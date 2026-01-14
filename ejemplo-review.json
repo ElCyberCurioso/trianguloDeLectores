@@ -3,6 +3,7 @@
   
   "ejemplos": [
     {
+      "_comentario_campo": "Ejemplo básico sin imagen",
       "titulo": "Nombre del libro/serie/película",
       "autor": "Autor, Director o Creador (opcional)",
       "tipo": "libro",
@@ -10,6 +11,16 @@
       "descripcion": "Tu opinión detallada sobre la obra. Qué te gustó, qué no, por qué lo recomiendas o no...",
       "fecha": "2026-01-14",
       "imagen": ""
+    },
+    {
+      "_comentario_campo": "Ejemplo con imagen LOCAL",
+      "titulo": "Mi Libro Favorito",
+      "autor": "Nombre del Autor",
+      "tipo": "libro",
+      "calificacion": 5,
+      "descripcion": "Una review completa con imagen local guardada en la carpeta images/libros/",
+      "fecha": "2026-01-14",
+      "imagen": "images/libros/mi-libro-favorito.jpg"
     },
     {
       "titulo": "El Señor de los Anillos: La Comunidad del Anillo",

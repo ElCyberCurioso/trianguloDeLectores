@@ -47,9 +47,43 @@ Edita el archivo `reviews.json` y agrega un nuevo objeto al array de reviews:
 - **calificacion** (obligatorio): Número del 1 al 5 (puede incluir decimales como 4.5)
 - **descripcion** (obligatorio): Tu opinión y comentarios
 - **fecha** (obligatorio): Fecha de la review en formato YYYY-MM-DD
-- **imagen** (opcional): URL de una imagen de portada (deja vacío "" para usar imagen generada automáticamente)
+- **imagen** (opcional): Ruta local (`images/libros/mi-libro.jpg`) o URL externa. Deja vacío `""` para usar imagen generada automáticamente
 
-### 3. Publicar cambios
+### 3. Agregar imágenes (Opcional)
+
+Puedes usar imágenes locales o URLs externas:
+
+#### **Opción A: Imágenes Locales** (Recomendado)
+
+1. Guarda tu imagen en la carpeta correspondiente:
+   - Libros → `images/libros/`
+   - Series → `images/series/`
+   - Películas → `images/peliculas/`
+   - Otros → `images/otros/`
+
+2. Nombra el archivo sin espacios: `mi-libro.jpg`, `breaking-bad.png`
+
+3. En `reviews.json`, usa la ruta relativa:
+```json
+"imagen": "images/libros/cien-anos-soledad.jpg"
+```
+
+#### **Opción B: URLs Externas**
+
+```json
+"imagen": "https://ejemplo.com/portada.jpg"
+```
+
+#### **Opción C: Sin imagen**
+
+```json
+"imagen": ""
+```
+Se generará automáticamente una imagen con gradiente y emoji.
+
+**💡 Tip:** Usa imágenes de 400x600px (proporción 2:3) y optimízalas antes de subirlas.
+
+### 4. Publicar cambios
 
 ```bash
 git add .

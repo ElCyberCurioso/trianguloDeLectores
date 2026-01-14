@@ -53,6 +53,15 @@
       "descripcion": "Una adaptación visualmente impresionante de la novela de Frank Herbert. La cinematografía y el diseño de producción son de otro nivel, aunque el ritmo puede ser lento para algunos.",
       "fecha": "2025-12-20",
       "imagen": ""
+    },
+    {
+      "titulo": "Ejemplo con Imagen Local",
+      "autor": "Este es un ejemplo",
+      "tipo": "libro",
+      "calificacion": 4,
+      "descripcion": "Esta review usa una imagen guardada localmente en la carpeta images/libros/. Puedes reemplazar 'placeholder-ejemplo.svg' con tus propias imágenes. Solo guarda tu imagen en la carpeta correcta y actualiza la ruta aquí.",
+      "fecha": "2026-01-14",
+      "imagen": "images/libros/placeholder-ejemplo.svg"
     }
   ]
 }

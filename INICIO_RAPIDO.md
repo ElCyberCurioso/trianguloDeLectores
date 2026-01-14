@@ -64,13 +64,43 @@ Tu sitio estará disponible en:
 https://TU_USUARIO.github.io/trianguloDeLectores
 ```
 
+## 🖼️ Agregar Imágenes
+
+### Opción 1: Imagen Local (Recomendado)
+
+1. Guarda tu imagen en la carpeta correcta:
+   - `images/libros/` para libros
+   - `images/series/` para series
+   - `images/peliculas/` para películas
+   - `images/otros/` para otros
+
+2. Nómbrala sin espacios: `mi-libro.jpg`
+
+3. En tu review:
+```json
+"imagen": "images/libros/mi-libro.jpg"
+```
+
+### Opción 2: URL Externa
+
+```json
+"imagen": "https://ejemplo.com/portada.jpg"
+```
+
+### Opción 3: Sin Imagen
+
+```json
+"imagen": ""
+```
+
 ## 💡 Consejos
 
 - **Calificación**: Usa números del 1 al 5 (puedes usar decimales: 4.5, 3.5, etc.)
 - **Tipo**: Debe ser exactamente: `"libro"`, `"serie"`, `"pelicula"` o `"otro"`
 - **Fecha**: Usa formato YYYY-MM-DD (ejemplo: 2026-01-14)
-- **Imagen**: Puedes dejarla vacía (`""`) y se generará una automáticamente
+- **Imagen**: Local (`images/tipo/nombre.jpg`), URL externa, o vacía (`""`)
 - **Autor**: Opcional - puedes dejarlo vacío si no aplica
+- **Dimensiones imagen**: 400x600px es ideal (proporción 2:3)
 
 ## 🎨 Probar localmente
 
