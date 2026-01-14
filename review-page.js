@@ -226,7 +226,7 @@ function initializeGiscus(reviewIndex) {
         repo: 'ElCyberCurioso/trianguloDeLectores', // Usuario debe completar: 'tu-usuario/trianguloDeLectores'
         repoId: 'R_kgDOQ544RA', // Usuario debe obtener de giscus.app
         category: 'Reviews', // Puede personalizarse
-        categoryId: 'DIC_kwDOQ544RM4C09X1', // Usuario debe obtener de giscus.app
+        categoryId: 'DIC_kwDOQ544RM4C09Zb', // Usuario debe obtener de giscus.app
         mapping: 'specific', // Usa término específico
         term: `review-${reviewIndex}`, // ID único por review
         reactionsEnabled: '1',
