@@ -417,6 +417,53 @@ body {
 }
 
 /* ============================================
+   Sistema de Estrellas
+   ============================================ */
+.stars-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.stars {
+    display: inline-flex;
+    gap: 2px;
+    position: relative;
+}
+
+.star {
+    width: 18px;
+    height: 18px;
+    position: relative;
+    display: inline-block;
+}
+
+.star svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--border-color);
+}
+
+.star.filled svg {
+    fill: #fbbf24;
+}
+
+.star.half svg {
+    fill: url(#half-fill);
+}
+
+.rating-number {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Definición del gradiente para media estrella */
+svg defs {
+    position: absolute;
+}
+
+/* ============================================
    Animaciones
    ============================================ */
 .review-card {

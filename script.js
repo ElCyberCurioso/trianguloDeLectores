@@ -79,8 +79,10 @@ async function loadReviews() {
         
         const data = await response.json();
         
-        // Filter reviews based on publication status
-        allReviews = filterPublishedReviews(data.reviews);
+        // Store ALL reviews (including drafts and scheduled) for index lookup
+        // But filter for display
+        const allReviewsData = data.reviews;
+        allReviews = filterPublishedReviews(allReviewsData);
         
         // Hide loading
         document.getElementById('loading').style.display = 'none';
@@ -104,30 +106,32 @@ function filterPublishedReviews(reviews) {
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate date comparison
     
-    return reviews.filter(review => {
-        // If no estado field, assume published (backward compatibility)
-        const estado = review.estado || 'publicado';
-        
-        // Hide drafts
-        if (estado === 'borrador') {
-            return false;
-        }
-        
-        // Show published reviews immediately
-        if (estado === 'publicado') {
+    return reviews
+        .map((review, originalIndex) => ({ ...review, originalIndex })) // Guardar índice original
+        .filter(review => {
+            // If no estado field, assume published (backward compatibility)
+            const estado = review.estado || 'publicado';
+            
+            // Hide drafts
+            if (estado === 'borrador') {
+                return false;
+            }
+            
+            // Show published reviews immediately
+            if (estado === 'publicado') {
+                return true;
+            }
+            
+            // For scheduled reviews, check publication date
+            if (estado === 'programado' && review.fecha_publicacion) {
+                const publicationDate = new Date(review.fecha_publicacion);
+                publicationDate.setHours(0, 0, 0, 0);
+                return publicationDate <= today;
+            }
+            
+            // Default: show the review
             return true;
-        }
-        
-        // For scheduled reviews, check publication date
-        if (estado === 'programado' && review.fecha_publicacion) {
-            const publicationDate = new Date(review.fecha_publicacion);
-            publicationDate.setHours(0, 0, 0, 0);
-            return publicationDate <= today;
-        }
-        
-        // Default: show the review
-        return true;
-    });
+        });
 }
 
 // ============================================
@@ -179,13 +183,11 @@ function renderReviews(reviews) {
         const emoji = getTypeEmoji(review.tipo);
         const imageUrl = review.imagen || generatePlaceholderImage(review.tipo);
         
-        // Find the original index in allReviews array
-        const reviewIndex = allReviews.findIndex(r => 
-            r.titulo === review.titulo && r.fecha === review.fecha
-        );
+        // Use the original index saved during filtering
+        const reviewIndex = review.originalIndex !== undefined ? review.originalIndex : index;
         
         return `
-            <a href="review.html?id=${reviewIndex >= 0 ? reviewIndex : index}" style="text-decoration: none; color: inherit; display: block;">
+            <a href="review.html?id=${reviewIndex}" style="text-decoration: none; color: inherit; display: block;">
                 <article class="review-card" style="animation-delay: ${index * 0.05}s">
                     <img src="${imageUrl}" alt="${review.titulo}" class="review-image" 
                          onerror="this.src='${generatePlaceholderImage(review.tipo)}'">
@@ -207,28 +209,68 @@ function renderReviews(reviews) {
     }).join('');
 }
 
-Voy a continuar modificando index.html para que las reviews enlacen a las páginas individuales.
-</thinking>
-
-Ahora voy a modificar `index.html` y `script.js` para que las tarjetas enlacen a las páginas individuales:
-
-<function_calls>
-<invoke name="todo_write">
-<parameter name="merge">true
-
 // ============================================
 // Helper Functions
 // ============================================
 function generateStars(rating) {
     const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 !== 0;
+    const hasHalfStar = rating % 1 >= 0.25 && rating % 1 < 0.75;
     const emptyStars = 5 - Math.ceil(rating);
     
-    let stars = '⭐'.repeat(fullStars);
-    if (hasHalfStar) stars += '✨';
-    stars += '☆'.repeat(emptyStars);
+    let starsHTML = '<div class="stars-container">';
+    starsHTML += '<div class="stars">';
     
-    return stars;
+    // SVG definition for half star
+    starsHTML += `
+        <svg style="position: absolute; width: 0; height: 0;">
+            <defs>
+                <linearGradient id="half-fill">
+                    <stop offset="50%" stop-color="#fbbf24" />
+                    <stop offset="50%" stop-color="var(--border-color)" />
+                </linearGradient>
+            </defs>
+        </svg>
+    `;
+    
+    // Full stars
+    for (let i = 0; i < fullStars; i++) {
+        starsHTML += `
+            <span class="star filled">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    // Half star
+    if (hasHalfStar) {
+        starsHTML += `
+            <span class="star half">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    // Empty stars
+    const emptyCount = hasHalfStar ? emptyStars - 1 : emptyStars;
+    for (let i = 0; i < emptyCount; i++) {
+        starsHTML += `
+            <span class="star">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    starsHTML += '</div>';
+    starsHTML += `<span class="rating-number">${rating.toFixed(1)}</span>`;
+    starsHTML += '</div>';
+    
+    return starsHTML;
 }
 
 function getTypeEmoji(type) {

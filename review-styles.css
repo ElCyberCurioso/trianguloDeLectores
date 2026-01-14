@@ -289,6 +289,46 @@
     }
 }
 
+/* Sistema de Estrellas - Review Page */
+.stars-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.stars {
+    display: inline-flex;
+    gap: 3px;
+    position: relative;
+}
+
+.star {
+    width: 24px;
+    height: 24px;
+    position: relative;
+    display: inline-block;
+}
+
+.star svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--border-color);
+}
+
+.star.filled svg {
+    fill: #fbbf24;
+}
+
+.star.half svg {
+    fill: url(#half-fill);
+}
+
+.rating-number {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
 /* Back to top button (optional) */
 .back-to-top {
     position: fixed;

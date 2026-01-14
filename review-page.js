@@ -325,14 +325,63 @@ function getTypeEmoji(type) {
 
 function generateStars(rating) {
     const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 !== 0;
+    const hasHalfStar = rating % 1 >= 0.25 && rating % 1 < 0.75;
     const emptyStars = 5 - Math.ceil(rating);
     
-    let stars = '⭐'.repeat(fullStars);
-    if (hasHalfStar) stars += '✨';
-    stars += '☆'.repeat(emptyStars);
+    let starsHTML = '<div class="stars-container">';
+    starsHTML += '<div class="stars">';
     
-    return stars;
+    // SVG definition for half star
+    starsHTML += `
+        <svg style="position: absolute; width: 0; height: 0;">
+            <defs>
+                <linearGradient id="half-fill">
+                    <stop offset="50%" stop-color="#fbbf24" />
+                    <stop offset="50%" stop-color="var(--border-color)" />
+                </linearGradient>
+            </defs>
+        </svg>
+    `;
+    
+    // Full stars
+    for (let i = 0; i < fullStars; i++) {
+        starsHTML += `
+            <span class="star filled">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    // Half star
+    if (hasHalfStar) {
+        starsHTML += `
+            <span class="star half">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    // Empty stars
+    const emptyCount = hasHalfStar ? emptyStars - 1 : emptyStars;
+    for (let i = 0; i < emptyCount; i++) {
+        starsHTML += `
+            <span class="star">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            </span>
+        `;
+    }
+    
+    starsHTML += '</div>';
+    starsHTML += `<span class="rating-number">${rating.toFixed(1)}</span>`;
+    starsHTML += '</div>';
+    
+    return starsHTML;
 }
 
 function formatDate(dateString) {
