@@ -78,7 +78,9 @@ async function loadReviews() {
         }
         
         const data = await response.json();
-        allReviews = data.reviews;
+        
+        // Filter reviews based on publication status
+        allReviews = filterPublishedReviews(data.reviews);
         
         // Hide loading
         document.getElementById('loading').style.display = 'none';
@@ -93,6 +95,39 @@ async function loadReviews() {
             </p>
         `;
     }
+}
+
+// ============================================
+// Filter Published Reviews
+// ============================================
+function filterPublishedReviews(reviews) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to midnight for accurate date comparison
+    
+    return reviews.filter(review => {
+        // If no estado field, assume published (backward compatibility)
+        const estado = review.estado || 'publicado';
+        
+        // Hide drafts
+        if (estado === 'borrador') {
+            return false;
+        }
+        
+        // Show published reviews immediately
+        if (estado === 'publicado') {
+            return true;
+        }
+        
+        // For scheduled reviews, check publication date
+        if (estado === 'programado' && review.fecha_publicacion) {
+            const publicationDate = new Date(review.fecha_publicacion);
+            publicationDate.setHours(0, 0, 0, 0);
+            return publicationDate <= today;
+        }
+        
+        // Default: show the review
+        return true;
+    });
 }
 
 // ============================================

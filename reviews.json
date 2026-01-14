@@ -7,7 +7,9 @@
       "calificacion": 5,
       "descripcion": "Una obra maestra del realismo mágico que narra la historia de la familia Buendía en el pueblo ficticio de Macondo. Una lectura imprescindible que combina lo fantástico con lo real de manera magistral.",
       "fecha": "2026-01-10",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-10"
     },
     {
       "titulo": "Breaking Bad",
@@ -16,7 +18,9 @@
       "calificacion": 5,
       "descripcion": "Una de las mejores series de la historia. La transformación de Walter White de profesor de química a kingpin del narcotráfico está narrada con una precisión cinematográfica impecable.",
       "fecha": "2026-01-08",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-08"
     },
     {
       "titulo": "El Padrino",
@@ -25,7 +29,9 @@
       "calificacion": 5,
       "descripcion": "Un clásico atemporal que definió el género de películas de mafia. Actuaciones legendarias, dirección magistral y una historia que permanece relevante décadas después.",
       "fecha": "2026-01-05",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-05"
     },
     {
       "titulo": "1984",
@@ -34,7 +40,9 @@
       "calificacion": 4.5,
       "descripcion": "Una distopía profética que resulta cada vez más relevante. La vigilancia masiva y el control del pensamiento son temas que resuenan fuertemente en nuestra era digital.",
       "fecha": "2026-01-03",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-03"
     },
     {
       "titulo": "The Last of Us",
@@ -43,7 +51,9 @@
       "calificacion": 4.5,
       "descripcion": "Una adaptación excepcional del videojuego. Pedro Pascal y Bella Ramsey ofrecen interpretaciones emotivas en esta historia post-apocalíptica sobre la conexión humana.",
       "fecha": "2025-12-28",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2025-12-28"
     },
     {
       "titulo": "Dune",
@@ -52,16 +62,42 @@
       "calificacion": 4.5,
       "descripcion": "Una adaptación visualmente impresionante de la novela de Frank Herbert. La cinematografía y el diseño de producción son de otro nivel, aunque el ritmo puede ser lento para algunos.",
       "fecha": "2025-12-20",
-      "imagen": ""
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2025-12-20"
     },
     {
       "titulo": "Ejemplo con Imagen Local",
       "autor": "Este es un ejemplo",
-      "tipo": "libro",
+      "tipo": "serie",
       "calificacion": 4,
       "descripcion": "Esta review usa una imagen guardada localmente en la carpeta images/libros/. Puedes reemplazar 'placeholder-ejemplo.svg' con tus propias imágenes. Solo guarda tu imagen en la carpeta correcta y actualiza la ruta aquí.",
       "fecha": "2026-01-14",
-      "imagen": "images/libros/placeholder-ejemplo.svg"
+      "imagen": "images/series/attack-on-titan.jpg",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-14"
+    },
+    {
+      "titulo": "Review Programada - Ejemplo",
+      "autor": "Autor Ejemplo",
+      "tipo": "libro",
+      "calificacion": 4,
+      "descripcion": "Esta review está programada para publicarse el 25 de enero de 2026. No aparecerá en el sitio hasta esa fecha.",
+      "fecha": "2026-01-25",
+      "imagen": "",
+      "estado": "programado",
+      "fecha_publicacion": "2026-01-25"
+    },
+    {
+      "titulo": "Borrador - No Publicado",
+      "autor": "Autor Borrador",
+      "tipo": "pelicula",
+      "calificacion": 3.5,
+      "descripcion": "Este es un borrador. No se mostrará en el sitio hasta que cambies el estado a 'publicado'.",
+      "fecha": "2026-01-14",
+      "imagen": "",
+      "estado": "borrador",
+      "fecha_publicacion": ""
     }
   ]
 }

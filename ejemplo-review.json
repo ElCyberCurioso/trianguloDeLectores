@@ -20,7 +20,33 @@
       "calificacion": 5,
       "descripcion": "Una review completa con imagen local guardada en la carpeta images/libros/",
       "fecha": "2026-01-14",
-      "imagen": "images/libros/mi-libro-favorito.jpg"
+      "imagen": "images/libros/mi-libro-favorito.jpg",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-14"
+    },
+    {
+      "_comentario_campo": "Ejemplo de BORRADOR (no se mostrará en el sitio)",
+      "titulo": "Review en Proceso",
+      "autor": "Autor",
+      "tipo": "serie",
+      "calificacion": 4,
+      "descripcion": "Esta review está en borrador. No aparecerá en el sitio hasta que cambies el estado a 'publicado'.",
+      "fecha": "2026-01-14",
+      "imagen": "",
+      "estado": "borrador",
+      "fecha_publicacion": ""
+    },
+    {
+      "_comentario_campo": "Ejemplo de PUBLICACIÓN PROGRAMADA",
+      "titulo": "Review del Futuro",
+      "autor": "Autor Futuro",
+      "tipo": "pelicula",
+      "calificacion": 5,
+      "descripcion": "Esta review se publicará automáticamente el 1 de febrero de 2026.",
+      "fecha": "2026-02-01",
+      "imagen": "",
+      "estado": "programado",
+      "fecha_publicacion": "2026-02-01"
     },
     {
       "titulo": "El Señor de los Anillos: La Comunidad del Anillo",

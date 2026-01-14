@@ -1,0 +1,23 @@
+{
+  "_info": "Este archivo es OPCIONAL. Puedes usarlo para guardar borradores de reviews antes de moverlas a reviews.json",
+  "_instrucciones": [
+    "1. Crea tus reviews aquí cuando estén en borrador",
+    "2. Cuando estés listo para publicar, cópialas a reviews.json",
+    "3. Este archivo NO se carga en el sitio web, es solo para tu organización personal"
+  ],
+  
+  "borradores": [
+    {
+      "titulo": "Ejemplo de Borrador",
+      "autor": "Nombre del Autor",
+      "tipo": "libro",
+      "calificacion": 4,
+      "descripcion": "Esta es una review en borrador. Cuando estés listo, cópiala a reviews.json con estado 'publicado' o 'programado'.",
+      "fecha": "2026-01-20",
+      "imagen": "",
+      "estado": "borrador",
+      "fecha_publicacion": "",
+      "notas_privadas": "Aquí puedes agregar notas que no quieras publicar. Este campo no se usará en el sitio."
+    }
+  ]
+}

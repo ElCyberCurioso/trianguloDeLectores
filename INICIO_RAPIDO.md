@@ -93,6 +93,28 @@ https://TU_USUARIO.github.io/trianguloDeLectores
 "imagen": ""
 ```
 
+## 📅 Control de Publicación
+
+### Publicar Inmediatamente
+```json
+"estado": "publicado",
+"fecha_publicacion": "2026-01-14"
+```
+
+### Guardar como Borrador
+```json
+"estado": "borrador",
+"fecha_publicacion": ""
+```
+No aparecerá en el sitio hasta que lo publiques.
+
+### Programar para el Futuro
+```json
+"estado": "programado",
+"fecha_publicacion": "2026-02-15"
+```
+Se publicará automáticamente en esa fecha.
+
 ## 💡 Consejos
 
 - **Calificación**: Usa números del 1 al 5 (puedes usar decimales: 4.5, 3.5, etc.)
@@ -101,6 +123,7 @@ https://TU_USUARIO.github.io/trianguloDeLectores
 - **Imagen**: Local (`images/tipo/nombre.jpg`), URL externa, o vacía (`""`)
 - **Autor**: Opcional - puedes dejarlo vacío si no aplica
 - **Dimensiones imagen**: 400x600px es ideal (proporción 2:3)
+- **Estado**: Omite estos campos o usa `"estado": "publicado"` para publicar inmediatamente
 
 ## 🎨 Probar localmente
 

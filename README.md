@@ -48,6 +48,8 @@ Edita el archivo `reviews.json` y agrega un nuevo objeto al array de reviews:
 - **descripcion** (obligatorio): Tu opinión y comentarios
 - **fecha** (obligatorio): Fecha de la review en formato YYYY-MM-DD
 - **imagen** (opcional): Ruta local (`images/libros/mi-libro.jpg`) o URL externa. Deja vacío `""` para usar imagen generada automáticamente
+- **estado** (opcional): `"publicado"`, `"borrador"` o `"programado"`. Por defecto es `"publicado"`
+- **fecha_publicacion** (opcional): Fecha en que se publicará (formato YYYY-MM-DD). Requerido si estado es `"programado"`
 
 ### 3. Agregar imágenes (Opcional)
 
@@ -83,7 +85,49 @@ Se generará automáticamente una imagen con gradiente y emoji.
 
 **💡 Tip:** Usa imágenes de 400x600px (proporción 2:3) y optimízalas antes de subirlas.
 
-### 4. Publicar cambios
+### 4. Control de Publicación (Opcional)
+
+Puedes controlar cuándo se publican tus reviews usando los campos `estado` y `fecha_publicacion`:
+
+#### **Opción A: Publicar Inmediatamente**
+
+```json
+{
+  "titulo": "Mi Review",
+  "estado": "publicado",
+  "fecha_publicacion": "2026-01-14"
+}
+```
+
+#### **Opción B: Guardar como Borrador**
+
+```json
+{
+  "titulo": "Review en Proceso",
+  "estado": "borrador",
+  "fecha_publicacion": ""
+}
+```
+
+La review NO aparecerá en el sitio hasta que cambies el estado a `"publicado"`.
+
+#### **Opción C: Programar Publicación**
+
+```json
+{
+  "titulo": "Review Futura",
+  "estado": "programado",
+  "fecha_publicacion": "2026-02-15"
+}
+```
+
+La review aparecerá automáticamente el 15 de febrero de 2026.
+
+#### **Archivo drafts.json (Opcional)**
+
+También puedes usar `drafts.json` para organizar tus borradores antes de moverlos a `reviews.json`. Este archivo NO se carga en el sitio web.
+
+### 5. Publicar cambios
 
 ```bash
 git add .
