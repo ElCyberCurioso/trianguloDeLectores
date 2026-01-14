@@ -30,8 +30,8 @@
       "descripcion": "Un clásico atemporal que definió el género de películas de mafia. Actuaciones legendarias, dirección magistral y una historia que permanece relevante décadas después.",
       "fecha": "2026-01-05",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2026-01-05"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "1984",
@@ -41,8 +41,8 @@
       "descripcion": "Una distopía profética que resulta cada vez más relevante. La vigilancia masiva y el control del pensamiento son temas que resuenan fuertemente en nuestra era digital.",
       "fecha": "2026-01-03",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2026-01-03"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "The Last of Us",
@@ -52,8 +52,8 @@
       "descripcion": "Una adaptación excepcional del videojuego. Pedro Pascal y Bella Ramsey ofrecen interpretaciones emotivas en esta historia post-apocalíptica sobre la conexión humana.",
       "fecha": "2025-12-28",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2025-12-28"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "Dune",
@@ -63,8 +63,8 @@
       "descripcion": "Una adaptación visualmente impresionante de la novela de Frank Herbert. La cinematografía y el diseño de producción son de otro nivel, aunque el ritmo puede ser lento para algunos.",
       "fecha": "2025-12-20",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2025-12-20"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "Ejemplo con Imagen Local",
@@ -85,8 +85,8 @@
       "descripcion": "Esta review está programada para publicarse el 25 de enero de 2026. No aparecerá en el sitio hasta esa fecha.",
       "fecha": "2026-01-25",
       "imagen": "",
-      "estado": "programado",
-      "fecha_publicacion": "2026-01-25"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "Attack on Titan",
@@ -96,8 +96,8 @@
       "descripcion": "Una obra maestra del anime moderno. La historia de Eren y la humanidad contra los titanes es épica, con giros impactantes y una animación espectacular. La narrativa compleja y los temas filosóficos la elevan a otro nivel.",
       "fecha": "2026-01-14",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2026-01-14"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "Death Note",
@@ -107,8 +107,8 @@
       "descripcion": "Un thriller psicológico fascinante. La batalla de ingenio entre Light y L es adictiva. La primera mitad es perfecta, aunque la segunda parte pierde algo de intensidad.",
       "fecha": "2026-01-12",
       "imagen": "",
-      "estado": "publicado",
-      "fecha_publicacion": "2026-01-12"
+      "estado": "borrador",
+      "fecha_publicacion": ""
     },
     {
       "titulo": "Borrador - No Publicado",
