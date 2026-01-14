@@ -142,6 +142,137 @@ function displayReview(review) {
     
     // Set description
     document.getElementById('reviewDescription').textContent = review.descripcion;
+    
+    // Add additional info section
+    displayAdditionalInfo(review);
+}
+
+// ============================================
+// Display Additional Info
+// ============================================
+function displayAdditionalInfo(review) {
+    const descriptionSection = document.querySelector('.review-detail-content');
+    
+    let additionalHTML = '';
+    
+    // Géneros (común para todos)
+    if (review.generos && review.generos.length > 0) {
+        additionalHTML += `
+            <div class="review-metadata">
+                <h3>📚 Géneros</h3>
+                <div class="genres-list">
+                    ${review.generos.map(genre => `<span class="genre-tag">${escapeHtml(genre)}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    // Información específica por tipo
+    additionalHTML += '<div class="review-metadata">';
+    
+    switch(review.tipo.toLowerCase()) {
+        case 'libro':
+            additionalHTML += '<h3>📖 Información del Libro</h3>';
+            additionalHTML += '<div class="metadata-grid">';
+            
+            if (review.paginas) {
+                additionalHTML += `
+                    <div class="metadata-item">
+                        <span class="metadata-label">Páginas:</span>
+                        <span class="metadata-value">${review.paginas}</span>
+                    </div>
+                `;
+            }
+            
+            if (review.editorial) {
+                additionalHTML += `
+                    <div class="metadata-item">
+                        <span class="metadata-label">Editorial:</span>
+                        <span class="metadata-value">${escapeHtml(review.editorial)}</span>
+                    </div>
+                `;
+            }
+            
+            if (review.isbn) {
+                additionalHTML += `
+                    <div class="metadata-item">
+                        <span class="metadata-label">ISBN:</span>
+                        <span class="metadata-value">${escapeHtml(review.isbn)}</span>
+                    </div>
+                `;
+            }
+            
+            additionalHTML += '</div>';
+            break;
+            
+        case 'serie':
+            if (review.temporadas && review.temporadas.length > 0) {
+                additionalHTML += '<h3>📺 Información de la Serie</h3>';
+                additionalHTML += `<p class="total-seasons">Total de temporadas: <strong>${review.temporadas.length}</strong></p>`;
+                additionalHTML += '<div class="seasons-list">';
+                
+                review.temporadas.forEach(temp => {
+                    additionalHTML += `
+                        <div class="season-item">
+                            <span class="season-number">Temporada ${temp.numero}</span>
+                            <span class="season-episodes">${temp.capitulos} capítulos</span>
+                        </div>
+                    `;
+                });
+                
+                additionalHTML += '</div>';
+                
+                // Calcular total de capítulos
+                const totalEpisodes = review.temporadas.reduce((sum, temp) => sum + temp.capitulos, 0);
+                additionalHTML += `<p class="total-episodes">Total: <strong>${totalEpisodes} capítulos</strong></p>`;
+            }
+            break;
+            
+        case 'pelicula':
+        case 'película':
+            additionalHTML += '<h3>🎬 Información de la Película</h3>';
+            additionalHTML += '<div class="metadata-grid">';
+            
+            if (review.fecha_estreno) {
+                const releaseDate = new Date(review.fecha_estreno);
+                const formattedDate = releaseDate.toLocaleDateString('es-ES', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                additionalHTML += `
+                    <div class="metadata-item">
+                        <span class="metadata-label">Fecha de estreno:</span>
+                        <span class="metadata-value">${formattedDate}</span>
+                    </div>
+                `;
+            }
+            
+            additionalHTML += '</div>';
+            break;
+            
+        case 'anime':
+            additionalHTML += '<h3>🎌 Información del Anime</h3>';
+            additionalHTML += '<div class="metadata-grid">';
+            
+            if (review.temporada_anime) {
+                const { año, temporada } = review.temporada_anime;
+                additionalHTML += `
+                    <div class="metadata-item">
+                        <span class="metadata-label">Temporada de emisión:</span>
+                        <span class="metadata-value">${temporada} ${año}</span>
+                    </div>
+                `;
+            }
+            
+            additionalHTML += '</div>';
+            break;
+    }
+    
+    additionalHTML += '</div>';
+    
+    // Insert additional info after description
+    descriptionSection.insertAdjacentHTML('beforeend', additionalHTML);
 }
 
 // ============================================

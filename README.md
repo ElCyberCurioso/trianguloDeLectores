@@ -44,15 +44,46 @@ Edita el archivo `reviews.json` y agrega un nuevo objeto al array de reviews:
 
 #### Campos del JSON:
 
+**Campos básicos (todos los tipos):**
 - **titulo** (obligatorio): El nombre del libro/serie/película
 - **autor** (opcional): Autor, director o creador
 - **tipo** (obligatorio): `"libro"`, `"serie"`, `"pelicula"`, `"anime"` o `"otro"`
 - **calificacion** (obligatorio): Número del 1 al 5 (puede incluir decimales como 4.5)
 - **descripcion** (obligatorio): Tu opinión y comentarios
 - **fecha** (obligatorio): Fecha de la review en formato YYYY-MM-DD
-- **imagen** (opcional): Ruta local (`images/libros/mi-libro.jpg`) o URL externa. Deja vacío `""` para usar imagen generada automáticamente
-- **estado** (opcional): `"publicado"`, `"borrador"` o `"programado"`. Por defecto es `"publicado"`
-- **fecha_publicacion** (opcional): Fecha en que se publicará (formato YYYY-MM-DD). Requerido si estado es `"programado"`
+- **imagen** (opcional): Ruta local (`images/libros/mi-libro.jpg`) o URL externa
+- **estado** (opcional): `"publicado"`, `"borrador"` o `"programado"`
+- **fecha_publicacion** (opcional): Fecha de publicación (YYYY-MM-DD)
+- **generos** (opcional): Array de géneros/temáticas: `["Drama", "Acción"]`
+
+**Campos específicos por tipo:**
+
+**Para Libros:**
+- **paginas** (opcional): Número de páginas
+- **editorial** (opcional): Nombre de la editorial
+- **isbn** (opcional): Código ISBN
+
+**Para Series:**
+- **temporadas** (opcional): Array con info de cada temporada:
+  ```json
+  [
+    { "numero": 1, "capitulos": 10 },
+    { "numero": 2, "capitulos": 12 }
+  ]
+  ```
+
+**Para Películas:**
+- **fecha_estreno** (opcional): Fecha de estreno (YYYY-MM-DD)
+
+**Para Anime:**
+- **temporada_anime** (opcional): Temporada de emisión:
+  ```json
+  {
+    "año": 2024,
+    "temporada": "Primavera"
+  }
+  ```
+  Temporadas: `"Invierno"`, `"Primavera"`, `"Verano"`, `"Otoño"`
 
 ### 3. Agregar imágenes (Opcional)
 

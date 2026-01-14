@@ -4,6 +4,7 @@
 let allReviews = [];
 let currentFilter = 'all';
 let currentSearchTerm = '';
+let currentGenre = 'all';
 
 // ============================================
 // Inicialización
@@ -55,6 +56,13 @@ function initEventListeners() {
             
             // Update filter
             currentFilter = e.target.getAttribute('data-filter');
+            
+            // Reset genre filter when changing category
+            currentGenre = 'all';
+            
+            // Update genre filters
+            updateGenreFilters();
+            
             filterAndRenderReviews();
         });
     });
@@ -135,6 +143,61 @@ function filterPublishedReviews(reviews) {
 }
 
 // ============================================
+// Update Genre Filters
+// ============================================
+function updateGenreFilters() {
+    const genreContainer = document.getElementById('genreFilterContainer');
+    const genreFilters = document.getElementById('genreFilters');
+    
+    // Hide genre filter for "all" and "otro"
+    if (currentFilter === 'all' || currentFilter === 'otro') {
+        genreContainer.style.display = 'none';
+        return;
+    }
+    
+    // Get unique genres for current category
+    const genres = new Set();
+    allReviews
+        .filter(review => review.tipo.toLowerCase() === currentFilter.toLowerCase())
+        .forEach(review => {
+            if (review.generos && Array.isArray(review.generos)) {
+                review.generos.forEach(genre => genres.add(genre));
+            }
+        });
+    
+    // If no genres, hide filter
+    if (genres.size === 0) {
+        genreContainer.style.display = 'none';
+        return;
+    }
+    
+    // Show and populate genre filters
+    genreContainer.style.display = 'block';
+    
+    // Create genre buttons
+    let genreHTML = '<button class="genre-filter-btn active" data-genre="all">Todos</button>';
+    
+    Array.from(genres).sort().forEach(genre => {
+        genreHTML += `<button class="genre-filter-btn" data-genre="${escapeHtml(genre)}">${escapeHtml(genre)}</button>`;
+    });
+    
+    genreFilters.innerHTML = genreHTML;
+    
+    // Add event listeners to genre buttons
+    document.querySelectorAll('.genre-filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            // Update active state
+            document.querySelectorAll('.genre-filter-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            
+            // Update genre filter
+            currentGenre = e.target.getAttribute('data-genre');
+            filterAndRenderReviews();
+        });
+    });
+}
+
+// ============================================
 // Filter and Render Reviews
 // ============================================
 function filterAndRenderReviews() {
@@ -145,6 +208,16 @@ function filterAndRenderReviews() {
         filteredReviews = filteredReviews.filter(review => 
             review.tipo.toLowerCase() === currentFilter.toLowerCase()
         );
+    }
+    
+    // Apply genre filter
+    if (currentGenre !== 'all' && currentFilter !== 'all' && currentFilter !== 'otro') {
+        filteredReviews = filteredReviews.filter(review => {
+            if (!review.generos || !Array.isArray(review.generos)) {
+                return false;
+            }
+            return review.generos.includes(currentGenre);
+        });
     }
     
     // Apply search filter

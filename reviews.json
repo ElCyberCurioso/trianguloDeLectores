@@ -9,7 +9,11 @@
       "fecha": "2026-01-10",
       "imagen": "",
       "estado": "publicado",
-      "fecha_publicacion": "2026-01-10"
+      "fecha_publicacion": "2026-01-10",
+      "generos": ["Realismo mágico", "Ficción literaria", "Drama familiar"],
+      "paginas": 471,
+      "editorial": "Editorial Sudamericana",
+      "isbn": "978-0307474728"
     },
     {
       "titulo": "Breaking Bad",
@@ -20,7 +24,15 @@
       "fecha": "2026-01-08",
       "imagen": "",
       "estado": "publicado",
-      "fecha_publicacion": "2026-01-08"
+      "fecha_publicacion": "2026-01-08",
+      "generos": ["Drama", "Crimen", "Thriller"],
+      "temporadas": [
+        { "numero": 1, "capitulos": 7 },
+        { "numero": 2, "capitulos": 13 },
+        { "numero": 3, "capitulos": 13 },
+        { "numero": 4, "capitulos": 13 },
+        { "numero": 5, "capitulos": 16 }
+      ]
     },
     {
       "titulo": "El Padrino",
@@ -30,8 +42,10 @@
       "descripcion": "Un clásico atemporal que definió el género de películas de mafia. Actuaciones legendarias, dirección magistral y una historia que permanece relevante décadas después.",
       "fecha": "2026-01-05",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-05",
+      "generos": ["Drama", "Crimen", "Thriller"],
+      "fecha_estreno": "1972-03-24"
     },
     {
       "titulo": "1984",
@@ -41,8 +55,12 @@
       "descripcion": "Una distopía profética que resulta cada vez más relevante. La vigilancia masiva y el control del pensamiento son temas que resuenan fuertemente en nuestra era digital.",
       "fecha": "2026-01-03",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-03",
+      "generos": ["Distopía", "Ciencia ficción", "Político"],
+      "paginas": 328,
+      "editorial": "Secker & Warburg",
+      "isbn": "978-0451524935"
     },
     {
       "titulo": "The Last of Us",
@@ -52,8 +70,12 @@
       "descripcion": "Una adaptación excepcional del videojuego. Pedro Pascal y Bella Ramsey ofrecen interpretaciones emotivas en esta historia post-apocalíptica sobre la conexión humana.",
       "fecha": "2025-12-28",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2025-12-28",
+      "generos": ["Post-apocalíptico", "Drama", "Acción"],
+      "temporadas": [
+        { "numero": 1, "capitulos": 9 }
+      ]
     },
     {
       "titulo": "Dune",
@@ -63,8 +85,10 @@
       "descripcion": "Una adaptación visualmente impresionante de la novela de Frank Herbert. La cinematografía y el diseño de producción son de otro nivel, aunque el ritmo puede ser lento para algunos.",
       "fecha": "2025-12-20",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2025-12-20",
+      "generos": ["Ciencia ficción", "Aventura", "Drama"],
+      "fecha_estreno": "2021-10-22"
     },
     {
       "titulo": "Ejemplo con Imagen Local",
@@ -75,7 +99,11 @@
       "fecha": "2026-01-14",
       "imagen": "images/series/attack-on-titan.jpg",
       "estado": "publicado",
-      "fecha_publicacion": "2026-01-14"
+      "fecha_publicacion": "2026-01-14",
+      "generos": ["Ejemplo", "Demo"],
+      "temporadas": [
+        { "numero": 1, "capitulos": 10 }
+      ]
     },
     {
       "titulo": "Review Programada - Ejemplo",
@@ -85,8 +113,12 @@
       "descripcion": "Esta review está programada para publicarse el 25 de enero de 2026. No aparecerá en el sitio hasta esa fecha.",
       "fecha": "2026-01-25",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "programado",
+      "fecha_publicacion": "2026-01-25",
+      "generos": ["Ejemplo"],
+      "paginas": 250,
+      "editorial": "Editorial Ejemplo",
+      "isbn": ""
     },
     {
       "titulo": "Attack on Titan",
@@ -96,8 +128,13 @@
       "descripcion": "Una obra maestra del anime moderno. La historia de Eren y la humanidad contra los titanes es épica, con giros impactantes y una animación espectacular. La narrativa compleja y los temas filosóficos la elevan a otro nivel.",
       "fecha": "2026-01-14",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-14",
+      "generos": ["Acción", "Drama", "Fantasía oscura", "Misterio"],
+      "temporada_anime": {
+        "año": 2013,
+        "temporada": "Primavera"
+      }
     },
     {
       "titulo": "Death Note",
@@ -107,8 +144,13 @@
       "descripcion": "Un thriller psicológico fascinante. La batalla de ingenio entre Light y L es adictiva. La primera mitad es perfecta, aunque la segunda parte pierde algo de intensidad.",
       "fecha": "2026-01-12",
       "imagen": "",
-      "estado": "borrador",
-      "fecha_publicacion": ""
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-12",
+      "generos": ["Thriller psicológico", "Sobrenatural", "Misterio"],
+      "temporada_anime": {
+        "año": 2006,
+        "temporada": "Otoño"
+      }
     },
     {
       "titulo": "Borrador - No Publicado",
@@ -119,7 +161,9 @@
       "fecha": "2026-01-14",
       "imagen": "",
       "estado": "borrador",
-      "fecha_publicacion": ""
+      "fecha_publicacion": "",
+      "generos": ["Drama"],
+      "fecha_estreno": "2025-06-15"
     }
   ]
 }

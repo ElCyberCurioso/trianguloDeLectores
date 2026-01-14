@@ -172,6 +172,69 @@ body {
     border-color: var(--accent-primary);
 }
 
+/* Genre Filters */
+.genre-filter-container {
+    margin: var(--spacing-lg) 0 var(--spacing-md) 0;
+    padding: var(--spacing-md);
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.genre-filter-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.genre-filters {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.genre-filter-btn {
+    padding: 0.4rem 1rem;
+    border: 1.5px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    font-family: var(--font-main);
+}
+
+.genre-filter-btn:hover {
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+    background: var(--bg-secondary);
+}
+
+.genre-filter-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    font-weight: 600;
+}
+
 .search-box {
     position: relative;
     max-width: 600px;

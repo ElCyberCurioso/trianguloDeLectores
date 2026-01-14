@@ -13,16 +13,23 @@
       "imagen": ""
     },
     {
-      "_comentario_campo": "Ejemplo con imagen LOCAL",
-      "titulo": "Mi Libro Favorito",
-      "autor": "Nombre del Autor",
-      "tipo": "libro",
-      "calificacion": 5,
-      "descripcion": "Una review completa con imagen local guardada en la carpeta images/libros/",
+      "_comentario": "EJEMPLO DE SERIE COMPLETA",
+      "titulo": "Stranger Things",
+      "autor": "Los Hermanos Duffer",
+      "tipo": "serie",
+      "calificacion": 4.5,
+      "descripcion": "Nostalgia ochentera mezclada con terror sobrenatural. Las primeras temporadas son excepcionales.",
       "fecha": "2026-01-14",
-      "imagen": "images/libros/mi-libro-favorito.jpg",
+      "imagen": "",
       "estado": "publicado",
-      "fecha_publicacion": "2026-01-14"
+      "fecha_publicacion": "2026-01-14",
+      "generos": ["Ciencia ficción", "Terror", "Drama", "Misterio"],
+      "temporadas": [
+        { "numero": 1, "capitulos": 8 },
+        { "numero": 2, "capitulos": 9 },
+        { "numero": 3, "capitulos": 8 },
+        { "numero": 4, "capitulos": 9 }
+      ]
     },
     {
       "_comentario_campo": "Ejemplo de BORRADOR (no se mostrará en el sitio)",
@@ -37,19 +44,21 @@
       "fecha_publicacion": ""
     },
     {
-      "_comentario_campo": "Ejemplo de PUBLICACIÓN PROGRAMADA",
-      "titulo": "Review del Futuro",
-      "autor": "Autor Futuro",
+      "_comentario": "EJEMPLO DE PELÍCULA COMPLETA",
+      "titulo": "Inception",
+      "autor": "Christopher Nolan",
       "tipo": "pelicula",
       "calificacion": 5,
-      "descripcion": "Esta review se publicará automáticamente el 1 de febrero de 2026.",
+      "descripcion": "Una obra maestra de ciencia ficción que desafía la mente. Nolan crea un mundo de sueños dentro de sueños brillantemente ejecutado.",
       "fecha": "2026-02-01",
       "imagen": "",
-      "estado": "programado",
-      "fecha_publicacion": "2026-02-01"
+      "estado": "publicado",
+      "fecha_publicacion": "2026-02-01",
+      "generos": ["Ciencia ficción", "Thriller", "Acción"],
+      "fecha_estreno": "2010-07-16"
     },
     {
-      "_comentario_campo": "Ejemplo de ANIME",
+      "_comentario": "EJEMPLO DE ANIME COMPLETO",
       "titulo": "Steins;Gate",
       "autor": "White Fox",
       "tipo": "anime",
@@ -58,7 +67,20 @@
       "fecha": "2026-01-14",
       "imagen": "images/anime/steins-gate.jpg",
       "estado": "publicado",
-      "fecha_publicacion": "2026-01-14"
+      "fecha_publicacion": "2026-01-14",
+      "generos": ["Ciencia ficción", "Thriller", "Drama"],
+      "temporada_anime": {
+        "año": 2011,
+        "temporada": "Primavera"
+      }
+    },
+    {
+      "_comentario": "EJEMPLO MINIMALISTA (solo campos obligatorios)",
+      "titulo": "Mi Review Simple",
+      "tipo": "libro",
+      "calificacion": 4,
+      "descripcion": "Una review con solo los campos obligatorios.",
+      "fecha": "2026-01-14"
     },
     {
       "titulo": "El Señor de los Anillos: La Comunidad del Anillo",
