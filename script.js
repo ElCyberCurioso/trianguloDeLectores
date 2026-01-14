@@ -179,26 +179,42 @@ function renderReviews(reviews) {
         const emoji = getTypeEmoji(review.tipo);
         const imageUrl = review.imagen || generatePlaceholderImage(review.tipo);
         
+        // Find the original index in allReviews array
+        const reviewIndex = allReviews.findIndex(r => 
+            r.titulo === review.titulo && r.fecha === review.fecha
+        );
+        
         return `
-            <article class="review-card" style="animation-delay: ${index * 0.05}s">
-                <img src="${imageUrl}" alt="${review.titulo}" class="review-image" 
-                     onerror="this.src='${generatePlaceholderImage(review.tipo)}'">
-                <div class="review-content">
-                    <div class="review-header">
-                        <span class="review-type">${emoji} ${review.tipo}</span>
-                        <h2 class="review-title">${escapeHtml(review.titulo)}</h2>
-                        ${review.autor ? `<p class="review-author">Por ${escapeHtml(review.autor)}</p>` : ''}
+            <a href="review.html?id=${reviewIndex >= 0 ? reviewIndex : index}" style="text-decoration: none; color: inherit; display: block;">
+                <article class="review-card" style="animation-delay: ${index * 0.05}s">
+                    <img src="${imageUrl}" alt="${review.titulo}" class="review-image" 
+                         onerror="this.src='${generatePlaceholderImage(review.tipo)}'">
+                    <div class="review-content">
+                        <div class="review-header">
+                            <span class="review-type">${emoji} ${review.tipo}</span>
+                            <h2 class="review-title">${escapeHtml(review.titulo)}</h2>
+                            ${review.autor ? `<p class="review-author">Por ${escapeHtml(review.autor)}</p>` : ''}
+                        </div>
+                        <div class="review-rating" aria-label="Calificación: ${review.calificacion} de 5 estrellas">
+                            ${stars}
+                        </div>
+                        <p class="review-description">${escapeHtml(review.descripcion.substring(0, 150))}${review.descripcion.length > 150 ? '...' : ''}</p>
+                        <p class="review-date">${formatDate(review.fecha)}</p>
                     </div>
-                    <div class="review-rating" aria-label="Calificación: ${review.calificacion} de 5 estrellas">
-                        ${stars}
-                    </div>
-                    <p class="review-description">${escapeHtml(review.descripcion)}</p>
-                    <p class="review-date">${formatDate(review.fecha)}</p>
-                </div>
-            </article>
+                </article>
+            </a>
         `;
     }).join('');
 }
+
+Voy a continuar modificando index.html para que las reviews enlacen a las páginas individuales.
+</thinking>
+
+Ahora voy a modificar `index.html` y `script.js` para que las tarjetas enlacen a las páginas individuales:
+
+<function_calls>
+<invoke name="todo_write">
+<parameter name="merge">true
 
 // ============================================
 // Helper Functions

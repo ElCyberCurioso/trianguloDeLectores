@@ -7,8 +7,11 @@ Una página web moderna y responsive para publicar reviews de libros, series, pe
 - 🎨 **Diseño moderno y responsive** - Se adapta perfectamente a móviles, tablets y escritorio
 - 🌓 **Modo oscuro** - Cambia entre tema claro y oscuro con un clic
 - 🔍 **Búsqueda en tiempo real** - Encuentra reviews rápidamente
-- 🏷️ **Filtros por categoría** - Libros, Series, Películas, Otros
+- 🏷️ **Filtros por categoría** - Libros, Series, Películas, Anime, Otros
 - ⭐ **Sistema de calificación** - Estrellas visuales de 1 a 5
+- 💬 **Sistema de comentarios** - Giscus integrado (GitHub Discussions)
+- 📄 **Páginas individuales** - Cada review tiene su propia página con URL única
+- 🔗 **Compartir en redes** - Botones para compartir reviews
 - 🚀 **Sin dependencias** - HTML, CSS y JavaScript puro
 - 📱 **PWA Ready** - Puede convertirse fácilmente en una Progressive Web App
 
