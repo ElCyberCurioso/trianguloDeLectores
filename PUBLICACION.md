@@ -222,15 +222,17 @@ Ahora tus borradores quedarán solo en tu computadora.
 {
   "reviews": [
     {
-      "titulo": "Review 1",
-      "estado": "programado",
-      "fecha_publicacion": "2026-01-20"
-    },
+  "titulo": "Review de Libro",
+  "tipo": "libro",
+  "estado": "programado",
+  "fecha_publicacion": "2026-01-20"
+},
     {
-      "titulo": "Review 2",
-      "estado": "programado",
-      "fecha_publicacion": "2026-01-27"
-    },
+  "titulo": "Review de Anime",
+  "tipo": "anime",
+  "estado": "programado",
+  "fecha_publicacion": "2026-01-27"
+},
     {
       "titulo": "Review 3",
       "estado": "programado",

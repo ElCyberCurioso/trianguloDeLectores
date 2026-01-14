@@ -72,6 +72,7 @@ https://TU_USUARIO.github.io/trianguloDeLectores
    - `images/libros/` para libros
    - `images/series/` para series
    - `images/peliculas/` para películas
+   - `images/anime/` para anime
    - `images/otros/` para otros
 
 2. Nómbrala sin espacios: `mi-libro.jpg`
@@ -118,7 +119,7 @@ Se publicará automáticamente en esa fecha.
 ## 💡 Consejos
 
 - **Calificación**: Usa números del 1 al 5 (puedes usar decimales: 4.5, 3.5, etc.)
-- **Tipo**: Debe ser exactamente: `"libro"`, `"serie"`, `"pelicula"` o `"otro"`
+- **Tipo**: Debe ser exactamente: `"libro"`, `"serie"`, `"pelicula"`, `"anime"` o `"otro"`
 - **Fecha**: Usa formato YYYY-MM-DD (ejemplo: 2026-01-14)
 - **Imagen**: Local (`images/tipo/nombre.jpg`), URL externa, o vacía (`""`)
 - **Autor**: Opcional - puedes dejarlo vacío si no aplica

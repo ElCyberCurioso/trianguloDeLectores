@@ -49,6 +49,18 @@
       "fecha_publicacion": "2026-02-01"
     },
     {
+      "_comentario_campo": "Ejemplo de ANIME",
+      "titulo": "Steins;Gate",
+      "autor": "White Fox",
+      "tipo": "anime",
+      "calificacion": 5,
+      "descripcion": "Un thriller de ciencia ficción sobre viajes en el tiempo que te mantendrá al borde del asiento.",
+      "fecha": "2026-01-14",
+      "imagen": "images/anime/steins-gate.jpg",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-14"
+    },
+    {
       "titulo": "El Señor de los Anillos: La Comunidad del Anillo",
       "autor": "Peter Jackson",
       "tipo": "pelicula",

@@ -89,6 +89,28 @@
       "fecha_publicacion": "2026-01-25"
     },
     {
+      "titulo": "Attack on Titan",
+      "autor": "Hajime Isayama / Wit Studio & MAPPA",
+      "tipo": "anime",
+      "calificacion": 5,
+      "descripcion": "Una obra maestra del anime moderno. La historia de Eren y la humanidad contra los titanes es épica, con giros impactantes y una animación espectacular. La narrativa compleja y los temas filosóficos la elevan a otro nivel.",
+      "fecha": "2026-01-14",
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-14"
+    },
+    {
+      "titulo": "Death Note",
+      "autor": "Tsugumi Ohba / Madhouse",
+      "tipo": "anime",
+      "calificacion": 4.5,
+      "descripcion": "Un thriller psicológico fascinante. La batalla de ingenio entre Light y L es adictiva. La primera mitad es perfecta, aunque la segunda parte pierde algo de intensidad.",
+      "fecha": "2026-01-12",
+      "imagen": "",
+      "estado": "publicado",
+      "fecha_publicacion": "2026-01-12"
+    },
+    {
       "titulo": "Borrador - No Publicado",
       "autor": "Autor Borrador",
       "tipo": "pelicula",

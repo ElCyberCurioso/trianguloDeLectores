@@ -9,6 +9,7 @@ images/
 ├── libros/       # Portadas de libros
 ├── series/       # Portadas de series
 ├── peliculas/    # Portadas de películas
+├── anime/        # Portadas de anime
 └── otros/        # Otras imágenes
 ```
 
@@ -21,6 +22,7 @@ Guarda la imagen de la portada en la carpeta correspondiente:
 - **Libros** → `images/libros/`
 - **Series** → `images/series/`
 - **Películas** → `images/peliculas/`
+- **Anime** → `images/anime/`
 - **Otros** → `images/otros/`
 
 ### 2. Nombrar el archivo

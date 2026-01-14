@@ -43,7 +43,7 @@ Edita el archivo `reviews.json` y agrega un nuevo objeto al array de reviews:
 
 - **titulo** (obligatorio): El nombre del libro/serie/película
 - **autor** (opcional): Autor, director o creador
-- **tipo** (obligatorio): `"libro"`, `"serie"`, `"pelicula"` o `"otro"`
+- **tipo** (obligatorio): `"libro"`, `"serie"`, `"pelicula"`, `"anime"` o `"otro"`
 - **calificacion** (obligatorio): Número del 1 al 5 (puede incluir decimales como 4.5)
 - **descripcion** (obligatorio): Tu opinión y comentarios
 - **fecha** (obligatorio): Fecha de la review en formato YYYY-MM-DD
@@ -61,6 +61,7 @@ Puedes usar imágenes locales o URLs externas:
    - Libros → `images/libros/`
    - Series → `images/series/`
    - Películas → `images/peliculas/`
+   - Anime → `images/anime/`
    - Otros → `images/otros/`
 
 2. Nombra el archivo sin espacios: `mi-libro.jpg`, `breaking-bad.png`

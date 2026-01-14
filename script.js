@@ -221,6 +221,7 @@ function getTypeEmoji(type) {
         'serie': '📺',
         'pelicula': '🎬',
         'película': '🎬',
+        'anime': '🎌',
         'otro': '✨'
     };
     return emojis[type.toLowerCase()] || '✨';
@@ -232,6 +233,7 @@ function generatePlaceholderImage(type) {
         'serie': 'linear-gradient(135deg, %23ec4899, %23f43f5e)',
         'pelicula': 'linear-gradient(135deg, %2310b981, %2306b6d4)',
         'película': 'linear-gradient(135deg, %2310b981, %2306b6d4)',
+        'anime': 'linear-gradient(135deg, %23f97316, %23dc2626)',
         'otro': 'linear-gradient(135deg, %23f59e0b, %23ef4444)'
     };
     
