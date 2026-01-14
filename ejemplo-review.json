@@ -1,0 +1,51 @@
+{
+  "_comentario": "Este es un archivo de ejemplo. Copia cualquiera de estos objetos y agrégalos al array 'reviews' en reviews.json",
+  
+  "ejemplos": [
+    {
+      "titulo": "Nombre del libro/serie/película",
+      "autor": "Autor, Director o Creador (opcional)",
+      "tipo": "libro",
+      "calificacion": 4.5,
+      "descripcion": "Tu opinión detallada sobre la obra. Qué te gustó, qué no, por qué lo recomiendas o no...",
+      "fecha": "2026-01-14",
+      "imagen": ""
+    },
+    {
+      "titulo": "El Señor de los Anillos: La Comunidad del Anillo",
+      "autor": "Peter Jackson",
+      "tipo": "pelicula",
+      "calificacion": 5,
+      "descripcion": "Una adaptación magistral de la obra de Tolkien. La cinematografía es épica, el casting perfecto y la banda sonora inolvidable. Un viaje que vale la pena hacer cada año.",
+      "fecha": "2026-01-14",
+      "imagen": "https://example.com/url-de-tu-imagen.jpg"
+    },
+    {
+      "titulo": "The Office",
+      "autor": "Greg Daniels",
+      "tipo": "serie",
+      "calificacion": 4.5,
+      "descripcion": "Una comedia que perfecciona el formato mockumentary. Michael Scott es un personaje inolvidable y las dinámicas de oficina son hilarantes y sorprendentemente emotivas.",
+      "fecha": "2026-01-13",
+      "imagen": ""
+    },
+    {
+      "titulo": "Sapiens",
+      "autor": "Yuval Noah Harari",
+      "tipo": "libro",
+      "calificacion": 4,
+      "descripcion": "Una perspectiva fascinante sobre la historia de la humanidad. Aunque algunas teorías son especulativas, ofrece reflexiones profundas sobre quiénes somos como especie.",
+      "fecha": "2026-01-12",
+      "imagen": ""
+    },
+    {
+      "titulo": "The Legend of Zelda: Tears of the Kingdom",
+      "autor": "Nintendo",
+      "tipo": "otro",
+      "calificacion": 5,
+      "descripcion": "Un videojuego que redefine lo que significa la libertad en un juego de mundo abierto. La creatividad que permite es asombrosa y cada rincón de Hyrule tiene algo que descubrir.",
+      "fecha": "2026-01-10",
+      "imagen": ""
+    }
+  ]
+}

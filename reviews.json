@@ -1,0 +1,58 @@
+{
+  "reviews": [
+    {
+      "titulo": "Cien años de soledad",
+      "autor": "Gabriel García Márquez",
+      "tipo": "libro",
+      "calificacion": 5,
+      "descripcion": "Una obra maestra del realismo mágico que narra la historia de la familia Buendía en el pueblo ficticio de Macondo. Una lectura imprescindible que combina lo fantástico con lo real de manera magistral.",
+      "fecha": "2026-01-10",
+      "imagen": ""
+    },
+    {
+      "titulo": "Breaking Bad",
+      "autor": "Vince Gilligan",
+      "tipo": "serie",
+      "calificacion": 5,
+      "descripcion": "Una de las mejores series de la historia. La transformación de Walter White de profesor de química a kingpin del narcotráfico está narrada con una precisión cinematográfica impecable.",
+      "fecha": "2026-01-08",
+      "imagen": ""
+    },
+    {
+      "titulo": "El Padrino",
+      "autor": "Francis Ford Coppola",
+      "tipo": "pelicula",
+      "calificacion": 5,
+      "descripcion": "Un clásico atemporal que definió el género de películas de mafia. Actuaciones legendarias, dirección magistral y una historia que permanece relevante décadas después.",
+      "fecha": "2026-01-05",
+      "imagen": ""
+    },
+    {
+      "titulo": "1984",
+      "autor": "George Orwell",
+      "tipo": "libro",
+      "calificacion": 4.5,
+      "descripcion": "Una distopía profética que resulta cada vez más relevante. La vigilancia masiva y el control del pensamiento son temas que resuenan fuertemente en nuestra era digital.",
+      "fecha": "2026-01-03",
+      "imagen": ""
+    },
+    {
+      "titulo": "The Last of Us",
+      "autor": "Craig Mazin & Neil Druckmann",
+      "tipo": "serie",
+      "calificacion": 4.5,
+      "descripcion": "Una adaptación excepcional del videojuego. Pedro Pascal y Bella Ramsey ofrecen interpretaciones emotivas en esta historia post-apocalíptica sobre la conexión humana.",
+      "fecha": "2025-12-28",
+      "imagen": ""
+    },
+    {
+      "titulo": "Dune",
+      "autor": "Denis Villeneuve",
+      "tipo": "pelicula",
+      "calificacion": 4.5,
+      "descripcion": "Una adaptación visualmente impresionante de la novela de Frank Herbert. La cinematografía y el diseño de producción son de otro nivel, aunque el ritmo puede ser lento para algunos.",
+      "fecha": "2025-12-20",
+      "imagen": ""
+    }
+  ]
+}

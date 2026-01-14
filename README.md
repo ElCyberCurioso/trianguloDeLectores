@@ -1,0 +1,175 @@
+# 📚 Triángulo de Lectores
+
+Una página web moderna y responsive para publicar reviews de libros, series, películas y más. Desplegada con GitHub Pages.
+
+## ✨ Características
+
+- 🎨 **Diseño moderno y responsive** - Se adapta perfectamente a móviles, tablets y escritorio
+- 🌓 **Modo oscuro** - Cambia entre tema claro y oscuro con un clic
+- 🔍 **Búsqueda en tiempo real** - Encuentra reviews rápidamente
+- 🏷️ **Filtros por categoría** - Libros, Series, Películas, Otros
+- ⭐ **Sistema de calificación** - Estrellas visuales de 1 a 5
+- 🚀 **Sin dependencias** - HTML, CSS y JavaScript puro
+- 📱 **PWA Ready** - Puede convertirse fácilmente en una Progressive Web App
+
+## 🚀 Inicio Rápido
+
+### 1. Configurar GitHub Pages
+
+1. Ve a tu repositorio en GitHub
+2. Haz clic en **Settings** (Configuración)
+3. En el menú lateral, selecciona **Pages**
+4. En **Source** (Fuente), selecciona la rama `main` y la carpeta `/ (root)`
+5. Haz clic en **Save** (Guardar)
+6. Tu sitio estará disponible en: `https://[tu-usuario].github.io/trianguloDeLectores`
+
+### 2. Añadir tu primera review
+
+Edita el archivo `reviews.json` y agrega un nuevo objeto al array de reviews:
+
+```json
+{
+  "titulo": "Título de tu review",
+  "autor": "Autor o Director",
+  "tipo": "libro",
+  "calificacion": 4.5,
+  "descripcion": "Tu opinión sobre la obra...",
+  "fecha": "2026-01-14",
+  "imagen": ""
+}
+```
+
+#### Campos del JSON:
+
+- **titulo** (obligatorio): El nombre del libro/serie/película
+- **autor** (opcional): Autor, director o creador
+- **tipo** (obligatorio): `"libro"`, `"serie"`, `"pelicula"` o `"otro"`
+- **calificacion** (obligatorio): Número del 1 al 5 (puede incluir decimales como 4.5)
+- **descripcion** (obligatorio): Tu opinión y comentarios
+- **fecha** (obligatorio): Fecha de la review en formato YYYY-MM-DD
+- **imagen** (opcional): URL de una imagen de portada (deja vacío "" para usar imagen generada automáticamente)
+
+### 3. Publicar cambios
+
+```bash
+git add .
+git commit -m "Agrega nueva review"
+git push origin main
+```
+
+Los cambios aparecerán en tu sitio en 1-2 minutos.
+
+## 📝 Ejemplo de uso
+
+### Agregar una review de libro:
+
+```json
+{
+  "titulo": "El nombre del viento",
+  "autor": "Patrick Rothfuss",
+  "tipo": "libro",
+  "calificacion": 5,
+  "descripcion": "Una historia épica de fantasía que atrapa desde la primera página. La prosa es poética y los personajes están maravillosamente desarrollados.",
+  "fecha": "2026-01-14",
+  "imagen": ""
+}
+```
+
+### Agregar una review de serie:
+
+```json
+{
+  "titulo": "Stranger Things",
+  "autor": "Los hermanos Duffer",
+  "tipo": "serie",
+  "calificacion": 4,
+  "descripcion": "Nostalgia ochentera mezclada con terror sobrenatural. Las primeras temporadas son excepcionales, aunque pierde algo de fuerza después.",
+  "fecha": "2026-01-14",
+  "imagen": ""
+}
+```
+
+## 🎨 Personalización
+
+### Cambiar colores
+
+Edita las variables CSS en `styles.css`:
+
+```css
+:root {
+    --accent-primary: #6366f1;  /* Color principal */
+    --accent-hover: #4f46e5;    /* Color hover */
+}
+```
+
+### Cambiar tipografías
+
+Modifica las fuentes de Google Fonts en `index.html` y actualiza las variables en `styles.css`:
+
+```css
+--font-main: 'Inter', sans-serif;
+--font-display: 'Playfair Display', serif;
+```
+
+## 📁 Estructura de archivos
+
+```
+trianguloDeLectores/
+├── index.html        # Página principal
+├── styles.css        # Estilos y diseño
+├── script.js         # Lógica y funcionalidad
+├── reviews.json      # Base de datos de reviews
+└── README.md         # Este archivo
+```
+
+## 🔧 Desarrollo Local
+
+Para ver tu sitio localmente antes de hacer push:
+
+1. **Opción 1**: Abre `index.html` directamente en tu navegador
+2. **Opción 2**: Usa un servidor local (recomendado):
+
+```bash
+# Con Python 3
+python -m http.server 8000
+
+# Con Node.js (npx)
+npx serve
+
+# Con PHP
+php -S localhost:8000
+```
+
+Luego visita `http://localhost:8000`
+
+## 🐛 Solución de problemas
+
+### Las reviews no aparecen
+
+1. Verifica que `reviews.json` tenga el formato correcto (usa un validador JSON)
+2. Asegúrate de que la fecha esté en formato YYYY-MM-DD
+3. Revisa la consola del navegador (F12) para ver errores
+
+### Los cambios no se reflejan en GitHub Pages
+
+- GitHub Pages puede tardar 1-5 minutos en actualizar
+- Limpia el caché del navegador (Ctrl+F5 o Cmd+Shift+R)
+- Verifica que los archivos estén correctamente en la rama `main`
+
+### Las imágenes no cargan
+
+- Verifica que la URL de la imagen sea válida y accesible
+- Usa URLs completas (https://...)
+- Si dejas el campo `"imagen": ""` vacío, se generará una automáticamente
+
+## 📄 Licencia
+
+Este proyecto es de código abierto. Siéntete libre de usar, modificar y distribuir.
+
+## 🤝 Contribuciones
+
+¿Tienes ideas para mejorar el sitio? ¡Las contribuciones son bienvenidas!
+
+---
+
+**¡Felices reviews! 📖🎬📺**

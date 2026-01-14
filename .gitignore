@@ -1,0 +1,25 @@
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporal
+*.tmp
+*.bak
+*.log
+
+# Node (si decides usar herramientas en el futuro)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Archivos personales
+notas.txt
+draft/

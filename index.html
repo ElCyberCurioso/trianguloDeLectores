@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triángulo de Lectores - Reviews</title>
+    <meta name="description" content="Reviews de libros, series, películas y más">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <h1 class="logo">
+                    <span class="logo-icon">📚</span>
+                    Triángulo de Lectores
+                </h1>
+                <button class="theme-toggle" id="themeToggle" aria-label="Cambiar tema">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </div>
+            <p class="tagline">Reviews honestas de libros, series, películas y más</p>
+        </div>
+    </header>
+
+    <!-- Filters -->
+    <section class="filters-section">
+        <div class="container">
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">
+                    Todos
+                </button>
+                <button class="filter-btn" data-filter="libro">
+                    📖 Libros
+                </button>
+                <button class="filter-btn" data-filter="serie">
+                    📺 Series
+                </button>
+                <button class="filter-btn" data-filter="pelicula">
+                    🎬 Películas
+                </button>
+                <button class="filter-btn" data-filter="otro">
+                    ✨ Otros
+                </button>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Buscar por título, autor o descripción..." aria-label="Buscar reviews">
+                <span class="search-icon">🔍</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Reviews Grid -->
+    <main class="main-content">
+        <div class="container">
+            <div id="reviewsGrid" class="reviews-grid">
+                <!-- Reviews will be loaded here by JavaScript -->
+            </div>
+            <div id="noResults" class="no-results" style="display: none;">
+                <p>No se encontraron reviews con ese criterio 😔</p>
+            </div>
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Cargando reviews...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Triángulo de Lectores. Hecho con ❤️ y ☕</p>
+            <p class="footer-links">
+                <a href="https://github.com" target="_blank" rel="noopener">GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
