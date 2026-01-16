@@ -1,0 +1,76 @@
+/* ============================================
+   Iconos SVG Minimalistas
+   ============================================ */
+
+.icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    fill: currentColor;
+    transition: all var(--transition-fast);
+}
+
+.icon-large {
+    width: 28px;
+    height: 28px;
+}
+
+.icon-small {
+    width: 16px;
+    height: 16px;
+}
+
+/* Iconos de categorías en filtros */
+.filter-btn .icon {
+    margin-right: 6px;
+}
+
+/* Logo icon */
+.logo-icon-svg {
+    width: 32px;
+    height: 32px;
+    fill: var(--accent-primary);
+}
+
+/* Theme toggle icon */
+.theme-icon-svg {
+    width: 24px;
+    height: 24px;
+    fill: white;
+}
+
+/* Review type badge icon */
+.review-type .icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    vertical-align: text-bottom;
+}
+
+/* Search icon */
+.search-icon-svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--text-secondary);
+}
+
+/* Genre filter label icon */
+.genre-filter-label .icon {
+    margin-right: 6px;
+}
+
+/* Smooth transitions */
+.icon {
+    transition: transform 0.2s ease, fill 0.2s ease;
+}
+
+.icon:hover {
+    transform: scale(1.1);
+}
+
+/* Animation for theme toggle */
+.theme-toggle:hover .theme-icon-svg {
+    transform: rotate(180deg);
+    transition: transform 0.4s ease;
+}

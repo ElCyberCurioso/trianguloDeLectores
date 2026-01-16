@@ -6,6 +6,7 @@
     <title id="pageTitle">Review - Triángulo de Lectores</title>
     <meta name="description" content="Lee la review completa y deja tus comentarios">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="icons.css">
     <link rel="stylesheet" href="review-styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,12 +19,17 @@
             <div class="header-content">
                 <h1 class="logo">
                     <a href="index.html" style="text-decoration: none; color: inherit;">
-                        <span class="logo-icon">📚</span>
+                        <svg class="logo-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.18l5.5 2.75v8.14L12 17.82l-5.5-2.75V6.93L12 4.18z"/>
+                            <path d="M12 7v10M9 9l3-2 3 2M9 15l3 2 3-2"/>
+                        </svg>
                         Triángulo de Lectores
                     </a>
                 </h1>
                 <button class="theme-toggle" id="themeToggle" aria-label="Cambiar tema">
-                    <span class="theme-icon">🌙</span>
+                    <svg class="theme-icon-svg" id="themeIcon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
                 </button>
             </div>
             <p class="tagline">

@@ -34,8 +34,14 @@ function toggleTheme() {
 }
 
 function updateThemeIcon(theme) {
-    const themeIcon = document.querySelector('.theme-icon');
-    themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
+    const themeIcon = document.getElementById('themeIcon');
+    if (theme === 'light') {
+        // Moon icon for dark mode
+        themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    } else {
+        // Sun icon for light mode
+        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+    }
 }
 
 // ============================================
@@ -253,7 +259,7 @@ function renderReviews(reviews) {
     
     grid.innerHTML = reviews.map((review, index) => {
         const stars = generateStars(review.calificacion);
-        const emoji = getTypeEmoji(review.tipo);
+        const icon = getTypeIcon(review.tipo);
         const imageUrl = review.imagen || generatePlaceholderImage(review.tipo);
         
         // Use the original index saved during filtering
@@ -266,7 +272,7 @@ function renderReviews(reviews) {
                          onerror="this.src='${generatePlaceholderImage(review.tipo)}'">
                     <div class="review-content">
                         <div class="review-header">
-                            <span class="review-type">${emoji} ${review.tipo}</span>
+                            <span class="review-type">${icon} ${review.tipo}</span>
                             <h2 class="review-title">${escapeHtml(review.titulo)}</h2>
                             ${review.autor ? `<p class="review-author">Por ${escapeHtml(review.autor)}</p>` : ''}
                         </div>
@@ -346,41 +352,43 @@ function generateStars(rating) {
     return starsHTML;
 }
 
-function getTypeEmoji(type) {
-    const emojis = {
-        'libro': '📖',
-        'serie': '📺',
-        'pelicula': '🎬',
-        'película': '🎬',
-        'anime': '🎌',
-        'otro': '✨'
+function getTypeIcon(type) {
+    const icons = {
+        'libro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5a2.5 2.5 0 0 0 0 5H20v-2H6.5a.5.5 0 0 1 0-1z"/><path d="M6.5 2H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5v-13A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+        'serie': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4"/></svg>',
+        'pelicula': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
+        'película': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
+        'anime': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M9 15c0-1.5 1.5-2 3-2s3 .5 3 2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+        'otro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>'
     };
-    return emojis[type.toLowerCase()] || '✨';
+    return icons[type.toLowerCase()] || icons['otro'];
 }
 
 function generatePlaceholderImage(type) {
     const colors = {
-        'libro': 'linear-gradient(135deg, %236366f1, %239333ea)',
-        'serie': 'linear-gradient(135deg, %23ec4899, %23f43f5e)',
-        'pelicula': 'linear-gradient(135deg, %2310b981, %2306b6d4)',
-        'película': 'linear-gradient(135deg, %2310b981, %2306b6d4)',
-        'anime': 'linear-gradient(135deg, %23f97316, %23dc2626)',
-        'otro': 'linear-gradient(135deg, %23f59e0b, %23ef4444)'
+        'libro': { start: 'rgb(99,102,241)', end: 'rgb(147,51,234)' },
+        'serie': { start: 'rgb(236,72,153)', end: 'rgb(244,63,94)' },
+        'pelicula': { start: 'rgb(16,185,129)', end: 'rgb(6,182,212)' },
+        'película': { start: 'rgb(16,185,129)', end: 'rgb(6,182,212)' },
+        'anime': { start: 'rgb(249,115,22)', end: 'rgb(220,38,38)' },
+        'otro': { start: 'rgb(245,158,11)', end: 'rgb(239,68,68)' }
     };
     
-    const gradient = colors[type.toLowerCase()] || colors['otro'];
+    const colorPair = colors[type.toLowerCase()] || colors['otro'];
+    const icon = getTypeIcon(type);
+    
     return `data:image/svg+xml,${encodeURIComponent(`
         <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
             <defs>
                 <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:rgb(99,102,241);stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:rgb(236,72,153);stop-opacity:1" />
+                    <stop offset="0%" style="stop-color:${colorPair.start};stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:${colorPair.end};stop-opacity:1" />
                 </linearGradient>
             </defs>
-            <rect width="400" height="300" fill="url(%23grad)"/>
-            <text x="50%" y="50%" text-anchor="middle" fill="white" font-size="80" font-family="Arial">
-                ${getTypeEmoji(type)}
-            </text>
+            <rect width="400" height="300" fill="url(#grad)"/>
+            <g transform="translate(200, 150) scale(4)">
+                ${icon.replace('class="icon"', 'fill="white" stroke="white"')}
+            </g>
         </svg>
     `)}`;
 }

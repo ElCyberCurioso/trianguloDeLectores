@@ -1,4 +1,4 @@
-	// ============================================
+// ============================================
 // Review Detail Page Logic
 // ============================================
 
@@ -9,8 +9,48 @@ let allReviewsData = [];
 // Initialize Page
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    initThemeToggle();
     loadReviewDetail();
 });
+
+// ============================================
+// Theme Management (same as main page)
+// ============================================
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+}
+
+function initThemeToggle() {
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const themeIcon = document.getElementById('themeIcon');
+    if (!themeIcon) return;
+    
+    if (theme === 'light') {
+        // Moon icon for dark mode
+        themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+    } else {
+        // Sun icon for light mode
+        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+    }
+}
 
 // ============================================
 // Get Review ID from URL
@@ -102,8 +142,8 @@ function displayReview(review) {
     document.getElementById('pageTitle').textContent = `${review.titulo} - Triángulo de Lectores`;
     
     // Set type badge
-    const emoji = getTypeEmoji(review.tipo);
-    document.getElementById('reviewType').innerHTML = `${emoji} ${review.tipo}`;
+    const icon = getTypeIcon(review.tipo);
+    document.getElementById('reviewType').innerHTML = `${icon} ${review.tipo}`;
     
     // Set title and author
     document.getElementById('reviewTitle').textContent = review.titulo;
@@ -159,7 +199,7 @@ function displayAdditionalInfo(review) {
     if (review.generos && review.generos.length > 0) {
         additionalHTML += `
             <div class="review-metadata">
-                <h3>📚 Géneros</h3>
+                <h3><svg class="icon icon-small" style="margin-right: 8px; vertical-align: middle;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="7" r="1.5"/></svg>Géneros</h3>
                 <div class="genres-list">
                     ${review.generos.map(genre => `<span class="genre-tag">${escapeHtml(genre)}</span>`).join('')}
                 </div>
@@ -172,7 +212,7 @@ function displayAdditionalInfo(review) {
     
     switch(review.tipo.toLowerCase()) {
         case 'libro':
-            additionalHTML += '<h3>📖 Información del Libro</h3>';
+            additionalHTML += '<h3><svg class="icon icon-small" style="margin-right: 8px; vertical-align: middle;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5a2.5 2.5 0 0 0 0 5H20v-2H6.5a.5.5 0 0 1 0-1z"/><path d="M6.5 2H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5v-13A2.5 2.5 0 0 1 6.5 2z"/></svg>Información del Libro</h3>';
             additionalHTML += '<div class="metadata-grid">';
             
             if (review.paginas) {
@@ -207,7 +247,7 @@ function displayAdditionalInfo(review) {
             
         case 'serie':
             if (review.temporadas && review.temporadas.length > 0) {
-                additionalHTML += '<h3>📺 Información de la Serie</h3>';
+                additionalHTML += '<h3><svg class="icon icon-small" style="margin-right: 8px; vertical-align: middle;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4"/></svg>Información de la Serie</h3>';
                 additionalHTML += `<p class="total-seasons">Total de temporadas: <strong>${review.temporadas.length}</strong></p>`;
                 additionalHTML += '<div class="seasons-list">';
                 
@@ -230,7 +270,7 @@ function displayAdditionalInfo(review) {
             
         case 'pelicula':
         case 'película':
-            additionalHTML += '<h3>🎬 Información de la Película</h3>';
+            additionalHTML += '<h3><svg class="icon icon-small" style="margin-right: 8px; vertical-align: middle;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>Información de la Película</h3>';
             additionalHTML += '<div class="metadata-grid">';
             
             if (review.fecha_estreno) {
@@ -252,7 +292,7 @@ function displayAdditionalInfo(review) {
             break;
             
         case 'anime':
-            additionalHTML += '<h3>🎌 Información del Anime</h3>';
+            additionalHTML += '<h3><svg class="icon icon-small" style="margin-right: 8px; vertical-align: middle;" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M9 15c0-1.5 1.5-2 3-2s3 .5 3 2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>Información del Anime</h3>';
             additionalHTML += '<div class="metadata-grid">';
             
             if (review.temporada_anime) {
@@ -279,7 +319,7 @@ function displayAdditionalInfo(review) {
 // Generate Placeholder Image URL
 // ============================================
 function generatePlaceholderImageURL(type) {
-    const emoji = getTypeEmoji(type);
+    const icon = getTypeIcon(type);
     const colors = {
         'libro': '#6366f1,#9333ea',
         'serie': '#ec4899,#f43f5e',
@@ -301,9 +341,9 @@ function generatePlaceholderImageURL(type) {
                 </linearGradient>
             </defs>
             <rect width="400" height="600" fill="url(#grad)"/>
-            <text x="200" y="320" text-anchor="middle" fill="white" font-size="120" font-family="Arial">
-                ${emoji}
-            </text>
+            <g transform="translate(200, 300) scale(6)">
+                ${icon.replace('class="icon"', 'fill="white" stroke="white"')}
+            </g>
         </svg>
     `)}`;
 }
@@ -442,16 +482,16 @@ function showError() {
 // ============================================
 // Helper Functions (from main script.js)
 // ============================================
-function getTypeEmoji(type) {
-    const emojis = {
-        'libro': '📖',
-        'serie': '📺',
-        'pelicula': '🎬',
-        'película': '🎬',
-        'anime': '🎌',
-        'otro': '✨'
+function getTypeIcon(type) {
+    const icons = {
+        'libro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5a2.5 2.5 0 0 0 0 5H20v-2H6.5a.5.5 0 0 1 0-1z"/><path d="M6.5 2H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5v-13A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+        'serie': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4"/></svg>',
+        'pelicula': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
+        'película': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
+        'anime': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M9 15c0-1.5 1.5-2 3-2s3 .5 3 2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+        'otro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>'
     };
-    return emojis[type.toLowerCase()] || '✨';
+    return icons[type.toLowerCase()] || icons['otro'];
 }
 
 function generateStars(rating) {

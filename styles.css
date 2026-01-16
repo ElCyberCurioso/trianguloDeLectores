@@ -98,8 +98,11 @@ body {
     gap: var(--spacing-sm);
 }
 
-.logo-icon {
-    font-size: 2.5rem;
+.logo-icon-svg {
+    width: 32px;
+    height: 32px;
+    fill: var(--accent-primary);
+    flex-shrink: 0;
 }
 
 .tagline {
@@ -260,13 +263,13 @@ body {
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.search-icon {
+.search-icon-svg {
     position: absolute;
     right: var(--spacing-md);
     top: 50%;
     transform: translateY(-50%);
-    font-size: 1.2rem;
     pointer-events: none;
+    fill: var(--text-secondary);
 }
 
 /* ============================================
@@ -319,7 +322,9 @@ body {
 }
 
 .review-type {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     padding: 0.25rem 0.75rem;
     background: var(--accent-primary);
     color: white;
@@ -328,6 +333,13 @@ body {
     font-weight: 600;
     text-transform: uppercase;
     margin-bottom: var(--spacing-sm);
+}
+
+.review-type .icon {
+    width: 14px;
+    height: 14px;
+    fill: white;
+    flex-shrink: 0;
 }
 
 .review-title {

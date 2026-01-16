@@ -6,6 +6,7 @@
     <title>Triángulo de Lectores - Reviews</title>
     <meta name="description" content="Reviews de libros, series, películas y más">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="icons.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
@@ -16,11 +17,16 @@
         <div class="container">
             <div class="header-content">
                 <h1 class="logo">
-                    <span class="logo-icon">📚</span>
+                    <svg class="logo-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L4 6v12l8 4 8-4V6l-8-4zm0 2.18l5.5 2.75v8.14L12 17.82l-5.5-2.75V6.93L12 4.18z"/>
+                        <path d="M12 7v10M9 9l3-2 3 2M9 15l3 2 3-2"/>
+                    </svg>
                     Triángulo de Lectores
                 </h1>
                 <button class="theme-toggle" id="themeToggle" aria-label="Cambiar tema">
-                    <span class="theme-icon">🌙</span>
+                    <svg class="theme-icon-svg" id="themeIcon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
                 </button>
             </div>
             <p class="tagline">Reviews honestas de libros, series, películas y más</p>
@@ -32,34 +38,70 @@
         <div class="container">
             <div class="filters">
                 <button class="filter-btn active" data-filter="all">
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 3h18v18H3V3zm2 2v14h14V5H5z"/>
+                        <path d="M7 7h10M7 12h10M7 17h7"/>
+                    </svg>
                     Todos
                 </button>
                 <button class="filter-btn" data-filter="libro">
-                    📖 Libros
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5a2.5 2.5 0 0 0 0 5H20v-2H6.5a.5.5 0 0 1 0-1z"/>
+                        <path d="M6.5 2H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5v-13A2.5 2.5 0 0 1 6.5 2z"/>
+                    </svg>
+                    Libros
                 </button>
                 <button class="filter-btn" data-filter="serie">
-                    📺 Series
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <path d="M8 21h8M12 17v4"/>
+                    </svg>
+                    Series
                 </button>
                 <button class="filter-btn" data-filter="pelicula">
-                    🎬 Películas
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/>
+                    </svg>
+                    Películas
                 </button>
                 <button class="filter-btn" data-filter="anime">
-                    🎌 Anime
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <path d="M12 2a10 10 0 0 1 0 20"/>
+                        <circle cx="9" cy="10" r="1.5"/>
+                        <circle cx="15" cy="10" r="1.5"/>
+                        <path d="M9 15c0-1.5 1.5-2 3-2s3 .5 3 2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    Anime
                 </button>
                 <button class="filter-btn" data-filter="otro">
-                    ✨ Otros
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    Otros
                 </button>
             </div>
             
             <!-- Genre Filter (shown only for specific categories) -->
             <div id="genreFilterContainer" class="genre-filter-container" style="display: none;">
-                <label class="genre-filter-label">🏷️ Filtrar por género:</label>
+                <label class="genre-filter-label">
+                    <svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="7" cy="7" r="1.5"/>
+                    </svg>
+                    Filtrar por género:
+                </label>
                 <div id="genreFilters" class="genre-filters"></div>
             </div>
             
             <div class="search-box">
                 <input type="text" id="searchInput" placeholder="Buscar por título, autor o descripción..." aria-label="Buscar reviews">
-                <span class="search-icon">🔍</span>
+                <svg class="search-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
             </div>
         </div>
     </section>
