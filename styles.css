@@ -98,11 +98,17 @@ body {
     gap: var(--spacing-sm);
 }
 
-.logo-icon-svg {
-    width: 32px;
-    height: 32px;
-    fill: var(--accent-primary);
+.logo-image {
+    height: 80px;
+    width: auto;
+    object-fit: contain;
     flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+    .logo-image {
+        height: 60px;
+    }
 }
 
 .tagline {
@@ -121,7 +127,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
     transition: transform var(--transition-fast), background-color var(--transition-base);
     box-shadow: var(--shadow-md);
 }
@@ -162,17 +167,43 @@ body {
     font-weight: 600;
     transition: all var(--transition-fast);
     font-family: var(--font-main);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+/* Invertir iconos en modo oscuro */
+[data-theme="dark"] .filter-icon {
+    filter: invert(1) brightness(1.2);
 }
 
 .filter-btn:hover {
+    background: var(--accent-primary);
+    color: white;
     border-color: var(--accent-primary);
     transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.filter-btn:hover .filter-icon {
+    filter: brightness(0) invert(1);
 }
 
 .filter-btn.active {
     background: var(--accent-primary);
     color: white;
     border-color: var(--accent-primary);
+}
+
+.filter-btn.active .filter-icon {
+    filter: brightness(0) invert(1);
 }
 
 /* Genre Filters */
@@ -197,13 +228,18 @@ body {
 }
 
 .genre-filter-label {
-    display: block;
+    display: flex;
+    align-items: center;
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-secondary);
     margin-bottom: var(--spacing-sm);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.genre-filter-label .icon {
+    margin-right: 6px;
 }
 
 .genre-filters {
@@ -263,13 +299,13 @@ body {
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.search-icon-svg {
+.search-icon {
     position: absolute;
     right: var(--spacing-md);
     top: 50%;
     transform: translateY(-50%);
     pointer-events: none;
-    fill: var(--text-secondary);
+    color: var(--text-secondary);
 }
 
 /* ============================================
@@ -335,11 +371,13 @@ body {
     margin-bottom: var(--spacing-sm);
 }
 
-.review-type .icon {
-    width: 14px;
-    height: 14px;
-    fill: white;
+.review-type .type-icon {
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
+    filter: brightness(0) invert(1);
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .review-title {

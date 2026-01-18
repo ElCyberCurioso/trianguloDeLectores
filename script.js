@@ -28,19 +28,31 @@ function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     const newTheme = currentTheme === 'light' ? 'dark' : 'light';
     
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    updateThemeIcon(newTheme);
+    const themeIcon = document.getElementById('themeIcon');
+    
+    // Añadir clase de transición
+    themeIcon.classList.add('changing');
+    
+    setTimeout(() => {
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeIcon(newTheme);
+        
+        // Remover clase después de cambiar
+        setTimeout(() => {
+            themeIcon.classList.remove('changing');
+        }, 50);
+    }, 150);
 }
 
 function updateThemeIcon(theme) {
     const themeIcon = document.getElementById('themeIcon');
     if (theme === 'light') {
-        // Moon icon for dark mode
-        themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+        // Moon icon (activará modo oscuro al hacer click)
+        themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="white"/>';
     } else {
-        // Sun icon for light mode
-        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+        // Sun icon (activará modo claro al hacer click)
+        themeIcon.innerHTML = '<circle cx="12" cy="12" r="5" fill="white"/><line x1="12" y1="1" x2="12" y2="3" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="21" x2="12" y2="23" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="12" x2="3" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="21" y1="12" x2="23" y2="12" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" stroke="white" stroke-width="2" stroke-linecap="round"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" stroke="white" stroke-width="2" stroke-linecap="round"/>';
     }
 }
 
@@ -354,12 +366,12 @@ function generateStars(rating) {
 
 function getTypeIcon(type) {
     const icons = {
-        'libro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v-2H6.5a2.5 2.5 0 0 0 0 5H20v-2H6.5a.5.5 0 0 1 0-1z"/><path d="M6.5 2H20v13H6.5a2.5 2.5 0 0 0-2.5 2.5v-13A2.5 2.5 0 0 1 6.5 2z"/></svg>',
-        'serie': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4"/></svg>',
-        'pelicula': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
-        'película': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.82 2H4.18A2.18 2.18 0 0 0 2 4.18v15.64A2.18 2.18 0 0 0 4.18 22h15.64A2.18 2.18 0 0 0 22 19.82V4.18A2.18 2.18 0 0 0 19.82 2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"/></svg>',
-        'anime': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2a10 10 0 0 1 0 20"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M9 15c0-1.5 1.5-2 3-2s3 .5 3 2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
-        'otro': '<svg class="icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3"/></svg>'
+        'libro': '<img src="images/icons/books.svg" alt="" class="type-icon">',
+        'serie': '<img src="images/icons/series.svg" alt="" class="type-icon">',
+        'pelicula': '<img src="images/icons/movies.svg" alt="" class="type-icon">',
+        'película': '<img src="images/icons/movies.svg" alt="" class="type-icon">',
+        'anime': '<img src="images/icons/anime.svg" alt="" class="type-icon">',
+        'otro': '<img src="images/icons/others.svg" alt="" class="type-icon">'
     };
     return icons[type.toLowerCase()] || icons['otro'];
 }
@@ -374,8 +386,17 @@ function generatePlaceholderImage(type) {
         'otro': { start: 'rgb(245,158,11)', end: 'rgb(239,68,68)' }
     };
     
+    const iconSVGs = {
+        'libro': '<path d="M12 10.4V20M12 10.4C12 8.15979 12 7.03969 11.564 6.18404C11.1805 5.43139 10.5686 4.81947 9.81596 4.43597C8.96031 4 7.84021 4 5.6 4H4.6C4.03995 4 3.75992 4 3.54601 4.10899C3.35785 4.20487 3.20487 4.35785 3.10899 4.54601C3 4.75992 3 5.03995 3 5.6V16.4C3 16.9601 3 17.2401 3.10899 17.454C3.20487 17.6422 3.35785 17.7951 3.54601 17.891C3.75992 18 4.03995 18 4.6 18H7.54668C8.08687 18 8.35696 18 8.61814 18.0466C8.84995 18.0879 9.0761 18.1563 9.29191 18.2506C9.53504 18.3567 9.75977 18.5065 10.2092 18.8062L12 20M12 10.4C12 8.15979 12 7.03969 12.436 6.18404C12.8195 5.43139 13.4314 4.81947 14.184 4.43597C15.0397 4 16.1598 4 18.4 4H19.4C19.9601 4 20.2401 4 20.454 4.10899C20.6422 4.20487 20.7951 4.35785 20.891 4.54601C21 4.75992 21 5.03995 21 5.6V16.4C21 16.9601 21 17.2401 20.891 17.454C20.7951 17.6422 20.6422 17.7951 20.454 17.891C20.2401 18 19.9601 18 19.4 18H16.4533C15.9131 18 15.643 18 15.3819 18.0466C15.15 18.0879 14.9239 18.1563 14.7081 18.2506C14.465 18.3567 14.2402 18.5065 13.7908 18.8062L12 20" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+        'serie': '<rect x="2" y="4" width="20" height="14" rx="2" stroke="white" stroke-width="1.5" fill="none"/><path d="M8 22h8M12 18v4" stroke="white" stroke-width="1.5"/>',
+        'pelicula': '<path d="M19.7286477,3.91709009 L19.7796475,4.07673953 L20.3309222,5.99926292 C20.4355805,6.36424991 20.2508505,6.74366136 19.9126449,6.89230405 L19.8167039,6.92693721 L9.08979429,10.0020329 L20.2488588,10.0029698 C20.6285546,10.0029698 20.9423498,10.2851237 20.9920122,10.6511993 L20.9988588,10.7529698 L20.9988588,19.2509821 C20.9988588,20.713514 19.8571542,21.9093864 18.4163811,21.9959633 L18.2488588,22.0009821 L5.75,22.0009821 C4.28746816,22.0009821 3.09159572,20.8592775 3.00501879,19.4185045 L3,19.2509821 L2.99979429,10.8590329 L2.47803395,9.03789737 C2.07490554,7.63202154 2.84275532,6.16777873 4.20385145,5.68742476 L4.36350088,5.63642498 L16.3781751,2.19127259 C17.7840509,1.78814418 19.2482937,2.55599396 19.7286477,3.91709009 Z M19.498,11.502 L4.5,11.502 L4.5,19.2509821 C4.5,19.8550436 4.92847749,20.3590287 5.4980814,20.4755866 L5.62219476,20.4945285 L5.75,20.5009821 L18.2488588,20.5009821 C18.8960675,20.5009821 19.4283927,20.0091075 19.4924052,19.3787874 L19.4988588,19.2509821 L19.498,11.502 Z M6.27268011,6.6494258 L4.77695691,7.07831752 C4.15481999,7.25671241 3.7786565,7.8762725 3.89085867,8.49982068 L3.91988247,8.62445396 L4.26421826,9.82529556 L4.55930489,9.74043653 L6.27268011,6.6494258 Z M11.029003,5.28557216 L8.31151617,6.06479896 L6.59814094,9.15580969 L9.31562776,8.37658289 L11.029003,5.28557216 Z M15.7862871,3.92144289 L13.0688003,4.70066969 L11.3554251,7.79168042 L14.0719506,7.01272925 L15.7862871,3.92144289 Z M17.6334765,3.68788446 L16.1127092,6.42755115 L18.6812212,5.6912865 L18.3377549,4.49019556 C18.2305941,4.11648136 17.96425,3.83153666 17.6334765,3.68788446 Z" fill="white"/>',
+        'película': '<path d="M19.7286477,3.91709009 L19.7796475,4.07673953 L20.3309222,5.99926292 C20.4355805,6.36424991 20.2508505,6.74366136 19.9126449,6.89230405 L19.8167039,6.92693721 L9.08979429,10.0020329 L20.2488588,10.0029698 C20.6285546,10.0029698 20.9423498,10.2851237 20.9920122,10.6511993 L20.9988588,10.7529698 L20.9988588,19.2509821 C20.9988588,20.713514 19.8571542,21.9093864 18.4163811,21.9959633 L18.2488588,22.0009821 L5.75,22.0009821 C4.28746816,22.0009821 3.09159572,20.8592775 3.00501879,19.4185045 L3,19.2509821 L2.99979429,10.8590329 L2.47803395,9.03789737 C2.07490554,7.63202154 2.84275532,6.16777873 4.20385145,5.68742476 L4.36350088,5.63642498 L16.3781751,2.19127259 C17.7840509,1.78814418 19.2482937,2.55599396 19.7286477,3.91709009 Z M19.498,11.502 L4.5,11.502 L4.5,19.2509821 C4.5,19.8550436 4.92847749,20.3590287 5.4980814,20.4755866 L5.62219476,20.4945285 L5.75,20.5009821 L18.2488588,20.5009821 C18.8960675,20.5009821 19.4283927,20.0091075 19.4924052,19.3787874 L19.4988588,19.2509821 L19.498,11.502 Z M6.27268011,6.6494258 L4.77695691,7.07831752 C4.15481999,7.25671241 3.7786565,7.8762725 3.89085867,8.49982068 L3.91988247,8.62445396 L4.26421826,9.82529556 L4.55930489,9.74043653 L6.27268011,6.6494258 Z M11.029003,5.28557216 L8.31151617,6.06479896 L6.59814094,9.15580969 L9.31562776,8.37658289 L11.029003,5.28557216 Z M15.7862871,3.92144289 L13.0688003,4.70066969 L11.3554251,7.79168042 L14.0719506,7.01272925 L15.7862871,3.92144289 Z M17.6334765,3.68788446 L16.1127092,6.42755115 L18.6812212,5.6912865 L18.3377549,4.49019556 C18.2305941,4.11648136 17.96425,3.83153666 17.6334765,3.68788446 Z" fill="white"/>',
+        'anime': '<rect x="3" y="5" width="18" height="13" rx="3" stroke="white" stroke-width="1.2" fill="none"/><line x1="8.5" y1="2" x2="10.2" y2="5" stroke="white" stroke-width="1.2"/><line x1="6.6" y1="11.8" x2="10" y2="10.5" stroke="white" stroke-width="1.2"/><line x1="15.3" y1="2" x2="13.8" y2="5" stroke="white" stroke-width="1.2"/><line x1="17.4" y1="11.8" x2="14" y2="10.5" stroke="white" stroke-width="1.2"/><path d="M14.5,13c-.3,.7-.6,1.3-1.3,1.3-.5,0-.8-.2-1.3-.9-.4,.7-.7,.9-1.3,.9-.7,0-1-.5-1.3-1.3" stroke="white" stroke-width="1.2" fill="none"/><path d="M13,19v1s4.3,.1,4.3,2.8H6.7c0-2.6,4.3-2.8,4.3-2.8v-1" stroke="white" stroke-width="1.2" fill="none"/>',
+        'otro': '<circle cx="12" cy="12" r="2" fill="white"/><circle cx="6" cy="12" r="2" fill="white"/><circle cx="18" cy="12" r="2" fill="white"/>'
+    };
+    
     const colorPair = colors[type.toLowerCase()] || colors['otro'];
-    const icon = getTypeIcon(type);
+    const iconSVG = iconSVGs[type.toLowerCase()] || iconSVGs['otro'];
     
     return `data:image/svg+xml,${encodeURIComponent(`
         <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
@@ -386,8 +407,10 @@ function generatePlaceholderImage(type) {
                 </linearGradient>
             </defs>
             <rect width="400" height="300" fill="url(#grad)"/>
-            <g transform="translate(200, 150) scale(4)">
-                ${icon.replace('class="icon"', 'fill="white" stroke="white"')}
+            <g transform="translate(150, 100)" opacity="0.3">
+                <svg width="100" height="100" viewBox="0 0 24 24">
+                    ${iconSVG}
+                </svg>
             </g>
         </svg>
     `)}`;
