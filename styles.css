@@ -29,6 +29,9 @@
     /* Transiciones */
     --transition-fast: 0.15s ease;
     --transition-base: 0.3s ease;
+
+    /* Header glassmorphism */
+    --bg-secondary-alpha: rgba(248, 249, 250, 0.92);
 }
 
 /* Dark Mode */
@@ -42,6 +45,7 @@
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4);
+    --bg-secondary-alpha: rgba(30, 41, 59, 0.92);
 }
 
 /* ============================================
@@ -71,14 +75,24 @@ body {
    Header
    ============================================ */
 .header {
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-secondary-alpha);
     padding: var(--spacing-lg) 0;
-    border-bottom: 1px solid var(--border-color);
     position: sticky;
     top: 0;
     z-index: 100;
-    backdrop-filter: blur(10px);
-    background-color: rgba(var(--bg-secondary-rgb), 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent-primary) 0%, #ec4899 50%, #f97316 100%);
+    opacity: 0.85;
 }
 
 .header-content {
@@ -344,6 +358,11 @@ body {
     height: 240px;
     object-fit: cover;
     background: linear-gradient(135deg, var(--accent-primary), #ec4899);
+    transition: transform 0.4s ease;
+}
+
+.review-card:hover .review-image {
+    transform: scale(1.05);
 }
 
 .review-content {
@@ -412,7 +431,6 @@ body {
 .review-date {
     color: var(--text-secondary);
     font-size: 0.85rem;
-    text-align: right;
 }
 
 /* ============================================
@@ -592,4 +610,66 @@ svg defs {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* ============================================
+   Colores por Categoría
+   ============================================ */
+.review-type[data-type="libro"]    { background: #6366f1; }
+.review-type[data-type="serie"]    { background: #ec4899; }
+.review-type[data-type="pelicula"] { background: #10b981; }
+.review-type[data-type="película"] { background: #10b981; }
+.review-type[data-type="anime"]    { background: #f97316; }
+.review-type[data-type="otro"]     { background: #f59e0b; }
+
+/* ============================================
+   Card Footer, Géneros y CTA
+   ============================================ */
+.card-genres {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-sm);
+}
+
+.card-genre-tag {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--border-color);
+}
+
+.read-more-link {
+    color: var(--accent-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: color var(--transition-fast);
+    white-space: nowrap;
+}
+
+a:hover .read-more-link {
+    color: var(--accent-hover);
+}
+
+/* ============================================
+   Reviews Count
+   ============================================ */
+.reviews-count {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: var(--spacing-md);
 }

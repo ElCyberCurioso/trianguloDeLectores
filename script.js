@@ -70,10 +70,10 @@ function initEventListeners() {
         btn.addEventListener('click', (e) => {
             // Update active state
             filterButtons.forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
-            
+            btn.classList.add('active');
+
             // Update filter
-            currentFilter = e.target.getAttribute('data-filter');
+            currentFilter = btn.getAttribute('data-filter');
             
             // Reset genre filter when changing category
             currentGenre = 'all';
@@ -264,27 +264,33 @@ function renderReviews(reviews) {
     if (reviews.length === 0) {
         grid.innerHTML = '';
         noResults.style.display = 'block';
+        updateReviewsCount(0);
         return;
     }
-    
+
     noResults.style.display = 'none';
+    updateReviewsCount(reviews.length);
     
     grid.innerHTML = reviews.map((review, index) => {
         const stars = generateStars(review.calificacion);
         const icon = getTypeIcon(review.tipo);
         const imageUrl = review.imagen || generatePlaceholderImage(review.tipo);
-        
+
         // Use the original index saved during filtering
         const reviewIndex = review.originalIndex !== undefined ? review.originalIndex : index;
-        
+
+        const genreTags = review.generos && review.generos.length > 0
+            ? `<div class="card-genres">${review.generos.slice(0, 3).map(g => `<span class="card-genre-tag">${escapeHtml(g)}</span>`).join('')}</div>`
+            : '';
+
         return `
             <a href="review.html?id=${reviewIndex}" style="text-decoration: none; color: inherit; display: block;">
                 <article class="review-card" style="animation-delay: ${index * 0.05}s">
-                    <img src="${imageUrl}" alt="${review.titulo}" class="review-image" 
+                    <img src="${imageUrl}" alt="${review.titulo}" class="review-image"
                          onerror="this.src='${generatePlaceholderImage(review.tipo)}'">
                     <div class="review-content">
                         <div class="review-header">
-                            <span class="review-type">${icon} ${review.tipo}</span>
+                            <span class="review-type" data-type="${review.tipo}">${icon} ${review.tipo}</span>
                             <h2 class="review-title">${escapeHtml(review.titulo)}</h2>
                             ${review.autor ? `<p class="review-author">Por ${escapeHtml(review.autor)}</p>` : ''}
                         </div>
@@ -292,7 +298,11 @@ function renderReviews(reviews) {
                             ${stars}
                         </div>
                         <p class="review-description">${escapeHtml(review.descripcion.substring(0, 150))}${review.descripcion.length > 150 ? '...' : ''}</p>
-                        <p class="review-date">${formatDate(review.fecha)}</p>
+                        ${genreTags}
+                        <div class="card-footer">
+                            <p class="review-date">${formatDate(review.fecha)}</p>
+                            <span class="read-more-link">Leer reseña →</span>
+                        </div>
                     </div>
                 </article>
             </a>
@@ -414,6 +424,12 @@ function generatePlaceholderImage(type) {
             </g>
         </svg>
     `)}`;
+}
+
+function updateReviewsCount(count) {
+    const countEl = document.getElementById('reviewsCount');
+    if (!countEl) return;
+    countEl.textContent = count > 0 ? `${count} ${count === 1 ? 'reseña' : 'reseñas'}` : '';
 }
 
 function formatDate(dateString) {
