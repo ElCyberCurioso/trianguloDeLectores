@@ -1,0 +1,44 @@
+name: Seguridad
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Auditoría de dependencias y secretos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: npm audit (vulnerabilidades altas o críticas)
+        run: npm audit --audit-level=high
+
+      - name: Escaneo de secretos del repositorio
+        run: npm run secrets:check
+
+      - name: Comprobar que no se usan APIs de Node en el Worker
+        run: |
+          set -euo pipefail
+          if grep -rnE "from '(node:)?(fs|child_process|net|tls|dns|cluster|worker_threads)'" src/server src/do src/db; then
+            echo "Se ha detectado una API de Node no disponible en Workers." >&2
+            exit 1
+          fi
+          echo "El código del Worker sólo usa APIs Web estándar."

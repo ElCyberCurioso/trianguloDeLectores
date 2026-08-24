@@ -1,0 +1,56 @@
+{
+  "name": "triangulo-de-lectores",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run build:client && wrangler dev",
+    "build:client": "node scripts/build-client.mjs",
+    "build": "npm run build:client && wrangler deploy --dry-run --outdir=.wrangler/build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.node.json",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/e2e-prepare.mjs --reset && playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply tdl-db --local",
+    "db:migrate:staging": "wrangler d1 migrations apply tdl-db --env staging --remote",
+    "db:migrate:prod": "wrangler d1 migrations apply tdl-db --env production --remote",
+    "db:seed:local": "wrangler d1 execute tdl-db --local --file=./scripts/seed.sql",
+    "db:seed:staging": "wrangler d1 execute tdl-db --env staging --remote --file=./scripts/seed.sql",
+    "db:reset:local": "node scripts/reset-local.mjs && npm run db:migrate:local && npm run db:seed:local",
+    "db:studio": "drizzle-kit studio",
+    "admin:create": "node scripts/create-admin.mjs",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings src/types/worker-configuration.d.ts",
+    "deploy": "npm run build:client && wrangler deploy --env production",
+    "deploy:staging": "npm run build:client && wrangler deploy --env staging",
+    "secrets:check": "node scripts/check-secrets.mjs",
+    "test:e2e:ui": "node scripts/e2e-prepare.mjs && playwright test --ui"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.38.4",
+    "hono": "^4.6.20",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.6.4",
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.10.5",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "drizzle-kit": "^0.30.1",
+    "esbuild": "^0.24.2",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.3",
+    "vitest": "2.1.8",
+    "wrangler": "^4.0.0",
+    "@eslint/js": "^9.17.0"
+  }
+}

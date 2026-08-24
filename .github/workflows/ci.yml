@@ -1,0 +1,172 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Un despliegue a la vez: evita carreras entre dos merges seguidos.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # --------------------------------------------------------------- calidad --
+  quality:
+    name: Lint · Typecheck · Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Buscar secretos en el repositorio
+        run: npm run secrets:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests unitarios
+        run: npm run test:unit
+
+      - name: Tests de integración (workerd + D1 + R2 + KV + DO)
+        run: npm run test:integration
+
+      - name: Build (dry-run del Worker)
+        run: npm run build
+
+  # ---------------------------------------------------------------- staging --
+  deploy-staging:
+    name: Desplegar en staging
+    needs: quality
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://staging.triangulodelectores.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:client
+
+      - name: Aplicar migraciones en staging
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply tdl-db --env staging --remote
+
+      - name: Desplegar Worker (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env staging
+
+  # -------------------------------------------------------------------- e2e --
+  e2e:
+    name: E2E contra staging
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_BASE_URL: https://staging.triangulodelectores.com
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar Playwright
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ------------------------------------------------------------- producción --
+  deploy-production:
+    name: Desplegar en producción
+    needs: e2e
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Requiere aprobación manual si el entorno de GitHub tiene revisores.
+    environment:
+      name: production
+      url: https://triangulodelectores.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:client
+
+      # Migraciones aditivas. Nunca destructivas de forma automática:
+      # cualquier DROP/ALTER que pierda datos se aplica a mano y con backup.
+      - name: Aplicar migraciones en producción
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply tdl-db --env production --remote
+
+      - name: Desplegar Worker (producción)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env production
+
+      - name: Comprobación de humo
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if curl -fsS https://triangulodelectores.com/health | grep -q '"ok":true'; then
+              echo "Producción responde correctamente."
+              exit 0
+            fi
+            echo "Reintento $i..."
+            sleep 10
+          done
+          echo "La comprobación de humo ha fallado." >&2
+          exit 1

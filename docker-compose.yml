@@ -1,0 +1,40 @@
+# ============================================================================
+# Desarrollo local. Un único servicio.
+#
+# No hay PostgreSQL ni Redis: D1 (SQLite), R2, KV y los Durable Objects los
+# emula Miniflare dentro del propio contenedor, con las mismas APIs que en
+# producción. Añadir servicios externos aquí sólo introduciría diferencias
+# entre desarrollo y Cloudflare.
+# ============================================================================
+services:
+  app:
+    build:
+      context: .
+      target: dev
+    container_name: tdl-app
+    ports:
+      - "8787:8787"
+    environment:
+      NODE_ENV: development
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Código en caliente, sin sobrescribir node_modules del contenedor.
+      - ./src:/app/src:cached
+      - ./public:/app/public:cached
+      - ./migrations:/app/migrations:cached
+      - ./scripts:/app/scripts:cached
+      - ./wrangler.jsonc:/app/wrangler.jsonc:cached
+      # Estado persistente de Miniflare: la base D1 local sobrevive a los reinicios.
+      - wrangler-state:/app/.wrangler
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  wrangler-state:

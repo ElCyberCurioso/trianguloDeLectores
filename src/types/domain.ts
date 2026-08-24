@@ -1,0 +1,97 @@
+/** Vocabulario del dominio + etiquetas en español (una sola fuente de verdad). */
+
+export const CONTENT_TYPES = [
+  'BOOK', 'NOVEL', 'MOVIE', 'SERIES', 'ANIME', 'COMIC', 'MANGA', 'GAME', 'OTHER',
+] as const;
+export type ContentType = (typeof CONTENT_TYPES)[number];
+
+export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
+  BOOK: 'Libro',
+  NOVEL: 'Novela',
+  MOVIE: 'Película',
+  SERIES: 'Serie',
+  ANIME: 'Anime',
+  COMIC: 'Cómic',
+  MANGA: 'Manga',
+  GAME: 'Videojuego',
+  OTHER: 'Otro',
+};
+
+export const AVAILABILITY = [
+  'SUBSCRIPTION', 'RENT', 'BUY', 'FREE', 'LIBRARY', 'PHYSICAL', 'OTHER',
+] as const;
+export type Availability = (typeof AVAILABILITY)[number];
+
+export const AVAILABILITY_LABELS: Record<Availability, string> = {
+  SUBSCRIPTION: 'Incluido con suscripción',
+  RENT: 'Alquiler',
+  BUY: 'Compra',
+  FREE: 'Gratis',
+  LIBRARY: 'Biblioteca',
+  PHYSICAL: 'Edición física',
+  OTHER: 'Otro',
+};
+
+export const PLATFORM_KINDS = ['STREAMING', 'STORE', 'LIBRARY', 'AUDIO', 'GAME', 'OTHER'] as const;
+export type PlatformKind = (typeof PLATFORM_KINDS)[number];
+
+export const PLATFORM_KIND_LABELS: Record<PlatformKind, string> = {
+  STREAMING: 'Streaming',
+  STORE: 'Tienda',
+  LIBRARY: 'Biblioteca',
+  AUDIO: 'Audio',
+  GAME: 'Videojuegos',
+  OTHER: 'Otro',
+};
+
+export const COMMENT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'REPORTED', 'HIDDEN'] as const;
+export type CommentStatus = (typeof COMMENT_STATUSES)[number];
+
+export const COMMENT_STATUS_LABELS: Record<CommentStatus, string> = {
+  PENDING: 'Pendiente',
+  APPROVED: 'Aprobado',
+  REJECTED: 'Rechazado',
+  REPORTED: 'Reportado',
+  HIDDEN: 'Oculto',
+};
+
+export const REPORT_REASONS = ['SPAM', 'INSULTS', 'HARASSMENT', 'SPOILERS', 'OFFENSIVE', 'OTHER'] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  SPAM: 'Spam o publicidad',
+  INSULTS: 'Insultos',
+  HARASSMENT: 'Acoso',
+  SPOILERS: 'Spoilers sin avisar',
+  OFFENSIVE: 'Contenido ofensivo',
+  OTHER: 'Otro motivo',
+};
+
+export const REVIEW_SORTS = ['recent', 'oldest', 'rating', 'comments'] as const;
+export type ReviewSort = (typeof REVIEW_SORTS)[number];
+
+export const REVIEW_SORT_LABELS: Record<ReviewSort, string> = {
+  recent: 'Más recientes',
+  oldest: 'Más antiguas',
+  rating: 'Mejor valoradas',
+  comments: 'Más comentadas',
+};
+
+/** rating interno 0..10 == estrellas * 2 */
+export const MAX_RATING_HALF_STARS = 10;
+
+export function ratingToStars(rating: number): number {
+  return Math.round(Math.max(0, Math.min(MAX_RATING_HALF_STARS, rating))) / 2;
+}
+
+export function starsToRating(stars: number): number {
+  return Math.round(Math.max(0, Math.min(5, stars)) * 2);
+}
+
+export function formatStars(rating: number): string {
+  const stars = ratingToStars(rating);
+  return Number.isInteger(stars) ? `${stars}` : stars.toFixed(1).replace('.', ',');
+}
+
+export const PAGE_SIZE = 12;
+export const MAX_PAGE_SIZE = 48;

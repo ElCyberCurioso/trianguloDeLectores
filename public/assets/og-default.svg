@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#161a21"/>
+      <stop offset="100%" stop-color="#0f1115"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <path d="M600 150 L760 430 H440 Z" fill="none" stroke="#ff5c5c" stroke-width="10" stroke-linejoin="round"/>
+  <text x="600" y="530" fill="#e8eaf0" font-family="Georgia, serif" font-size="54" text-anchor="middle">
+    Triángulo de Lectores
+  </text>
+  <text x="600" y="580" fill="#a2abbd" font-family="system-ui, sans-serif" font-size="26" text-anchor="middle">
+    Reseñas de libros, cine, series, anime, cómic y videojuegos
+  </text>
+</svg>

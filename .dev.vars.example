@@ -1,0 +1,15 @@
+# ---------------------------------------------------------------------------
+# Secretos para desarrollo local (wrangler los lee de .dev.vars).
+# Copia este fichero a `.dev.vars` — que está en .gitignore — y rellénalo.
+# En staging y producción NO se usa este fichero: allí van con
+#   npx wrangler secret put NOMBRE --env <entorno>
+# ---------------------------------------------------------------------------
+
+# Pepper HMAC para pseudonimizar IP/User-Agent (GDPR) y firmar los tokens de
+# los formularios públicos. Genera uno con:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+HASH_PEPPER="cambia-esto-por-un-valor-aleatorio-de-32-bytes"
+
+# Clave privada de Turnstile.
+# Clave de PRUEBA que siempre valida (documentada por Cloudflare):
+TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"

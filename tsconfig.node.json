@@ -1,0 +1,21 @@
+{
+  // Herramientas que corren en Node: scripts, configuración de build y de tests.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "scripts/**/*",
+    "drizzle.config.ts",
+    "vitest.workspace.ts",
+    "vitest.unit.config.ts",
+    "vitest.integration.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "tests/e2e/**/*"
+  ],
+  "exclude": ["node_modules"]
+}

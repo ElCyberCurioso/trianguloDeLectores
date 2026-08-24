@@ -1,0 +1,10 @@
+{
+  // Islas que se ejecutan en el navegador: aquí sí hay DOM, y no hay bindings.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/client/**/*"],
+  "exclude": ["node_modules"]
+}
