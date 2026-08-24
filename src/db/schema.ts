@@ -282,6 +282,46 @@ export const mediaObjects = sqliteTable(
   (t) => ({ createdIdx: index('idx_media_created').on(t.createdAt) }),
 );
 
+/**
+ * Cola de pendientes del administrador. Más ligera que `reviews` a propósito:
+ * aquí todavía no hay opinión, sólo intención de consumir algo.
+ */
+export const watchlistItems = sqliteTable(
+  'watchlist_items',
+  {
+    id: text('id').primaryKey(),
+    titleEs: text('title_es').notNull(),
+    titleOriginal: text('title_original'),
+    contentType: text('content_type', {
+      enum: ['BOOK', 'NOVEL', 'MOVIE', 'SERIES', 'ANIME', 'COMIC', 'MANGA', 'GAME', 'OTHER'],
+    }).notNull(),
+    categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    year: integer('year'),
+    creator: text('creator'),
+    note: text('note'),
+    sourceUrl: text('source_url'),
+    priority: text('priority', { enum: ['LOW', 'MEDIUM', 'HIGH'] }).notNull().default('MEDIUM'),
+    status: text('status', { enum: ['PENDING', 'IN_PROGRESS', 'DONE', 'DROPPED'] })
+      .notNull()
+      .default('PENDING'),
+    isPublic: integer('is_public').notNull().default(1),
+    coverKey: text('cover_key'),
+    coverAlt: text('cover_alt'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    reviewId: text('review_id').references(() => reviews.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    completedAt: integer('completed_at'),
+  },
+  (t) => ({
+    queueIdx: index('idx_watchlist_queue').on(t.status, t.priority, t.sortOrder, t.createdAt),
+    publicIdx: index('idx_watchlist_public').on(t.isPublic, t.status, t.priority, t.createdAt),
+    typeIdx: index('idx_watchlist_type').on(t.contentType, t.status),
+    reviewIdx: index('idx_watchlist_review').on(t.reviewId),
+  }),
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
@@ -293,3 +333,4 @@ export type Comment = typeof comments.$inferSelect;
 export type CommentReport = typeof commentReports.$inferSelect;
 export type AuditEntry = typeof auditLog.$inferSelect;
 export type MediaObject = typeof mediaObjects.$inferSelect;
+export type WatchlistItem = typeof watchlistItems.$inferSelect;

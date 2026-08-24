@@ -95,3 +95,40 @@ export function formatStars(rating: number): string {
 
 export const PAGE_SIZE = 12;
 export const MAX_PAGE_SIZE = 48;
+
+// ------------------------------------------------------- lista de pendientes --
+
+export const WATCHLIST_STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE', 'DROPPED'] as const;
+export type WatchlistStatus = (typeof WATCHLIST_STATUSES)[number];
+
+export const WATCHLIST_STATUS_LABELS: Record<WatchlistStatus, string> = {
+  PENDING: 'Pendiente',
+  IN_PROGRESS: 'En curso',
+  DONE: 'Terminado',
+  DROPPED: 'Descartado',
+};
+
+/** Estados que siguen "vivos": los únicos que se muestran en público. */
+export const WATCHLIST_ACTIVE_STATUSES = ['PENDING', 'IN_PROGRESS'] as const;
+
+export const PRIORITIES = ['HIGH', 'MEDIUM', 'LOW'] as const;
+export type Priority = (typeof PRIORITIES)[number];
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  HIGH: 'Alta',
+  MEDIUM: 'Media',
+  LOW: 'Baja',
+};
+
+/** Orden de cola: alta primero. SQLite ordena texto, así que se mapea a número. */
+export const PRIORITY_WEIGHT: Record<Priority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+export const WATCHLIST_SORTS = ['priority', 'recent', 'oldest', 'title'] as const;
+export type WatchlistSort = (typeof WATCHLIST_SORTS)[number];
+
+export const WATCHLIST_SORT_LABELS: Record<WatchlistSort, string> = {
+  priority: 'Prioridad',
+  recent: 'Añadidos recientemente',
+  oldest: 'Añadidos hace más tiempo',
+  title: 'Título (A–Z)',
+};

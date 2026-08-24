@@ -2,8 +2,8 @@
 
 Catálogo y plataforma de reseñas de **libros, novelas, películas, series, anime, cómics, manga y videojuegos**, construido **para Cloudflare desde la primera línea**: no es una aplicación Node adaptada después.
 
-- Público: catálogo filtrable, ficha en modal accesible, puntuación de 0 a 5 con medias estrellas, spoilers ocultables, comentarios anidados y reportes.
-- Privado: panel en `/admin` con editor enriquecido, gestión de portadas en R2, moderación con umbral automático de reportes y auditoría.
+- Público: catálogo filtrable, ficha en modal accesible, puntuación de 0 a 5 con medias estrellas, spoilers ocultables, comentarios anidados y reportes. Y una **lista de pendientes** con lo que está en cola por ver, leer o jugar.
+- Privado: panel en `/admin` con editor enriquecido, gestión de portadas en R2, cola de pendientes convertible en reseña de un clic, moderación con umbral automático de reportes y auditoría.
 
 ---
 
@@ -24,6 +24,8 @@ Catálogo y plataforma de reseñas de **libros, novelas, películas, series, ani
 13. [DNS y SSL/TLS](#13-dns-y-ssltls)
 14. [Seguridad](#14-seguridad)
 15. [SEO](#15-seo)
+15b. [Lista de pendientes](#15b-lista-de-pendientes)
+15c. [Recursos de marca](#15c-recursos-de-marca)
 16. [Privacidad y RGPD](#16-privacidad-y-rgpd)
 17. [Observabilidad y analítica](#17-observabilidad-y-analítica)
 18. [Testing](#18-testing)
@@ -486,6 +488,86 @@ Comprobación manual recomendada antes de abrir al público:
 
 ---
 
+## 15b. Lista de pendientes
+
+La cola de trabajo: lo que hay por ver, leer o jugar antes de reseñarlo.
+
+**Es la lista del administrador**, no una por visitante — no hay registro de
+usuarios y añadirlo sería contrario a la minimización de datos que sigue el
+resto del sitio. Cada entrada puede marcarse **pública** (aparece en
+`/pendientes`) o **privada** (sólo visible en el panel).
+
+Tabla `watchlist_items`, deliberadamente más ligera que `reviews`: título, tipo,
+año, autor, categoría, nota, enlace, prioridad, estado y portada opcional. Sin
+puntuación ni cuerpo, porque todavía no hay opinión que dar.
+
+| Estado | Significado | ¿Sale en público? |
+|---|---|---|
+| `PENDING` | En cola | Sí |
+| `IN_PROGRESS` | Viéndolo ahora | Sí, en «Ahora mismo» |
+| `DONE` | Terminado o ya reseñado | No |
+| `DROPPED` | Abandonado | No |
+
+Prioridad `HIGH` / `MEDIUM` / `LOW`. Ordena la cola del panel y destaca las
+tarjetas públicas.
+
+**Convertir en reseña** crea un borrador con los datos ya conocidos y la
+portada, arranca el cuerpo con la nota del pendiente (escapada, porque es texto
+plano y el cuerpo es HTML), marca el item como terminado y enlaza ambos
+registros. La reseña **nace como borrador**: publicar sigue siendo un acto
+explícito.
+
+Para llenar la lista de golpe, `/admin/pendientes` acepta un título por línea
+(máximo 50) con tipo y prioridad por defecto.
+
+La página pública se cachea en el borde con su propio sello de versión
+(`cachever:watchlist`), independiente del de las reseñas.
+
+## 15c. Recursos de marca
+
+Los ficheros de `public/assets/brand/` se generan desde `triangulo_brand.zip`:
+
+```bash
+pip install Pillow
+python3 scripts/build-brand.py triangulo_brand.zip
+```
+
+No es parte del build: se ejecuta cuando cambia la marca y el resultado se
+versiona. Requiere Pillow, que no es dependencia del proyecto.
+
+El pack original necesitaba tres arreglos, todos automatizados en el script:
+
+1. **Neblina blanca.** Los PNG «transparentes» traían un velo blanco a alpha 24
+   sobre todo el lienzo; sobre el tema oscuro se veía como un rectángulo gris.
+2. **Encuadre del icono.** `icon-1024.png` tenía el dibujo en la esquina
+   superior izquierda, ocupando 84–676 px de 1024. Se recorta y se recentra.
+3. **Contraste en tema oscuro.** La tinta de la marca es azul marino: invisible
+   sobre el fondo oscuro. Las variantes `-light` transforman el **alfa** (tinta
+   → marfil opaco, papel → transparente) en vez de recolorear, porque el
+   original es una rasterización con ruido JPEG y cualquier mapeo de color lo
+   convertía en suciedad visible. El dorado se respeta en ambas variantes.
+
+Dónde aparece cada pieza:
+
+| Sitio | Recurso |
+|---|---|
+| Cabecera | Marca suelta + nombre en tipografía display. El lockup completo es ilegible a la altura de una barra de navegación |
+| Mancheta de portada | Logotipo completo sobre banda de tinta, fija en ambos temas |
+| Pie | Lockup horizontal |
+| Acceso al panel | Lockup horizontal |
+| Pestaña del navegador | `favicon.ico` con placa marfil (la marca sola desaparecería en una barra oscura) |
+| iOS / PWA | `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` |
+| Redes sociales | `og-default.jpg` 1200×630 |
+
+La paleta del sitio sale de los propios ficheros: tinta `#0d1a26`, dorado
+`#c8963e`, marfil `#f4efe4`. En tema claro el dorado se oscurece a `#96662a`
+para mantener el contraste AA sobre blanco.
+
+Detalle de accesibilidad: los logotipos que dependen del tema van como fondo CSS
+—existen en dos versiones y así el navegador descarga sólo la que aplica— y el
+nombre accesible lo aporta texto real en el marcado, no un `alt` de imagen
+decorativa.
+
 ## 16. Privacidad y RGPD
 
 Pensado para público de España y la UE:
@@ -533,9 +615,9 @@ npm test                   # ambos
 npm run test:e2e           # Playwright
 ```
 
-**Unitarios** (`tests/unit/`): sanitizado con vectores XSS reales, validación de esquemas, conversión de puntuaciones, umbral de moderación, hashing y pseudonimización, validación de imágenes y claves de R2, slugs.
+**Unitarios** (`tests/unit/`): sanitizado con vectores XSS reales, validación de esquemas, conversión de puntuaciones, umbral de moderación, hashing y pseudonimización, validación de imágenes y claves de R2, slugs, y la validación de la lista de pendientes.
 
-**Integración** (`tests/integration/`): corren en **workerd**, el mismo runtime que Cloudflare, con Miniflare proporcionando D1, R2, KV y Durable Objects auténticos. Sin mocks. Cubren autenticación completa, CSRF, cabeceras de seguridad, CRUD de reseñas, filtros y paginación, comentarios anidados con límite de profundidad, moderación, reportes con deduplicación y umbral, subidas a R2 con MIME spoofing y path traversal, caché y rate limiting.
+**Integración** (`tests/integration/`): corren en **workerd**, el mismo runtime que Cloudflare, con Miniflare proporcionando D1, R2, KV y Durable Objects auténticos. Sin mocks. Cubren autenticación completa, CSRF, cabeceras de seguridad, CRUD de reseñas, filtros y paginación, comentarios anidados con límite de profundidad, moderación, reportes con deduplicación y umbral, subidas a R2 con MIME spoofing y path traversal, caché, rate limiting, y la lista de pendientes completa (alta, cola, visibilidad pública y conversión en reseña).
 
 **E2E** (`tests/e2e/`): el recorrido completo — login, crear reseña, subir portada, publicar, visualizar en modal, comentar, responder, reportar, alcanzar el umbral, moderar, eliminar y restaurar — más un bloque de accesibilidad que incluye **navegación con el sitio sin JavaScript**.
 
@@ -678,7 +760,7 @@ src/
 
 migrations/                  # SQL aplicado a D1
 public/                      # assets estáticos servidos por el Worker
-scripts/                     # build de cliente, seed, admin, reset, escaneo de secretos
+scripts/                     # build de cliente y de marca, seed, admin, reset, secretos
 tests/
 ├── unit/  ├── integration/  └── e2e/
 

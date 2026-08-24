@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   CONTENT_TYPES, AVAILABILITY, PLATFORM_KINDS, REPORT_REASONS, REVIEW_SORTS,
   COMMENT_STATUSES, MAX_RATING_HALF_STARS, PAGE_SIZE, MAX_PAGE_SIZE,
+  WATCHLIST_STATUSES, WATCHLIST_SORTS, PRIORITIES,
 } from '../types/domain';
 
 /**
@@ -15,6 +16,23 @@ const optionalText = (max: number) =>
   trimmed(max).optional().transform((v) => (v && v.length ? v : undefined));
 
 export const idSchema = z.string().uuid();
+
+/**
+ * URL destinada a acabar en un `href`.
+ *
+ * `z.string().url()` NO basta: se apoya en el constructor `URL`, que acepta
+ * cualquier esquema, incluido `javascript:`. Como estos valores se pintan como
+ * enlaces, aquí se restringe explícitamente a http/https.
+ */
+export const httpUrl = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .url('URL inválida')
+    .refine((value) => /^https?:\/\//i.test(value), {
+      message: 'El enlace debe empezar por http:// o https://',
+    });
 export const slugSchema = z
   .string()
   .trim()
@@ -41,7 +59,7 @@ export const passwordSchema = z
 // ------------------------------------------------------------------ reseñas --
 export const reviewPlatformInput = z.object({
   platformId: idSchema,
-  url: z.string().trim().url('URL inválida').max(500).optional().or(z.literal('')),
+  url: httpUrl(500).optional().or(z.literal('')),
   availability: z.enum(AVAILABILITY).default('OTHER'),
   note: optionalText(120),
 });
@@ -142,10 +160,44 @@ export const platformInputSchema = z.object({
   name: trimmed(80).min(2),
   slug: slugSchema.optional(),
   kind: z.enum(PLATFORM_KINDS).default('OTHER'),
-  baseUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
+  baseUrl: httpUrl(300).optional().or(z.literal('')),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().or(z.literal('')),
   isActive: z.coerce.boolean().default(true),
   sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+});
+
+// ------------------------------------------------------ lista de pendientes --
+export const watchlistInputSchema = z.object({
+  titleEs: trimmed(200).min(2, 'El título es obligatorio'),
+  titleOriginal: optionalText(200),
+  contentType: z.enum(CONTENT_TYPES),
+  categoryId: idSchema.optional().nullable(),
+  year: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  creator: optionalText(200),
+  note: optionalText(500),
+  sourceUrl: httpUrl(500).optional().or(z.literal('')),
+  priority: z.enum(PRIORITIES).default('MEDIUM'),
+  status: z.enum(WATCHLIST_STATUSES).default('PENDING'),
+  isPublic: z.coerce.boolean().default(true),
+  coverKey: z.string().max(120).optional().nullable(),
+  coverAlt: optionalText(200),
+  sortOrder: z.coerce.number().int().min(0).max(9999).default(0),
+});
+export type WatchlistInput = z.infer<typeof watchlistInputSchema>;
+
+export const watchlistQuerySchema = z.object({
+  status: z.enum([...WATCHLIST_STATUSES, 'ALL', 'ACTIVE']).default('ACTIVE'),
+  type: z.enum(CONTENT_TYPES).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+  q: z.string().trim().max(120).optional(),
+  sort: z.enum(WATCHLIST_SORTS).default('priority'),
+  page: z.coerce.number().int().min(1).max(2000).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type WatchlistQueryInput = z.infer<typeof watchlistQuerySchema>;
+
+export const watchlistActionSchema = z.object({
+  action: z.enum(['start', 'complete', 'drop', 'reopen', 'delete', 'convert', 'toggle-public']),
 });
 
 /** Convierte un ZodError en un mapa campo -> mensaje, apto para el formulario. */

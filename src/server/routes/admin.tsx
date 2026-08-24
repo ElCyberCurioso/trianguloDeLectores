@@ -9,6 +9,7 @@ import { ReviewEditorPage } from '../views/admin/review-editor';
 import { AdminCommentsPage } from '../views/admin/comments';
 import { TaxonomyPage } from '../views/admin/taxonomy';
 import { SettingsPage } from '../views/admin/settings';
+import { AdminWatchlistPage, WatchlistEditorPage } from '../views/admin/watchlist';
 import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { rateLimit } from '../middleware/ratelimit';
 import { NO_STORE } from '../lib/cache';
@@ -16,6 +17,7 @@ import { clientIp, badRequest, forbidden, notFound, ok } from '../lib/http';
 import {
   loginSchema, reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
   moderationActionSchema, categoryInputSchema, genreInputSchema, platformInputSchema,
+  watchlistInputSchema, watchlistQuerySchema, watchlistActionSchema,
   fieldErrors,
 } from '../../validation/schemas';
 import { verifyPassword, hashPassword, pseudonymize, PBKDF2_ITERATIONS } from '../lib/crypto';
@@ -28,10 +30,11 @@ import { ReviewService } from '../services/reviews';
 import { CommentService } from '../services/comments';
 import { MediaService } from '../services/media';
 import { StatsService } from '../services/stats';
+import { WatchlistService, type WatchlistAction } from '../services/watchlist';
 import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
 import * as F from '../lib/form';
-import type { CommentStatus } from '../../types/domain';
+import type { CommentStatus, ContentType, Priority } from '../../types/domain';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -226,7 +229,10 @@ adminRoutes.post('/logout', requireAdmin, requireCsrf, async (c) => {
 // ================================================= ZONA AUTENTICADA =======
 adminRoutes.use('/*', requireAdmin);
 adminRoutes.use('/*', requireCsrf);
-adminRoutes.use('/*', rateLimit('adminWrite', (c) => c.get('user')?.id ?? null));
+adminRoutes.use('/*', rateLimit('adminWrite', {
+  identity: (c) => c.get('user')?.id ?? null,
+  onlyUnsafeMethods: true,
+}));
 
 adminRoutes.get('/', async (c) => {
   const data = await new StatsService(c.get('container')).dashboard();
@@ -488,6 +494,131 @@ adminRoutes.post('/comentarios/:id/accion', async (c) => {
   return c.redirect(target, 303);
 });
 
+
+// --------------------------------------------------------- pendientes -----
+adminRoutes.get('/pendientes', async (c) => {
+  const container = c.get('container');
+  const parsed = watchlistQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const query = parsed.success ? parsed.data : watchlistQuerySchema.parse({});
+
+  const [resultado, counters, categories] = await Promise.all([
+    container.watchlist.list(query),
+    container.watchlist.counters(),
+    container.taxonomy.listCategories(false),
+  ]);
+
+  return adminShell(
+    c,
+    'Pendientes',
+    <AdminWatchlistPage
+      items={resultado.items}
+      counters={counters}
+      categories={categories}
+      csrfToken={c.get('csrfToken')!}
+      query={{
+        status: query.status,
+        type: query.type,
+        priority: query.priority,
+        q: query.q,
+        sort: query.sort,
+      }}
+      page={resultado.page}
+      totalPages={resultado.totalPages}
+      total={resultado.total}
+      flash={
+        c.req.query('ok') === '1'
+          ? { kind: 'ok', message: 'Lista actualizada.' }
+          : c.req.query('added')
+            ? { kind: 'ok', message: `${c.req.query('added')} títulos añadidos a la lista.` }
+            : null
+      }
+    />,
+  );
+});
+
+adminRoutes.get('/pendientes/:id', async (c) => {
+  const container = c.get('container');
+  const item = await container.watchlist.getById(c.req.param('id'));
+  if (!item) throw notFound('Ese pendiente no existe');
+  const categories = await container.taxonomy.listCategories(false);
+
+  return adminShell(
+    c,
+    'Editar pendiente',
+    <WatchlistEditorPage
+      env={c.env}
+      item={item}
+      categories={categories}
+      csrfToken={c.get('csrfToken')!}
+      flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Cambios guardados.' } : null}
+    />,
+  );
+});
+
+/** Normaliza el formulario de pendientes al esquema de dominio. */
+async function readWatchlistForm(c: Context<AppEnv>) {
+  const body = await c.req.parseBody({ all: true });
+  return watchlistInputSchema.safeParse({
+    titleEs: F.strOrEmpty(body, 'titleEs', 200),
+    titleOriginal: F.str(body, 'titleOriginal', 200),
+    contentType: F.str(body, 'contentType', 20),
+    categoryId: F.str(body, 'categoryId', 40) ?? null,
+    year: F.num(body, 'year') ?? null,
+    creator: F.str(body, 'creator', 200),
+    note: F.str(body, 'note', 500),
+    sourceUrl: F.str(body, 'sourceUrl', 500) ?? '',
+    priority: F.str(body, 'priority', 10) ?? 'MEDIUM',
+    status: F.str(body, 'status', 20) ?? 'PENDING',
+    isPublic: F.bool(body, 'isPublic'),
+    coverKey: F.str(body, 'coverKey', 120) ?? null,
+    coverAlt: F.str(body, 'coverAlt', 200),
+    sortOrder: F.num(body, 'sortOrder') ?? 0,
+  });
+}
+
+adminRoutes.post('/pendientes', async (c) => {
+  const parsed = await readWatchlistForm(c);
+  if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
+  await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+  return c.redirect('/admin/pendientes?ok=1', 303);
+});
+
+adminRoutes.post('/pendientes/lote', async (c) => {
+  const body = await c.req.parseBody({ all: true });
+  const bruto = F.str(body, 'titles', 6000) ?? '';
+  const service = new WatchlistService(c.get('container'));
+  const total = await service.createBatch(
+    bruto.split('\n'),
+    {
+      contentType: (F.str(body, 'contentType', 20) ?? 'OTHER') as ContentType,
+      priority: (F.str(body, 'priority', 10) ?? 'MEDIUM') as Priority,
+      isPublic: F.bool(body, 'isPublic'),
+    },
+    c.get('user')!,
+  );
+  return c.redirect(`/admin/pendientes?added=${total}`, 303);
+});
+
+adminRoutes.post('/pendientes/:id', async (c) => {
+  const parsed = await readWatchlistForm(c);
+  if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
+  await new WatchlistService(c.get('container')).update(c.req.param('id'), parsed.data, c.get('user')!);
+  return c.redirect(`/admin/pendientes/${c.req.param('id')}?ok=1`, 303);
+});
+
+adminRoutes.post('/pendientes/:id/accion', async (c) => {
+  const body = await c.req.parseBody({ all: true });
+  const parsed = watchlistActionSchema.safeParse({ action: F.str(body, 'action', 20) });
+  if (!parsed.success) throw badRequest('bad_action', 'Acción no válida');
+
+  const resultado = await new WatchlistService(c.get('container')).act(
+    c.req.param('id'),
+    parsed.data.action as WatchlistAction,
+    c.get('user')!,
+  );
+  return c.redirect(resultado.redirectTo ?? '/admin/pendientes?ok=1', 303);
+});
+
 // --------------------------------------------------------- taxonomías -----
 adminRoutes.get('/taxonomias', async (c) => {
   const container = c.get('container');
@@ -687,7 +818,7 @@ adminRoutes.post('/ajustes', async (c) => {
 });
 
 // --------------------------------------------------- API interna (JSON) ---
-adminRoutes.post('/api/media/portada', rateLimit('upload', (c) => c.get('user')?.id ?? null), async (c) => {
+adminRoutes.post('/api/media/portada', rateLimit('upload', { identity: (c) => c.get('user')?.id ?? null }), async (c) => {
   const contentType = c.req.header('Content-Type') ?? '';
   if (!contentType.includes('multipart/form-data')) throw badRequest('bad_content_type', 'Se esperaba multipart/form-data');
 

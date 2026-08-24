@@ -133,3 +133,33 @@ VALUES
 UPDATE reviews SET comment_count = (
   SELECT COUNT(*) FROM comments c WHERE c.review_id = reviews.id AND c.status = 'APPROVED' AND c.is_deleted = 0
 );
+
+-- --------------------------------------------- pendientes de ejemplo (dev)
+INSERT OR IGNORE INTO watchlist_items
+  (id, title_es, title_original, content_type, category_id, year, creator, note, source_url,
+   priority, status, is_public, sort_order, created_at, updated_at)
+VALUES
+  ('77777777-7777-4777-8777-000000000001','Los detectives salvajes',NULL,'BOOK',
+   '11111111-1111-4111-8111-000000000001',1998,'Roberto Bolaño',
+   'Lleva dos años en la estantería mirándome mal. Este invierno cae.',NULL,
+   'HIGH','IN_PROGRESS',1,0,strftime('%s','now')*1000 - 86400000*14, strftime('%s','now')*1000 - 86400000*2),
+
+  ('77777777-7777-4777-8777-000000000002','Vinland Saga','Vinland Saga','MANGA',
+   '11111111-1111-4111-8111-000000000005',2005,'Makoto Yukimura',
+   'Me lo recomiendan cada vez que digo que el manga histórico me aburre.',NULL,
+   'HIGH','PENDING',1,0,strftime('%s','now')*1000 - 86400000*9, strftime('%s','now')*1000 - 86400000*9),
+
+  ('77777777-7777-4777-8777-000000000003','Disco Elysium',NULL,'GAME',
+   '11111111-1111-4111-8111-000000000007',2019,'ZA/UM',
+   'Dicen que es más novela que juego. Habrá que comprobarlo con tiempo por delante.',
+   'https://store.steampowered.com','MEDIUM','PENDING',1,0,
+   strftime('%s','now')*1000 - 86400000*7, strftime('%s','now')*1000 - 86400000*7),
+
+  ('77777777-7777-4777-8777-000000000004','Perfect Days',NULL,'MOVIE',
+   '11111111-1111-4111-8111-000000000002',2023,'Wim Wenders',
+   'Para una tarde tranquila.',NULL,'MEDIUM','PENDING',1,0,
+   strftime('%s','now')*1000 - 86400000*4, strftime('%s','now')*1000 - 86400000*4),
+
+  ('77777777-7777-4777-8777-000000000005','Nota privada de prueba',NULL,'OTHER',
+   NULL,NULL,NULL,'Este no debe aparecer en la página pública.',NULL,
+   'LOW','PENDING',0,0,strftime('%s','now')*1000, strftime('%s','now')*1000);

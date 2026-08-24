@@ -10,9 +10,26 @@ import { pseudonymize } from '../lib/crypto';
  * La identidad por defecto es la IP **pseudonimizada** (HMAC + pepper): limitamos
  * sin guardar ni propagar la IP en claro.
  */
-export function rateLimit(scope: RateScope, identityFn?: (c: Context<AppEnv>) => string | null) {
+export interface RateLimitOptions {
+  /** cómo identificar a quien pide; por defecto, la IP pseudonimizada */
+  identity?: (c: Context<AppEnv>) => string | null;
+  /**
+   * Contar sólo métodos con efectos (POST, PUT, PATCH, DELETE).
+   * Navegar por el panel no debe gastar el presupuesto de escritura: quien
+   * administra abre muchas páginas seguidas de forma perfectamente legítima.
+   */
+  onlyUnsafeMethods?: boolean;
+}
+
+const METODOS_SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export function rateLimit(scope: RateScope, options: RateLimitOptions = {}) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    const raw = identityFn?.(c) ?? clientIp(c) ?? 'anonymous';
+    if (options.onlyUnsafeMethods && METODOS_SEGUROS.has(c.req.method.toUpperCase())) {
+      return next();
+    }
+
+    const raw = options.identity?.(c) ?? clientIp(c) ?? 'anonymous';
     const identity = (await pseudonymize(raw, c.env.HASH_PEPPER)) ?? raw;
 
     const decision = await enforceRateLimit(c.env, scope, identity);

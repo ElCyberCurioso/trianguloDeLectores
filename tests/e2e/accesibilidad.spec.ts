@@ -74,3 +74,23 @@ test('robots.txt referencia el sitemap o bloquea el sitio', async ({ page }) => 
   const body = await response!.text();
   expect(body).toContain('Disallow: /');
 });
+
+test('la marca del sitio tiene nombre accesible en cabecera y pie', async ({ page }) => {
+  await page.goto('/');
+  // El logotipo va como fondo CSS: el nombre lo aporta el texto oculto.
+  await expect(page.getByRole('link', { name: 'Triángulo de Lectores' }).first()).toBeVisible();
+  await expect(page.locator('.hero__logo')).toHaveAttribute('alt', /.+/);
+});
+
+test('los iconos de marca se sirven correctamente', async ({ request }) => {
+  for (const ruta of ['/favicon.ico', '/apple-touch-icon.png', '/icon-192.png', '/site.webmanifest']) {
+    const response = await request.get(ruta);
+    expect(response.status(), ruta).toBe(200);
+  }
+});
+
+test('la página de pendientes es navegable', async ({ page }) => {
+  await page.goto('/pendientes');
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.getByRole('heading', { name: 'Pendientes', level: 1 })).toBeVisible();
+});

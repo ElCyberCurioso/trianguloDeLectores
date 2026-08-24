@@ -9,6 +9,7 @@ export type AuditAction =
   | 'review.delete' | 'review.restore' | 'review.duplicate'
   | 'comment.create' | 'comment.moderate' | 'comment.delete' | 'comment.restore' | 'comment.purge'
   | 'report.create' | 'report.threshold'
+  | 'watchlist.create' | 'watchlist.update' | 'watchlist.status' | 'watchlist.delete' | 'watchlist.convert'
   | 'media.upload' | 'media.delete'
   | 'taxonomy.create' | 'taxonomy.update' | 'taxonomy.delete'
   | 'settings.update';

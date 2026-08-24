@@ -5,7 +5,9 @@ import { Layout } from '../views/layout';
 import { HomePage } from '../views/pages/home';
 import { ReviewPage } from '../views/pages/review';
 import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
+import { WatchlistPage } from '../views/pages/watchlist';
 import { reviewQuerySchema } from '../../validation/schemas';
+import { CONTENT_TYPES, type ContentType } from '../../types/domain';
 import { edgeCached, CACHE_NS, NO_STORE } from '../lib/cache';
 import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
 import { variantUrl } from '../lib/images';
@@ -138,6 +140,51 @@ publicRoutes.get('/resena/:slug', async (c) => {
   return edgeCached(c, REVIEW_CACHE, produce);
 });
 
+
+// ------------------------------------------------------------- pendientes --
+const WATCHLIST_CACHE = { ns: CACHE_NS.watchlist, edgeTtl: 300, browserTtl: 60, swr: 3600 } as const;
+
+publicRoutes.get('/pendientes', async (c) => {
+  const tipoParam = c.req.query('type');
+  const tipo = CONTENT_TYPES.includes(tipoParam as ContentType) ? (tipoParam as ContentType) : undefined;
+
+  return edgeCached(c, WATCHLIST_CACHE, async () => {
+    const container = c.get('container');
+    const [resultado, tipos, settings] = await Promise.all([
+      // `onlyPublic` + estado activo se aplican en el repositorio: lo privado y
+      // lo ya terminado no sale de la base de datos.
+      container.watchlist.list({ onlyPublic: true, status: 'ACTIVE', type: tipo, perPage: 60 }),
+      container.watchlist.publicTypes(),
+      container.settings.all(),
+    ]);
+
+    const total = tipos.reduce((suma, t) => suma + t.total, 0);
+
+    return c.html(
+      <Layout
+        env={c.env}
+        nonce={c.get('nonce')}
+        seo={{
+          title: `Pendientes por ver | ${c.env.SITE_NAME}`,
+          description:
+            'Lo que está en cola por ver, leer o jugar en ' +
+            `${c.env.SITE_NAME}. ${settings['site.tagline']}`,
+          canonical: `${c.env.SITE_URL.replace(/\/$/, '')}/pendientes`,
+          type: 'website',
+        }}
+      >
+        <WatchlistPage
+          env={c.env}
+          items={resultado.items}
+          tiposDisponibles={tipos}
+          tipoActivo={tipo}
+          total={total}
+        />
+      </Layout>,
+    );
+  });
+});
+
 // ------------------------------------------------------- páginas estáticas --
 publicRoutes.get('/sobre', async (c) =>
   edgeCached(c, { ns: CACHE_NS.taxonomy, edgeTtl: 3600, browserTtl: 600 }, async () =>
@@ -232,6 +279,7 @@ publicRoutes.get('/sitemap.xml', async (c) =>
 
     const urls = [
       { loc: `${siteUrl}/`, lastmod: new Date().toISOString(), priority: '1.0' },
+      { loc: `${siteUrl}/pendientes`, lastmod: new Date().toISOString(), priority: '0.6' },
       { loc: `${siteUrl}/sobre`, lastmod: undefined, priority: '0.3' },
       { loc: `${siteUrl}/privacidad`, lastmod: undefined, priority: '0.2' },
       { loc: `${siteUrl}/cookies`, lastmod: undefined, priority: '0.2' },

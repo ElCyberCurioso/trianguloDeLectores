@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import {
   ORIGIN, loginAsAdmin, createReview, CATEGORY_ID, PLATFORM_ID, type AdminSession,
+  resetAdminRateLimit,
 } from './helpers';
 
 let session: AdminSession;
 
 beforeAll(async () => {
   session = await loginAsAdmin();
+  await resetAdminRateLimit();
 });
 
 /**

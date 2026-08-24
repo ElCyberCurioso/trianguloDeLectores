@@ -5,6 +5,7 @@ import { TaxonomyRepository } from '../../db/repos/taxonomy';
 import { UserRepository } from '../../db/repos/users';
 import { AuditRepository } from '../../db/repos/audit';
 import { MediaRepository } from '../../db/repos/media';
+import { WatchlistRepository } from '../../db/repos/watchlist';
 import { SettingsService } from '../lib/settings';
 import { Logger } from '../lib/logger';
 
@@ -20,6 +21,7 @@ export class Container {
   readonly users: UserRepository;
   readonly audit: AuditRepository;
   readonly media: MediaRepository;
+  readonly watchlist: WatchlistRepository;
   readonly settings: SettingsService;
   readonly log: Logger;
 
@@ -31,6 +33,7 @@ export class Container {
     this.users = new UserRepository(env);
     this.audit = new AuditRepository(env);
     this.media = new MediaRepository(env);
+    this.watchlist = new WatchlistRepository(env);
     this.settings = new SettingsService(env);
     this.log = new Logger(env, { requestId });
   }

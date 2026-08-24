@@ -4,6 +4,7 @@ import type { ReviewDetail } from '../../../db/repos/reviews';
 import type { Bindings } from '../../../types/env';
 import { AVAILABILITY_LABELS, CONTENT_TYPE_LABELS } from '../../../types/domain';
 import { variantUrl } from '../../lib/images';
+import { safeUrl } from '../../lib/sanitize';
 import { StarRating, formatDate } from './ui';
 
 interface FactProps { label: string; value: string | number | null | undefined }
@@ -120,6 +121,8 @@ const PlatformSection: FC<{ review: ReviewDetail }> = ({ review }) => (
     <ul class="platforms__list">
       {review.platforms.map((platform) => {
         const label = AVAILABILITY_LABELS[platform.availability];
+        // El href vuelve a filtrarse aquí, no sólo al guardarlo.
+        const enlace = platform.url ? safeUrl(platform.url, { allowRelative: false }) : null;
         const content = (
           <>
             <span class="platform__name">{platform.name}</span>
@@ -129,8 +132,8 @@ const PlatformSection: FC<{ review: ReviewDetail }> = ({ review }) => (
         );
         return (
           <li class={`platform platform--${platform.kind.toLowerCase()}`}>
-            {platform.url ? (
-              <a class="platform__link" href={platform.url} rel="noopener noreferrer nofollow" target="_blank">
+            {enlace ? (
+              <a class="platform__link" href={enlace} rel="noopener noreferrer nofollow" target="_blank">
                 {content}
                 <span class="platform__ext" aria-hidden="true">
                   ↗

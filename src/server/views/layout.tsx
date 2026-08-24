@@ -43,7 +43,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
     isAdmin = false, adminBadge = 0, user = null, csrfToken = null,
   } = props;
   const siteUrl = env.SITE_URL.replace(/\/$/, '');
-  const ogImage = seo.image ?? `${siteUrl}/assets/og-default.svg`;
+  const ogImage = seo.image ?? `${siteUrl}/assets/brand/og-default.jpg`;
 
   return (
     <html lang="es" data-theme-default="dark">
@@ -75,8 +75,11 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <meta name="twitter:description" content={seo.description} />
         <meta name="twitter:image" content={ogImage} />
 
-        <meta name="theme-color" content="#0f1115" />
-        <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+        <meta name="theme-color" content="#0d1420" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/site.webmanifest" />
         <link rel="stylesheet" href="/assets/styles.css" />
         <link rel="alternate" type="application/rss+xml" title={env.SITE_NAME} href={`${siteUrl}/rss.xml`} />
 
@@ -118,14 +121,22 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
 const PublicHeader: FC<{ siteName: string; tagline: string | null }> = ({ siteName }) => (
   <header class="site-header">
     <div class="wrap site-header__inner">
+      {/*
+        En la cabecera va la marca suelta y el nombre como texto: el lockup
+        completo, con su línea de "libros · películas · series…", se vuelve
+        ilegible a la altura de una barra de navegación. El lockup entero se
+        reserva para la mancheta y el pie, donde tiene sitio.
+
+        La marca va como fondo CSS y no como <img> porque existe en dos
+        versiones (tinta y marfil) y así el navegador descarga sólo la que toca.
+      */}
       <a class="brand" href="/">
-        <span class="brand__mark" aria-hidden="true">
-          &#9651;
-        </span>
+        <span class="brand__icon" aria-hidden="true" />
         <span class="brand__name">{siteName}</span>
       </a>
       <nav class="site-nav" aria-label="Principal">
         <a href="/">Catálogo</a>
+        <a href="/pendientes">Pendientes</a>
         <a href="/sobre">Sobre el sitio</a>
       </nav>
       <button
@@ -148,15 +159,14 @@ const AdminHeader: FC<{
 }> = ({ siteName, badge, user, csrfToken }) => (
   <header class="site-header site-header--admin">
     <div class="wrap site-header__inner">
-      <a class="brand" href="/admin">
-        <span class="brand__mark" aria-hidden="true">
-          &#9651;
-        </span>
+      <a class="brand brand--admin" href="/admin">
+        <span class="brand__icon" aria-hidden="true" />
         <span class="brand__name">{siteName} · Panel</span>
       </a>
       <nav class="site-nav" aria-label="Administración">
         <a href="/admin">Dashboard</a>
         <a href="/admin/resenas">Reseñas</a>
+        <a href="/admin/pendientes">Pendientes</a>
         <a href="/admin/comentarios">
           Comentarios
           {badge > 0 ? (
@@ -184,7 +194,13 @@ const AdminHeader: FC<{
 const SiteFooter: FC<{ siteName: string; isAdmin: boolean }> = ({ siteName, isAdmin }) => (
   <footer class="site-footer">
     <div class="wrap site-footer__inner">
-      <p>
+      {!isAdmin ? (
+        <a class="footer-brand" href="/">
+          <span class="footer-brand__logo" aria-hidden="true" />
+          <span class="visually-hidden">{siteName}</span>
+        </a>
+      ) : null}
+      <p class="site-footer__copy">
         © {new Date().getFullYear()} {siteName}
       </p>
       {!isAdmin ? (

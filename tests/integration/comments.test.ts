@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import {
   ORIGIN, loginAsAdmin, createReview, readFormToken, mintFormToken, setSetting, type AdminSession,
+  resetAdminRateLimit,
 } from './helpers';
 
 let session: AdminSession;
 
 beforeAll(async () => {
   session = await loginAsAdmin();
+  await resetAdminRateLimit();
 });
 
 interface PostCommentOptions {

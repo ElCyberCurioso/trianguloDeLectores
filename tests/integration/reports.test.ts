@@ -2,12 +2,14 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import {
   ORIGIN, loginAsAdmin, createReview, readFormToken, setSetting, type AdminSession,
+  resetAdminRateLimit,
 } from './helpers';
 
 let session: AdminSession;
 
 beforeAll(async () => {
   session = await loginAsAdmin();
+  await resetAdminRateLimit();
   await setSetting('comments.require_approval', false);
   await setSetting('moderation.report_threshold', 3);
   await setSetting('moderation.auto_hide_threshold', 10);

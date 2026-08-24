@@ -1,5 +1,5 @@
 import { env, SELF } from 'cloudflare:test';
-import { hashPassword } from '../../src/server/lib/crypto';
+import { hashPassword, pseudonymize } from '../../src/server/lib/crypto';
 import { issueFormToken } from '../../src/server/lib/formtoken';
 
 export const ORIGIN = 'http://localhost:8787';
@@ -169,6 +169,19 @@ export async function readFormToken(slug: string): Promise<string> {
  */
 export function mintFormToken(reviewId: string): Promise<string> {
   return issueFormToken(env, `comment:${reviewId}`);
+}
+
+/**
+ * Vacía el limitador de escrituras del panel.
+ *
+ * La suite hace en segundos lo que una persona haría en horas, y todos los
+ * ficheros comparten el mismo administrador. El límite real (120 escrituras por
+ * minuto) tiene su propio test; aquí sólo estorbaría.
+ */
+export async function resetAdminRateLimit(): Promise<void> {
+  const identidad = (await pseudonymize(adminId ?? '', env.HASH_PEPPER)) ?? adminId ?? 'anonymous';
+  const stub = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName(`adminWrite:${identidad}`));
+  await stub.reset();
 }
 
 export async function setSetting(key: string, value: unknown): Promise<void> {

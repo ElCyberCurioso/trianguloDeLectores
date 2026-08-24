@@ -7,21 +7,22 @@
 :root {
   color-scheme: dark light;
 
-  --bg: #0f1115;
-  --bg-elev: #161a21;
-  --bg-elev-2: #1d222b;
-  --line: #262c37;
-  --line-soft: #1f242d;
-  --text: #e8eaf0;
-  --text-dim: #a2abbd;
-  --text-faint: #6f7891;
+  /* Paleta tomada del propio logotipo: tinta azul marino, dorado y marfil. */
+  --bg: #0d1420;
+  --bg-elev: #141d2b;
+  --bg-elev-2: #1b2537;
+  --line: #253143;
+  --line-soft: #1c2637;
+  --text: #f4efe4;
+  --text-dim: #a8b3c4;
+  --text-faint: #74819a;
 
-  --accent: #ff5c5c;
-  --accent-soft: #ff8f6b;
-  --accent-ink: #1a0d0d;
-  --ok: #3ecf8e;
-  --warn: #f2b544;
-  --alert: #ff5c5c;
+  --accent: #c8963e;
+  --accent-soft: #e0b463;
+  --accent-ink: #14100a;
+  --ok: #4fbf8b;
+  --warn: #d9a441;
+  --alert: #e0614f;
 
   --radius: 14px;
   --radius-sm: 8px;
@@ -38,17 +39,18 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #faf8f5;
+  --bg: #faf7f0;
   --bg-elev: #ffffff;
-  --bg-elev-2: #f2efe9;
-  --line: #e2ddd4;
-  --line-soft: #ece8e1;
-  --text: #1b1a18;
-  --text-dim: #55524c;
-  --text-faint: #86817a;
-  --accent: #c8342f;
-  --accent-soft: #e0663c;
-  --accent-ink: #fff;
+  --bg-elev-2: #f1ece1;
+  --line: #e0d8c8;
+  --line-soft: #ebe5d8;
+  --text: #0d1a26;
+  --text-dim: #4a5464;
+  --text-faint: #7d8797;
+  /* Más oscuro que el dorado de marca: sobre blanco hace falta contraste AA. */
+  --accent: #96662a;
+  --accent-soft: #b0803a;
+  --accent-ink: #ffffff;
   --shadow: 0 10px 40px rgb(60 45 30 / 12%);
   --shadow-sm: 0 2px 10px rgb(60 45 30 / 8%);
 }
@@ -56,17 +58,17 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --bg: #faf8f5;
+    --bg: #faf7f0;
     --bg-elev: #ffffff;
-    --bg-elev-2: #f2efe9;
-    --line: #e2ddd4;
-    --line-soft: #ece8e1;
-    --text: #1b1a18;
-    --text-dim: #55524c;
-    --text-faint: #86817a;
-    --accent: #c8342f;
-    --accent-soft: #e0663c;
-    --accent-ink: #fff;
+    --bg-elev-2: #f1ece1;
+    --line: #e0d8c8;
+    --line-soft: #ebe5d8;
+    --text: #0d1a26;
+    --text-dim: #4a5464;
+    --text-faint: #7d8797;
+    --accent: #96662a;
+    --accent-soft: #b0803a;
+    --accent-ink: #ffffff;
     --shadow: 0 10px 40px rgb(60 45 30 / 12%);
     --shadow-sm: 0 2px 10px rgb(60 45 30 / 8%);
   }
@@ -110,6 +112,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
 
 .wrap { width: min(100% - 2.5rem, var(--wrap)); margin-inline: auto; }
 .main { flex: 1 0 auto; padding-block: clamp(1.5rem, 4vw, 3rem); }
+/* Cuando la página abre con la mancheta, ésta va pegada a la cabecera. */
+.main:has(> .hero:first-child) { padding-block-start: 0; }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -135,8 +139,24 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
   min-height: 64px; flex-wrap: wrap;
 }
 .brand { display: inline-flex; align-items: center; gap: 0.6rem; text-decoration: none; font-weight: 600; }
-.brand__mark { color: var(--accent); font-size: 1.3rem; }
-.brand__name { font-family: var(--font-display); font-size: 1.15rem; letter-spacing: 0.01em; }
+.brand__name { font-family: var(--font-display); font-size: 1.12rem; letter-spacing: 0.015em; white-space: nowrap; }
+
+/*
+  Logotipo por CSS y no por <img>: hay dos versiones (tinta para fondo claro,
+  marfil para fondo oscuro) y así el navegador descarga sólo la que aplica.
+  El nombre accesible lo aporta un texto oculto en el marcado.
+*/
+.brand__icon {
+  display: block;
+  width: 34px;
+  height: 34px;
+  background: url("/assets/brand/mark.png") center / contain no-repeat;
+  flex-shrink: 0;
+}
+:root[data-theme="dark"] .brand__icon { background-image: url("/assets/brand/mark-light.png"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand__icon { background-image: url("/assets/brand/mark-light.png"); }
+}
 
 .site-nav { display: flex; gap: 1.25rem; margin-inline-start: auto; flex-wrap: wrap; }
 .site-nav a {
@@ -158,13 +178,28 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
 .admin-user__name { color: var(--text-dim); font-size: 0.9rem; }
 
 /* -------------------------------------------------------------------- hero */
+/*
+  Mancheta: banda de tinta en ambos temas, como la portada de una revista.
+  Al fijar el fondo oscuro siempre, basta una única versión del logotipo.
+*/
 .hero {
-  padding-block: clamp(2rem, 6vw, 4rem) clamp(1rem, 3vw, 2rem);
-  border-bottom: 1px solid var(--line-soft);
-  background: radial-gradient(120% 100% at 15% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%);
+  padding-block: clamp(2rem, 5vw, 3.5rem);
+  margin-block-end: 0.5rem;
+  background:
+    radial-gradient(90% 120% at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 65%),
+    linear-gradient(180deg, #101a29 0%, #0b1220 100%);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 }
-.hero__title { font-size: clamp(2.2rem, 6vw, 3.6rem); margin-bottom: 0.25em; letter-spacing: -0.02em; }
-.hero__tagline { color: var(--text-dim); font-size: clamp(1rem, 2vw, 1.15rem); max-width: 52ch; margin: 0; }
+.hero__inner { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.75rem; }
+.hero__title { margin: 0; line-height: 0; }
+.hero__logo { width: clamp(180px, 26vw, 300px); height: auto; }
+.hero__tagline {
+  color: #c3ccdb;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  max-width: 52ch;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
 
 /* ----------------------------------------------------------------- filtros */
 .filters {
@@ -533,6 +568,17 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
   background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 2rem; width: min(100%, 400px); box-shadow: var(--shadow);
 }
+.login__logo {
+  display: block;
+  width: 170px;
+  height: 61px;
+  margin: 0 auto 0.75rem;
+  background: url("/assets/brand/wordmark.png") center / contain no-repeat;
+}
+:root[data-theme="dark"] .login__logo { background-image: url("/assets/brand/wordmark-light.png"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .login__logo { background-image: url("/assets/brand/wordmark-light.png"); }
+}
 .login__title { font-size: 1.5rem; margin-bottom: 0.2em; }
 .login__subtitle { color: var(--text-faint); margin-block: 0 1.5rem; font-size: 0.9rem; }
 
@@ -592,7 +638,22 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
 
 /* ----------------------------------------------------------------- footer */
 .site-footer { border-top: 1px solid var(--line); padding-block: 1.5rem; margin-block-start: 3rem; flex-shrink: 0; }
-.site-footer__inner { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; color: var(--text-faint); font-size: 0.85rem; }
+.site-footer__inner { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; color: var(--text-faint); font-size: 0.85rem; }
+.site-footer__copy { margin: 0; }
+.footer-brand { display: block; text-decoration: none; }
+.footer-brand__logo {
+  display: block;
+  width: 210px;
+  height: 75px;
+  background: url("/assets/brand/wordmark.png") left center / contain no-repeat;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.footer-brand:hover .footer-brand__logo { opacity: 1; }
+:root[data-theme="dark"] .footer-brand__logo { background-image: url("/assets/brand/wordmark-light.png"); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .footer-brand__logo { background-image: url("/assets/brand/wordmark-light.png"); }
+}
 .site-footer nav { display: flex; gap: 1rem; }
 .site-footer a { color: var(--text-dim); text-decoration: none; }
 .site-footer a:hover { color: var(--accent); }
@@ -606,6 +667,8 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
 }
 
 @media (max-width: 620px) {
+  .brand__name { font-size: 1rem; }
+  .footer-brand__logo { width: 150px; height: 54px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
   .site-header__inner { min-height: 56px; gap: 0.75rem; }
   .site-nav { order: 3; width: 100%; margin-inline-start: 0; overflow-x: auto; }
@@ -618,4 +681,114 @@ h1, h2, h3, h4 { font-family: var(--font-display); line-height: 1.2; margin: 0 0
 @media print {
   .site-header, .site-footer, .comments, .toasts, .filters { display: none; }
   body { background: #fff; color: #000; }
+}
+
+/* ==========================================================================
+   Lista de pendientes
+   ========================================================================== */
+
+.watchlist { padding-block: 1rem 3rem; }
+.watchlist__head { max-width: 60ch; margin-bottom: 1.5rem; }
+.watchlist__title { font-size: clamp(1.8rem, 4vw, 2.6rem); margin-bottom: 0.3em; }
+.watchlist__intro { color: var(--text-dim); margin: 0; }
+.watchlist__section { margin-block: 2rem; }
+.watchlist__section-title {
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--accent); margin-bottom: 1rem;
+  padding-bottom: 0.5rem; border-bottom: 1px solid var(--line-soft);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-block: 1rem 1.5rem; }
+.chip {
+  display: inline-block; padding: 0.3rem 0.75rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--text-dim);
+  text-decoration: none; font-size: 0.85rem; transition: border-color 0.15s, color 0.15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.is-active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.pending-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+.pending {
+  display: flex; gap: 0.9rem;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  border-inline-start-width: 3px; border-radius: var(--radius);
+  padding: 0.85rem; transition: border-color 0.18s, transform 0.18s;
+}
+.pending:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.pending--high { border-inline-start-color: var(--accent); }
+.pending--medium { border-inline-start-color: var(--line); }
+.pending--low { border-inline-start-color: var(--line-soft); }
+
+.pending__cover { position: relative; flex-shrink: 0; width: 76px; }
+.pending__img {
+  width: 76px; height: 114px; object-fit: cover;
+  border-radius: var(--radius-sm); background: var(--bg-elev-2);
+}
+.pending__img--placeholder {
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-size: 1.8rem; color: var(--text-faint);
+}
+.pending__flag {
+  position: absolute; inset-block-end: -6px; inset-inline-start: 50%; transform: translateX(-50%);
+  background: var(--warn); color: #241a00; font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.12rem 0.4rem; border-radius: 999px; white-space: nowrap;
+}
+
+.pending__body { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; flex: 1; }
+.pending__type {
+  margin: 0; font-size: 0.68rem; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--accent); font-weight: 700;
+}
+.pending__title { margin: 0; font-size: 1rem; line-height: 1.25; }
+.pending__meta { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-faint); }
+.pending__note {
+  margin: 0.2rem 0 0; font-size: 0.84rem; color: var(--text-dim);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pending__footer {
+  margin-block-start: auto; padding-block-start: 0.5rem;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.pending__footer .badge { margin-inline-start: 0; }
+.pending__link { font-size: 0.8rem; color: var(--accent); text-decoration: none; margin-inline-start: auto; }
+.pending__link:hover { text-decoration: underline; }
+
+/* ------------------------------------------------------ cola del panel --- */
+.queue { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
+.queue-item {
+  display: flex; gap: 1rem; justify-content: space-between; flex-wrap: wrap;
+  background: var(--bg-elev); border: 1px solid var(--line);
+  border-inline-start-width: 4px; border-radius: var(--radius); padding: 0.85rem 1rem;
+}
+.queue-item--high { border-inline-start-color: var(--accent); }
+.queue-item--medium { border-inline-start-color: var(--line); }
+.queue-item--low { border-inline-start-color: var(--line-soft); }
+.queue-item--done, .queue-item--dropped { opacity: 0.62; }
+.queue-item__main { min-width: 240px; flex: 1; }
+.queue-item__head { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.queue-item__title { font-weight: 650; color: var(--text); text-decoration: none; font-size: 1.02rem; }
+.queue-item__title:hover { color: var(--accent); }
+.queue-item__meta { margin: 0.3rem 0 0; font-size: 0.8rem; color: var(--text-faint); }
+.queue-item__note { margin: 0.35rem 0 0; font-size: 0.86rem; color: var(--text-dim); }
+.queue-item__note a { color: var(--accent); }
+.queue-item__actions { display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: flex-start; }
+
+.quick-add {
+  display: grid; gap: 0.5rem; align-items: center;
+  grid-template-columns: minmax(180px, 2fr) minmax(120px, 1fr) minmax(110px, 1fr) minmax(180px, 2fr) auto auto;
+}
+.batch-add { margin-block-start: 0.9rem; }
+.batch-add__form { margin-block-start: 0.8rem; }
+.batch-add__row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 900px) {
+  .quick-add { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  .quick-add { grid-template-columns: 1fr; }
+  .pending { flex-direction: column; }
+  .pending__cover, .pending__img { width: 100%; }
+  .pending__img { height: 180px; object-fit: cover; }
 }

@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
-import { ORIGIN, loginAsAdmin, type AdminSession } from './helpers';
+import { ORIGIN, loginAsAdmin, resetAdminRateLimit, type AdminSession } from './helpers';
 
 let session: AdminSession;
 
 beforeAll(async () => {
   session = await loginAsAdmin();
+  await resetAdminRateLimit();
 });
 
 function pngFile(name = 'portada.png', width = 800, height = 1200): File {

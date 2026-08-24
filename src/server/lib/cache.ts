@@ -17,6 +17,7 @@ export const CACHE_NS = {
   reviews: 'reviews',
   taxonomy: 'taxonomy',
   comments: 'comments',
+  watchlist: 'watchlist',
 } as const;
 
 export type CacheNamespace = (typeof CACHE_NS)[keyof typeof CACHE_NS];
@@ -44,6 +45,11 @@ export async function invalidatePublicContent(env: Bindings): Promise<void> {
     bumpCacheVersion(env, CACHE_NS.reviews),
     bumpCacheVersion(env, CACHE_NS.comments),
   ]);
+}
+
+/** La lista de pendientes tiene su propio sello: cambia por su cuenta. */
+export async function invalidateWatchlist(env: Bindings): Promise<void> {
+  await bumpCacheVersion(env, CACHE_NS.watchlist);
 }
 
 /** Una petición sólo es cacheable si es GET público y sin credenciales. */

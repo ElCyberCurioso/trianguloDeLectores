@@ -11,7 +11,8 @@ export interface LoginPageProps {
 export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, next, siteName }) => (
   <div class="wrap login">
     <div class="login__card">
-      <h1 class="login__title">{siteName}</h1>
+      <span class="login__logo" aria-hidden="true" />
+      <h1 class="login__title visually-hidden">{siteName}</h1>
       <p class="login__subtitle">Acceso al panel de administración</p>
 
       {error ? (

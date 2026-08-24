@@ -30,9 +30,24 @@ function buildHref(query: ReviewQuery, page: number): string {
 
 export const HomePage: FC<HomePageProps> = ({ env, results, categories, genres, query, tagline }) => (
   <>
+    {/*
+      Cabecera de revista: banda oscura fija en ambos temas, con el logotipo
+      completo en marfil. Al ser una sola imagen para los dos temas se evita
+      duplicar la descarga, y el <h1> conserva texto real vía `alt`.
+    */}
     <section class="hero">
-      <div class="wrap">
-        <h1 class="hero__title">{env.SITE_NAME}</h1>
+      <div class="wrap hero__inner">
+        <h1 class="hero__title">
+          <img
+            class="hero__logo"
+            src="/assets/brand/logo-light.png"
+            alt={env.SITE_NAME}
+            width="320"
+            height="327"
+            fetchpriority="high"
+            decoding="async"
+          />
+        </h1>
         <p class="hero__tagline">{tagline}</p>
       </div>
     </section>

@@ -12,6 +12,8 @@ export interface DashboardStats {
   commentsReported: number;
   reportsOpen: number;
   usersTotal: number;
+  watchlistPending: number;
+  watchlistInProgress: number;
 }
 
 export interface DashboardData extends DashboardStats {
@@ -30,7 +32,7 @@ export class StatsService {
     const db = getDb(this.c.env);
     const notDeleted = isNull(reviews.deletedAt);
 
-    const [total, published, commentsTotal, pending, reported, reportsOpen, usersTotal] = await Promise.all([
+    const [total, published, commentsTotal, pending, reported, reportsOpen, usersTotal, watchlist] = await Promise.all([
       db.select({ value: count() }).from(reviews).where(notDeleted).get(),
       db.select({ value: count() }).from(reviews).where(and(notDeleted, eq(reviews.status, 'PUBLISHED'))).get(),
       this.c.comments.countAll(),
@@ -38,6 +40,7 @@ export class StatsService {
       this.c.comments.countByStatus('REPORTED'),
       this.c.reports.countOpen(),
       db.select({ value: count() }).from(users).get(),
+      this.c.watchlist.counters(),
     ]);
 
     const reviewsTotal = total?.value ?? 0;
@@ -52,6 +55,8 @@ export class StatsService {
       commentsReported: reported,
       reportsOpen,
       usersTotal: usersTotal?.value ?? 0,
+      watchlistPending: watchlist.pending,
+      watchlistInProgress: watchlist.inProgress,
     };
   }
 

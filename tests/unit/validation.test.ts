@@ -134,3 +134,24 @@ describe('fieldErrors', () => {
     }
   });
 });
+
+describe('URLs de plataforma (regresión)', () => {
+  const base = { titleEs: 'Dune', contentType: 'MOVIE' };
+  const platformId = '33333333-3333-4333-8333-000000000001';
+
+  it('rechaza javascript: en el enlace de una plataforma', () => {
+    const parsed = reviewInputSchema.safeParse({
+      ...base,
+      platforms: [{ platformId, url: 'javascript:alert(1)', availability: 'SUBSCRIPTION' }],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('acepta un enlace https normal', () => {
+    const parsed = reviewInputSchema.safeParse({
+      ...base,
+      platforms: [{ platformId, url: 'https://www.netflix.com/title/1', availability: 'SUBSCRIPTION' }],
+    });
+    expect(parsed.success).toBe(true);
+  });
+});

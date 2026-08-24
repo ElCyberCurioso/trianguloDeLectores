@@ -32,6 +32,18 @@ export const DashboardPage: FC<{ data: DashboardData }> = ({ data }) => (
       />
       <Stat label="Reportes abiertos" value={data.reportsOpen} href="/admin/comentarios?status=REPORTED" />
       <Stat label="Usuarios" value={data.usersTotal} href="/admin/ajustes" />
+      <Stat
+        label="Pendientes por ver"
+        value={data.watchlistPending}
+        href="/admin/pendientes?status=PENDING"
+        tone="accent"
+      />
+      <Stat
+        label="En curso"
+        value={data.watchlistInProgress}
+        href="/admin/pendientes?status=IN_PROGRESS"
+        tone={data.watchlistInProgress > 0 ? 'warn' : 'neutral'}
+      />
     </div>
 
     <p class="pending-counter" aria-live="polite">
@@ -131,7 +143,7 @@ export const DashboardPage: FC<{ data: DashboardData }> = ({ data }) => (
   </AdminPage>
 );
 
-const Stat: FC<{ label: string; value: number; href: string; tone?: 'neutral' | 'ok' | 'warn' | 'alert' }> = ({
+const Stat: FC<{ label: string; value: number; href: string; tone?: 'neutral' | 'ok' | 'warn' | 'alert' | 'accent' }> = ({
   label,
   value,
   href,
