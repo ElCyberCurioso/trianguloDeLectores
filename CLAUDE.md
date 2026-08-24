@@ -44,7 +44,12 @@ decisión. Estas son las reglas que no se negocian.
 ## Antes de dar algo por terminado
 
 ```bash
-npm run lint && npm run typecheck && npm test
+npm run preflight
 ```
 
-Y si has tocado rutas, vistas o el flujo de moderación, además `npm run test:e2e`.
+Encadena secretos, lint, typecheck, tests unitarios y de integración, build,
+`deploy --dry-run` en los tres entornos y E2E. Devuelve código distinto de cero
+si algo falla. Para iterar rápido: `npm run preflight -- --quick`.
+
+Para probar a mano: `npm run local` deja el entorno completo levantado
+(D1 migrada y sembrada, R2, KV, Durable Objects y usuario administrador).

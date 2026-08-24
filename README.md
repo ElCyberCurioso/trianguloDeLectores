@@ -130,20 +130,36 @@ git clone <url-del-repositorio>
 cd triangulo-de-lectores
 
 npm install
+npm run local
+```
 
-# Secretos locales (fichero ignorado por git)
-cp .dev.vars.example .dev.vars
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-# pega el valor en HASH_PEPPER dentro de .dev.vars
+`npm run local` deja el entorno completo listo y arranca el servidor. Hace, en orden:
 
-# Base de datos local (SQLite gestionado por Miniflare)
+1. crea `.dev.vars` con un `HASH_PEPPER` aleatorio si no existe (fichero ignorado por git);
+2. compila los bundles de cliente;
+3. aplica las migraciones de D1 local;
+4. carga los datos de ejemplo (categorías, géneros, plataformas, ajustes y tres reseñas);
+5. crea el usuario administrador si todavía no hay ninguno — la contraseña se pide por teclado y no queda en disco;
+6. levanta `wrangler dev` con D1, R2, KV y Durable Objects simulados por Miniflare.
+
+Opciones útiles:
+
+```bash
+npm run local:reset          # borra .wrangler/state y empieza de cero
+npm run local -- --port 3000 # otro puerto
+npm run local -- --no-seed   # sin datos de ejemplo
+npm run local -- --no-build  # sin recompilar el cliente
+```
+
+Nada de esto toca Cloudflare: todo el estado vive en `.wrangler/state`, en tu máquina.
+
+Si prefieres los pasos sueltos:
+
+```bash
+cp .dev.vars.example .dev.vars   # y pon un HASH_PEPPER real
 npm run db:migrate:local
 npm run db:seed:local
-
-# Usuario administrador (la contraseña se pide por teclado, no queda en disco)
 npm run admin:create
-
-# Arrancar
 npm run dev
 ```
 
@@ -152,11 +168,8 @@ npm run dev
 
 En local `TURNSTILE_ENABLED` está en `false`, así que los formularios no piden verificación anti-bot.
 
-Para empezar de cero:
-
-```bash
-npm run db:reset:local   # borra .wrangler/state, migra y vuelve a sembrar
-```
+Para empezar de cero: `npm run local:reset` (o `npm run db:reset:local` si sólo
+quieres reconstruir la base sin arrancar el servidor).
 
 ---
 
@@ -570,6 +583,38 @@ Secretos necesarios en GitHub (Settings → Secrets and variables → Actions):
 
 ## 20. Despliegue y rollback
 
+### Antes de subir nada
+
+```bash
+npm run preflight
+```
+
+Ejecuta de una vez toda la verificación previa a producción y devuelve código
+distinto de cero si algo falla:
+
+| Comprobación | Qué mira |
+|---|---|
+| Entorno | Node ≥ 20 y dependencias instaladas |
+| Secretos | Que no haya credenciales en el repositorio |
+| Configuración | Marcadores `REPLACE_WITH_` pendientes en producción y flags de compatibilidad |
+| Runtime | Que el código del Worker no importe APIs de Node |
+| Calidad | ESLint y TypeScript (Worker, cliente y herramientas) |
+| Tests | Unitarios + integración en workerd real |
+| Build | Bundles de cliente y `deploy --dry-run` en los tres entornos |
+| E2E | Recorrido completo con Playwright |
+
+Variantes:
+
+```bash
+npm run preflight -- --quick                        # sin E2E ni dry-run
+npm run preflight -- --skip-e2e                     # sin E2E
+npm run preflight -- --base http://127.0.0.1:8787   # E2E contra tu `npm run local`
+```
+
+Al terminar imprime además la lista de comprobaciones que ningún script puede
+hacer por ti (bucket R2 privado, secretos puestos, SSL/TLS, WAF, copia de
+seguridad de D1). Repásala antes de desplegar.
+
 ### Primer despliegue
 
 ```bash
@@ -646,7 +691,10 @@ wrangler.jsonc  ·  Dockerfile  ·  docker-compose.yml  ·  .dev.vars.example  �
 
 ```bash
 npm install                # instalar dependencias
-npm run dev                # desarrollo local (http://localhost:8787)
+npm run local              # entorno local completo, listo para probar
+npm run local:reset        # ídem, partiendo de cero
+npm run preflight          # verificación completa antes de producción
+npm run dev                # sólo el servidor (sin preparar datos)
 npm run build:client       # empaquetar las islas del navegador
 npm run build              # dry-run del Worker (valida bindings)
 npm run lint               # ESLint

@@ -8,6 +8,9 @@
   },
   "scripts": {
     "dev": "npm run build:client && wrangler dev",
+    "local": "node scripts/local.mjs",
+    "local:reset": "node scripts/local.mjs --reset",
+    "preflight": "node scripts/preflight.mjs",
     "build:client": "node scripts/build-client.mjs",
     "build": "npm run build:client && wrangler deploy --dry-run --outdir=.wrangler/build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.node.json",
