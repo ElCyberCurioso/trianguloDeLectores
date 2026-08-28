@@ -170,7 +170,7 @@ export const AdminWatchlistPage: FC<AdminWatchlistProps> = (props) => (
     </form>
 
     {props.items.length === 0 ? (
-      <EmptyState title="No hay nada con esos filtros" hint="Añade algo con el formulario de arriba." icon="📋" />
+      <EmptyState title="No hay nada con esos filtros" hint="Añade algo con el formulario de arriba." icon="list" />
     ) : (
       <ol class="queue">
         {props.items.map((item) => (

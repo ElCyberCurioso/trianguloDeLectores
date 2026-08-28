@@ -10,6 +10,8 @@ export type AuditAction =
   | 'comment.create' | 'comment.moderate' | 'comment.delete' | 'comment.restore' | 'comment.purge'
   | 'report.create' | 'report.threshold'
   | 'watchlist.create' | 'watchlist.update' | 'watchlist.status' | 'watchlist.delete' | 'watchlist.convert'
+  | 'recommendation.status' | 'recommendation.delete'
+  | 'recommendation.to_review' | 'recommendation.to_watchlist'
   | 'media.upload' | 'media.delete'
   | 'taxonomy.create' | 'taxonomy.update' | 'taxonomy.delete'
   | 'settings.update';

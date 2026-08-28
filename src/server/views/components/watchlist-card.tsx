@@ -7,6 +7,7 @@ import {
 import { variantUrl } from '../../lib/images';
 import { safeUrl } from '../../lib/sanitize';
 import { formatDate } from './ui';
+import { Icon } from './icons';
 
 export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: boolean }> = ({
   item,
@@ -54,15 +55,19 @@ export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: b
 
         <div class="pending__footer">
           <span class={`badge badge--${item.priority === 'HIGH' ? 'accent' : 'neutral'}`}>
-            Prioridad {PRIORITY_LABELS[item.priority].toLowerCase()}
+            <span class="visually-hidden">Prioridad </span>
+            {PRIORITY_LABELS[item.priority]}
           </span>
           {item.reviewSlug ? (
             <a class="pending__link" href={`/resena/${item.reviewSlug}`}>
               Ver la reseña
+              <Icon name="arrow-right" size={13} />
             </a>
           ) : enlaceSeguro ? (
             <a class="pending__link" href={enlaceSeguro} rel="noopener noreferrer nofollow" target="_blank">
-              Ficha ↗
+              Ficha
+              <Icon name="external" size={13} />
+              <span class="visually-hidden">Se abre en una pestaña nueva</span>
             </a>
           ) : null}
         </div>

@@ -7,6 +7,19 @@ import type { AppEnv, Bindings } from '../../types/env';
 import { randomToken, sha256Hex, timingSafeEqual, pseudonymize } from './crypto';
 
 export const SESSION_COOKIE = 'tdl_session';
+
+/**
+ * Nombre real de la cookie de sesión.
+ *
+ * Fuera de desarrollo lleva el prefijo `__Host-`, que el navegador sólo acepta
+ * si la cookie va con `Secure`, con `Path=/` y **sin `Domain`**. Eso la ata al
+ * origen exacto: un subdominio comprometido —staging, por ejemplo— no puede
+ * escribir la cookie de sesión del dominio principal. En desarrollo se sirve por
+ * http, donde ese prefijo es inválido, así que allí se usa el nombre llano.
+ */
+export function sessionCookieName(env: Pick<Bindings, 'ENVIRONMENT'>): string {
+  return env.ENVIRONMENT === 'development' ? SESSION_COOKIE : `__Host-${SESSION_COOKIE}`;
+}
 /** Identificador anónimo y rotativo para deduplicar reportes sin guardar PII. */
 export const REPORTER_COOKIE = 'tdl_rid';
 
@@ -145,18 +158,18 @@ export async function purgeExpiredSessions(env: Bindings): Promise<void> {
 }
 
 export function writeSessionCookie(c: Context<AppEnv>, session: EstablishedSession): void {
-  setCookie(c, SESSION_COOKIE, session.token, {
+  setCookie(c, sessionCookieName(c.env), session.token, {
     ...cookieOptions(c.env),
     maxAge: Math.floor(ABSOLUTE_TTL_MS / 1000),
   });
 }
 
 export function clearSessionCookie(c: Context<AppEnv>): void {
-  deleteCookie(c, SESSION_COOKIE, { ...cookieOptions(c.env) });
+  deleteCookie(c, sessionCookieName(c.env), { ...cookieOptions(c.env) });
 }
 
 export function readSessionCookie(c: Context<AppEnv>): string | undefined {
-  return getCookie(c, SESSION_COOKIE);
+  return getCookie(c, sessionCookieName(c.env));
 }
 
 /**

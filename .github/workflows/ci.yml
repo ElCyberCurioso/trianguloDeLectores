@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: staging
-      url: https://staging.triangulodelectores.com
+      url: https://staging.triangulodelectores.site
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +79,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply tdl-db --env staging --remote
+          command: d1 migrations apply DB --env staging --remote
 
       - name: Desplegar Worker (staging)
         uses: cloudflare/wrangler-action@v3
@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      E2E_BASE_URL: https://staging.triangulodelectores.com
+      E2E_BASE_URL: https://staging.triangulodelectores.site
       E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
       E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
     steps:
@@ -129,7 +129,7 @@ jobs:
     # Requiere aprobación manual si el entorno de GitHub tiene revisores.
     environment:
       name: production
-      url: https://triangulodelectores.com
+      url: https://triangulodelectores.site
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +148,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply tdl-db --env production --remote
+          command: d1 migrations apply DB --env production --remote
 
       - name: Desplegar Worker (producción)
         uses: cloudflare/wrangler-action@v3
@@ -161,7 +161,7 @@ jobs:
         run: |
           set -euo pipefail
           for i in 1 2 3 4 5; do
-            if curl -fsS https://triangulodelectores.com/health | grep -q '"ok":true'; then
+            if curl -fsS https://triangulodelectores.site/health | grep -q '"ok":true'; then
               echo "Producción responde correctamente."
               exit 0
             fi

@@ -31,10 +31,8 @@ function initTheme(): void {
   const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
   if (!button) return;
 
-  const current = (): 'light' | 'dark' => {
-    if (root.dataset.theme === 'light' || root.dataset.theme === 'dark') return root.dataset.theme;
-    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-  };
+  // Sin marca explícita el tema es el oscuro, que es el del sitio.
+  const current = (): 'light' | 'dark' => (root.dataset.theme === 'light' ? 'light' : 'dark');
 
   const sync = () => button.setAttribute('aria-pressed', current() === 'light' ? 'true' : 'false');
   sync();
@@ -245,6 +243,28 @@ function initFilters(): void {
   });
 }
 
+// ------------------------------------------------------- menú de usuario --
+/**
+ * El menú es un <details>, así que ya funciona sin esto. Aquí sólo se añade lo
+ * que un desplegable debe hacer y el elemento nativo no trae: cerrarse al pulsar
+ * fuera y con Escape, devolviendo el foco al botón.
+ */
+function initUserMenu(): void {
+  const menu = document.querySelector<HTMLDetailsElement>('[data-user-menu]');
+  if (!menu) return;
+
+  document.addEventListener('click', (event) => {
+    if (menu.open && !menu.contains(event.target as Node)) menu.open = false;
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && menu.open) {
+      menu.open = false;
+      menu.querySelector<HTMLElement>('summary')?.focus();
+    }
+  });
+}
+
 // ------------------------------------------------------------ confirmación --
 function initConfirms(): void {
   document.addEventListener('submit', (event) => {
@@ -304,6 +324,7 @@ function boot(): void {
   initCommentForms();
   initReportForms();
   initFilters();
+  initUserMenu();
   initConfirms();
   initFlashFromQuery();
   loadTurnstile();

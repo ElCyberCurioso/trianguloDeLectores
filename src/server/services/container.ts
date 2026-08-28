@@ -6,6 +6,7 @@ import { UserRepository } from '../../db/repos/users';
 import { AuditRepository } from '../../db/repos/audit';
 import { MediaRepository } from '../../db/repos/media';
 import { WatchlistRepository } from '../../db/repos/watchlist';
+import { RecommendationRepository } from '../../db/repos/recommendations';
 import { SettingsService } from '../lib/settings';
 import { Logger } from '../lib/logger';
 
@@ -22,6 +23,7 @@ export class Container {
   readonly audit: AuditRepository;
   readonly media: MediaRepository;
   readonly watchlist: WatchlistRepository;
+  readonly recommendations: RecommendationRepository;
   readonly settings: SettingsService;
   readonly log: Logger;
 
@@ -34,6 +36,7 @@ export class Container {
     this.audit = new AuditRepository(env);
     this.media = new MediaRepository(env);
     this.watchlist = new WatchlistRepository(env);
+    this.recommendations = new RecommendationRepository(env);
     this.settings = new SettingsService(env);
     this.log = new Logger(env, { requestId });
   }

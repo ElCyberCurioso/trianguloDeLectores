@@ -10,7 +10,10 @@ import { buildCsp } from '../middleware/security';
  *    versión guardado en KV. Publicar/editar una reseña incrementa el sello, con
  *    lo que todas las entradas antiguas quedan inalcanzables al instante. Es la
  *    alternativa correcta a purgar por tag, que requiere plan Enterprise.
- * 3) Nada autenticado o privado entra jamás en caché (ver `isCacheable`).
+ * 3) Invalidación por **versión desplegada**: la clave lleva también el id de
+ *    la versión del Worker, así que publicar código nuevo deja atrás todo el
+ *    HTML anterior sin tener que purgar nada a mano.
+ * 4) Nada autenticado o privado entra jamás en caché (ver `isCacheable`).
  */
 
 export const CACHE_NS = {
@@ -107,6 +110,9 @@ export async function edgeCached(
   const keyUrl = new URL(url.origin + url.pathname);
   for (const [k, v] of params) keyUrl.searchParams.append(k, v);
   keyUrl.searchParams.set('__v', version);
+  // El sello de KV cubre los cambios de contenido; el de versión, los de código.
+  const despliegue = c.env.CF_VERSION?.id;
+  if (despliegue) keyUrl.searchParams.set('__d', despliegue.slice(0, 8));
 
   const cacheKey = new Request(keyUrl.toString(), { method: 'GET' });
   const cache = caches.default;
@@ -130,9 +136,12 @@ export async function edgeCached(
       fresh.headers.set('Content-Security-Policy', buildCsp(c.get('nonce'), c.env));
     }
     fresh.headers.set('Cache-Control', cacheControlFor(opts));
+    // Vary por cookie: quien visita una página sin sesión y luego entra seguiría
+    // viendo, durante `browserTtl`, la copia que guardó su propio navegador —y
+    // en ella no aparece su menú de usuario—. Por codificación: evita servir la
+    // variante comprimida equivocada.
+    fresh.headers.set('Vary', 'Cookie, Accept-Encoding');
     fresh.headers.set('X-Cache', 'MISS');
-    // Vary: sin él, un cambio de tema o idioma podría servir la variante errónea.
-    fresh.headers.append('Vary', 'Accept-Encoding');
     const write = cache.put(cacheKey, fresh.clone()).catch(() => undefined);
     if (c.env.ENVIRONMENT === 'development') {
       // En desarrollo y en los tests se espera la escritura: Miniflare no cierra

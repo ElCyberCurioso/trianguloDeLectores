@@ -4,6 +4,11 @@
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
 
+# Las tipografías nunca cambian sin cambiar de nombre: cache máxima.
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
 # Los recursos de marca cambian muy de tarde en tarde, pero su nombre es fijo:
 # se cachean fuerte con revalidación en segundo plano.
 /assets/brand/*

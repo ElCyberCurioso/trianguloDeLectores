@@ -104,7 +104,9 @@ const CommentItem: FC<{ node: CommentNode; props: CommentsSectionProps }> = ({ n
                   <textarea class="textarea" name="details" rows={2} maxlength={500} />
                 </label>
                 {props.turnstileSiteKey ? (
-                  <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" />
+                  <div class="turnstile-slot">
+                    <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" data-size="normal" />
+                  </div>
                 ) : null}
                 <button type="submit" class="btn btn--sm btn--danger">
                   Enviar reporte
@@ -182,7 +184,9 @@ const CommentForm: FC<CommentsSectionProps & { parentId: string | null; compact?
     </label>
 
     {props.turnstileSiteKey ? (
-      <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" />
+      <div class="turnstile-slot">
+                    <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" data-size="normal" />
+                  </div>
     ) : null}
 
     <div class="comment-form__actions">

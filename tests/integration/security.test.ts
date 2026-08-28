@@ -178,3 +178,49 @@ describe('errores', () => {
     expect(body.error.message).not.toContain('SQL');
   });
 });
+
+describe('identidad de la petición', () => {
+  it('no deja elegir la propia identidad con X-Real-IP', async () => {
+    // `X-Real-IP` la manda el cliente, así que rotarla no debe conceder un cupo
+    // nuevo: la identidad sale de `CF-Connecting-IP`, que pone el borde.
+    const { slug } = await createReview(session, { title: 'Identidad falsificada' });
+    const estados: number[] = [];
+
+    for (let i = 0; i < 8; i++) {
+      const response = await SELF.fetch(`${ORIGIN}/api/resenas/${slug}/comentarios`, {
+        method: 'POST',
+        body: new URLSearchParams({ alias: `Alguien ${i}`, body: 'Comentario de prueba del límite.' }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: ORIGIN,
+          'Sec-Fetch-Site': 'same-origin',
+          // Cambia en cada intento; no debería servir de nada.
+          'X-Real-IP': `10.1.2.${i + 1}`,
+        },
+        redirect: 'manual',
+      });
+      await response.text();
+      estados.push(response.status);
+    }
+
+    expect(estados).toContain(429);
+  });
+});
+
+describe('tamaño de la petición', () => {
+  it('rechaza un formulario público desmesurado antes de parsearlo', async () => {
+    const response = await SELF.fetch(`${ORIGIN}/api/recomendaciones`, {
+      method: 'POST',
+      body: new URLSearchParams({ titleEs: 'Enorme', contentType: 'BOOK', note: 'x'.repeat(70 * 1024) }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Origin: ORIGIN,
+        'Sec-Fetch-Site': 'same-origin',
+        'CF-Connecting-IP': '203.0.113.200',
+      },
+      redirect: 'manual',
+    });
+    await response.text();
+    expect(response.status).toBe(400);
+  });
+});

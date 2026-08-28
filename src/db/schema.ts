@@ -322,6 +322,41 @@ export const watchlistItems = sqliteTable(
   }),
 );
 
+/**
+ * Recomendaciones del público. Espejo tipado de `0002_recommendations.sql`.
+ * Si cambia una, cambia la otra.
+ */
+export const recommendations = sqliteTable(
+  'recommendations',
+  {
+    id: text('id').primaryKey(),
+    titleEs: text('title_es').notNull(),
+    contentType: text('content_type', {
+      enum: ['BOOK', 'NOVEL', 'MOVIE', 'SERIES', 'ANIME', 'COMIC', 'MANGA', 'GAME', 'OTHER'],
+    }).notNull(),
+    creator: text('creator'),
+    year: integer('year'),
+    note: text('note').notNull(),
+    sourceUrl: text('source_url'),
+    alias: text('alias'),
+    status: text('status', { enum: ['PENDING', 'ACCEPTED', 'REJECTED'] }).notNull().default('PENDING'),
+    resolution: text('resolution', { enum: ['REVIEW', 'WATCHLIST'] }),
+    reviewId: text('review_id').references(() => reviews.id, { onDelete: 'set null' }),
+    watchlistId: text('watchlist_id').references(() => watchlistItems.id, { onDelete: 'set null' }),
+    ipHash: text('ip_hash'),
+    uaHash: text('ua_hash'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+    resolvedBy: text('resolved_by').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (t) => ({
+    bandejaIdx: index('idx_recommendations_bandeja').on(t.status, t.createdAt),
+    pendientesIdx: index('idx_recommendations_pendientes').on(t.status),
+    origenIdx: index('idx_recommendations_origen').on(t.ipHash, t.createdAt),
+  }),
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
@@ -334,3 +369,4 @@ export type CommentReport = typeof commentReports.$inferSelect;
 export type AuditEntry = typeof auditLog.$inferSelect;
 export type MediaObject = typeof mediaObjects.$inferSelect;
 export type WatchlistItem = typeof watchlistItems.$inferSelect;
+export type Recommendation = typeof recommendations.$inferSelect;

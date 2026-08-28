@@ -19,6 +19,7 @@ const HOUR = 60 * MINUTE;
 export const RATE_RULES: Record<string, RateRule> & {
   login: RateRule; loginGlobal: RateRule; comment: RateRule; report: RateRule;
   upload: RateRule; adminWrite: RateRule; publicApi: RateRule;
+  recommendation: RateRule;
 } = {
   login: { limit: 5, windowMs: 15 * MINUTE, penaltyMs: 15 * MINUTE },
   loginGlobal: { limit: 50, windowMs: HOUR, penaltyMs: 10 * MINUTE },
@@ -27,10 +28,13 @@ export const RATE_RULES: Record<string, RateRule> & {
   upload: { limit: 30, windowMs: HOUR },
   adminWrite: { limit: 120, windowMs: MINUTE },
   publicApi: { limit: 120, windowMs: MINUTE },
+  // Recomendar es un acto ocasional: cinco por hora sobran de largo.
+  recommendation: { limit: 5, windowMs: HOUR, penaltyMs: HOUR },
 };
 
 export type RateScope =
-  | 'login' | 'loginGlobal' | 'comment' | 'report' | 'upload' | 'adminWrite' | 'publicApi';
+  | 'login' | 'loginGlobal' | 'comment' | 'report' | 'upload' | 'adminWrite' | 'publicApi'
+  | 'recommendation';
 
 function stubFor(env: Bindings, scope: RateScope, identity: string) {
   const id = env.RATE_LIMITER.idFromName(`${scope}:${identity}`);

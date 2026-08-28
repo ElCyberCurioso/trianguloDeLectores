@@ -32,12 +32,18 @@ export function ok<T>(c: Context<AppEnv>, data: T, status = 200) {
 }
 
 /** Obtiene la IP real del visitante detrás de Cloudflare. */
+/**
+ * IP de quien hace la petición.
+ *
+ * **Sólo** `CF-Connecting-IP`, que la pone el borde de Cloudflare y sobrescribe
+ * cualquier valor que mande el cliente. Antes había un respaldo en `X-Real-IP`,
+ * que es una cabecera arbitraria del cliente: como este valor alimenta el
+ * limitador de peticiones y la pseudonimización, aceptarla permitía a un
+ * atacante elegir su propia identidad. Sin cabecera del borde no hay IP, y quien
+ * la consume ya trata ese caso.
+ */
 export function clientIp(c: Context<AppEnv>): string | null {
-  return (
-    c.req.header('CF-Connecting-IP') ??
-    c.req.header('X-Real-IP') ??
-    null
-  );
+  return c.req.header('CF-Connecting-IP') ?? null;
 }
 
 export function isSameOrigin(c: Context<AppEnv>): boolean {

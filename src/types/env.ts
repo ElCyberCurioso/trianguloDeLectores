@@ -11,6 +11,14 @@ export interface Bindings {
   RATE_LIMITER: DurableObjectNamespace<RateLimiter>;
   MODERATION: DurableObjectNamespace<ModerationCoordinator>;
   ASSETS: Fetcher;
+  /**
+   * Identificador único de la versión desplegada. Entra en la clave de caché,
+   * así que cada despliegue deja inalcanzable el HTML del anterior: sin esto,
+   * un cambio de plantilla o de estilos convivía hasta una hora con el marcado
+   * viejo, y el sitio se veía distinto según la página que hubiera caducado.
+   * Opcional: en desarrollo y en los tests no existe.
+   */
+  CF_VERSION?: { id: string; tag?: string };
 
   // --- vars (wrangler.jsonc, no secretas) -----------------------------------
   ENVIRONMENT: 'development' | 'staging' | 'production';

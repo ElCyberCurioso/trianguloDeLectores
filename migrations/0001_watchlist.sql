@@ -25,7 +25,7 @@ CREATE TABLE watchlist_items (
                  CHECK (priority IN ('LOW','MEDIUM','HIGH')),
   status         TEXT NOT NULL DEFAULT 'PENDING'
                  CHECK (status IN ('PENDING','IN_PROGRESS','DONE','DROPPED')),
-  /** 0 = sólo visible en el panel; 1 = aparece en /pendientes. */
+  -- 0 = sólo visible en el panel. 1 = aparece en /pendientes.
   is_public      INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0,1)),
   cover_key      TEXT,
   cover_alt      TEXT,

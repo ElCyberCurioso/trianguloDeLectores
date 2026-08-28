@@ -9,6 +9,7 @@ import { ReviewEditorPage } from '../views/admin/review-editor';
 import { AdminCommentsPage } from '../views/admin/comments';
 import { TaxonomyPage } from '../views/admin/taxonomy';
 import { SettingsPage } from '../views/admin/settings';
+import { RecommendationsPage } from '../views/admin/recommendations';
 import { AdminWatchlistPage, WatchlistEditorPage } from '../views/admin/watchlist';
 import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { rateLimit } from '../middleware/ratelimit';
@@ -18,6 +19,7 @@ import {
   loginSchema, reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
   moderationActionSchema, categoryInputSchema, genreInputSchema, platformInputSchema,
   watchlistInputSchema, watchlistQuerySchema, watchlistActionSchema,
+  recommendationQuerySchema, recommendationActionSchema,
   fieldErrors,
 } from '../../validation/schemas';
 import { verifyPassword, hashPassword, pseudonymize, PBKDF2_ITERATIONS } from '../lib/crypto';
@@ -31,6 +33,7 @@ import { CommentService } from '../services/comments';
 import { MediaService } from '../services/media';
 import { StatsService } from '../services/stats';
 import { WatchlistService, type WatchlistAction } from '../services/watchlist';
+import { RecommendationService } from '../services/recommendations';
 import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
 import * as F from '../lib/form';
@@ -63,6 +66,7 @@ async function adminShell(
     <Layout
       env={c.env}
       nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
       isAdmin
       adminBadge={badge}
       user={user}
@@ -92,6 +96,7 @@ adminRoutes.get('/login', async (c) => {
     <Layout
       env={c.env}
       nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
       bodyClass="body--login"
       seo={{
         title: `Acceso · ${c.env.SITE_NAME}`,
@@ -202,6 +207,7 @@ async function renderLoginError(c: Context<AppEnv>, message: string) {
     <Layout
       env={c.env}
       nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
       bodyClass="body--login"
       seo={{
         title: `Acceso · ${c.env.SITE_NAME}`,
@@ -851,6 +857,41 @@ adminRoutes.get('/api/slug', async (c) => {
   if (!title) throw badRequest('missing_title', 'Falta el título');
   const slug = await uniqueSlug(slugify(title), (s) => c.get('container').reviews.slugIsFree(s, c.req.query('id') ?? undefined));
   return ok(c, { slug });
+});
+
+// ================================================== RECOMENDACIONES =====
+adminRoutes.get('/recomendaciones', async (c) => {
+  const container = c.get('container');
+  const parsed = recommendationQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const query = parsed.success ? parsed.data : recommendationQuerySchema.parse({});
+
+  const [resultado, counters] = await Promise.all([
+    container.recommendations.list(query),
+    container.recommendations.counters(),
+  ]);
+
+  return adminShell(
+    c,
+    'Recomendaciones',
+    <RecommendationsPage
+      items={resultado.items}
+      counters={counters}
+      status={query.status}
+      page={query.page}
+      totalPages={resultado.totalPages}
+      csrfToken={c.get('csrfToken')!}
+    />,
+  );
+});
+
+adminRoutes.post('/recomendaciones/:id/accion', requireCsrf, async (c) => {
+  const parsed = recommendationActionSchema.safeParse(await c.req.parseBody());
+  if (!parsed.success) throw badRequest('validation', 'Acción no válida');
+
+  const servicio = new RecommendationService(c.get('container'));
+  const { redirectTo } = await servicio.act(c.req.param('id'), parsed.data.action, c.get('user')!);
+
+  return c.redirect(redirectTo ?? '/admin/recomendaciones', 303);
 });
 
 adminRoutes.all('*', () => {

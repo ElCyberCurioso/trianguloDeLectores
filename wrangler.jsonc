@@ -7,6 +7,7 @@
   // exclusivamente APIs Web estandar disponibles en workerd.
   "compatibility_flags": [],
   "workers_dev": false,
+  "version_metadata": { "binding": "CF_VERSION" },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "placement": { "mode": "smart" },
   "assets": {
@@ -55,21 +56,21 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "SITE_NAME": "Triángulo de Lectores (staging)",
-        "SITE_URL": "https://staging.triangulodelectores.com",
+        "SITE_URL": "https://staging.triangulodelectores.site",
         "SITE_LOCALE": "es-ES",
-        "TURNSTILE_SITE_KEY": "REPLACE_WITH_STAGING_TURNSTILE_SITE_KEY",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEeDd1vqq7WZ1s-I",
         "TURNSTILE_ENABLED": "true",
         "IMAGE_RESIZING": "true",
         "LOG_LEVEL": "info"
       },
       "routes": [
-        { "pattern": "staging.triangulodelectores.com", "custom_domain": true }
+        { "pattern": "staging.triangulodelectores.site", "custom_domain": true }
       ],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "tdl-db-staging",
-          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "database_id": "e185f21a-e635-4733-95aa-f94048e60288",
           "migrations_dir": "migrations"
         }
       ],
@@ -77,8 +78,8 @@
         { "binding": "MEDIA", "bucket_name": "tdl-media-staging" }
       ],
       "kv_namespaces": [
-        { "binding": "CACHE", "id": "REPLACE_WITH_STAGING_CACHE_KV_ID" },
-        { "binding": "CONFIG", "id": "REPLACE_WITH_STAGING_CONFIG_KV_ID" }
+        { "binding": "CACHE", "id": "3a86f302d4744157943928ff13f42c84" },
+        { "binding": "CONFIG", "id": "479a8a31ae834f33a3fbd113938b8e5a" }
       ],
       "durable_objects": {
         "bindings": [
@@ -95,6 +96,7 @@
         "html_handling": "none",
         "not_found_handling": "none"
       },
+      "version_metadata": { "binding": "CF_VERSION" },
       "observability": { "enabled": true, "head_sampling_rate": 1 },
       // Mantenimiento diario: purga de sesiones caducadas y retención de auditoría.
       "triggers": { "crons": ["0 4 * * *"] }
@@ -104,22 +106,21 @@
       "vars": {
         "ENVIRONMENT": "production",
         "SITE_NAME": "Triángulo de Lectores",
-        "SITE_URL": "https://triangulodelectores.com",
+        "SITE_URL": "https://triangulodelectores.site",
         "SITE_LOCALE": "es-ES",
-        "TURNSTILE_SITE_KEY": "REPLACE_WITH_PROD_TURNSTILE_SITE_KEY",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEeDMwghTFFCYU1g",
         "TURNSTILE_ENABLED": "true",
         "IMAGE_RESIZING": "true",
         "LOG_LEVEL": "warn"
       },
       "routes": [
-        { "pattern": "triangulodelectores.com", "custom_domain": true },
-        { "pattern": "www.triangulodelectores.com", "custom_domain": true }
+        { "pattern": "triangulodelectores.site", "custom_domain": true }
       ],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "tdl-db-prod",
-          "database_id": "REPLACE_WITH_PROD_D1_ID",
+          "database_id": "f58fc8e1-1f6f-44b4-afbb-a79d17bdbd7f",
           "migrations_dir": "migrations"
         }
       ],
@@ -127,8 +128,8 @@
         { "binding": "MEDIA", "bucket_name": "tdl-media-prod" }
       ],
       "kv_namespaces": [
-        { "binding": "CACHE", "id": "REPLACE_WITH_PROD_CACHE_KV_ID" },
-        { "binding": "CONFIG", "id": "REPLACE_WITH_PROD_CONFIG_KV_ID" }
+        { "binding": "CACHE", "id": "b3bbb0b3f6af4888b6144eec3de038c5" },
+        { "binding": "CONFIG", "id": "0726753e9d9e4968a08e0bfa6ac340e2" }
       ],
       "durable_objects": {
         "bindings": [
@@ -145,9 +146,10 @@
         "html_handling": "none",
         "not_found_handling": "none"
       },
+      "version_metadata": { "binding": "CF_VERSION" },
       "observability": { "enabled": true, "head_sampling_rate": 0.5 },
       "placement": { "mode": "smart" },
-      "limits": { "cpu_ms": 50 },
+      "limits": { "cpu_ms": 200 },
       // Mantenimiento diario: purga de sesiones caducadas y retención de auditoría.
       "triggers": { "crons": ["0 4 * * *"] }
     }

@@ -3,6 +3,7 @@ import {
   CONTENT_TYPES, AVAILABILITY, PLATFORM_KINDS, REPORT_REASONS, REVIEW_SORTS,
   COMMENT_STATUSES, MAX_RATING_HALF_STARS, PAGE_SIZE, MAX_PAGE_SIZE,
   WATCHLIST_STATUSES, WATCHLIST_SORTS, PRIORITIES,
+  RECOMMENDATION_STATUSES, RECOMMENDATION_ACTIONS,
 } from '../types/domain';
 
 /**
@@ -209,3 +210,31 @@ export function fieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+// ------------------------------------------------------ recomendaciones --
+
+/**
+ * Lo que envía el público. Esquema cerrado: nada de campos no declarados, y el
+ * enlace pasa por `httpUrl()` porque acaba en un `href` del panel.
+ */
+export const recommendationInputSchema = z.object({
+  titleEs: trimmed(200).min(2, 'Dinos qué obra recomiendas'),
+  contentType: z.enum(CONTENT_TYPES),
+  creator: optionalText(200),
+  year: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  note: trimmed(1500).min(10, 'Cuéntanos por qué la recomiendas, aunque sea en una línea'),
+  sourceUrl: httpUrl(500).optional().or(z.literal('')),
+  alias: optionalText(60),
+});
+export type RecommendationInput = z.infer<typeof recommendationInputSchema>;
+
+export const recommendationQuerySchema = z.object({
+  status: z.enum([...RECOMMENDATION_STATUSES, 'ALL']).default('PENDING'),
+  page: z.coerce.number().int().min(1).max(2000).default(1),
+  perPage: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type RecommendationQueryInput = z.infer<typeof recommendationQuerySchema>;
+
+export const recommendationActionSchema = z.object({
+  action: z.enum(RECOMMENDATION_ACTIONS),
+});

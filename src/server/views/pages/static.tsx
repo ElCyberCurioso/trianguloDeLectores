@@ -6,7 +6,7 @@ export const AboutPage: FC<{ siteName: string }> = ({ siteName }) => (
     <p>
       {siteName} es un catálogo personal de reseñas de libros, novelas, películas, series,
       anime, cómics, manga y videojuegos. Cada ficha reúne los datos básicos de la obra, dónde
-      encontrarla y una crítica honesta puntuada de 0 a 5 estrellas, con medias estrellas.
+      encontrarla y una crítica honesta puntuada de 0 a 10.
     </p>
     <h2>Cómo se puntúa</h2>
     <ul>

@@ -6,6 +6,7 @@ import { AVAILABILITY_LABELS, CONTENT_TYPE_LABELS } from '../../../types/domain'
 import { variantUrl } from '../../lib/images';
 import { safeUrl } from '../../lib/sanitize';
 import { StarRating, formatDate } from './ui';
+import { Icon, MEDIA_ICON } from './icons';
 
 interface FactProps { label: string; value: string | number | null | undefined }
 
@@ -55,7 +56,10 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
         </div>
 
         <div class="review__head">
-          <p class="review__kicker">{CONTENT_TYPE_LABELS[review.contentType]}</p>
+          <p class="review__kicker">
+            <Icon name={MEDIA_ICON[review.contentType] ?? 'bookmark'} size={14} />
+            {CONTENT_TYPE_LABELS[review.contentType]}
+          </p>
           <Title class="review__title">{review.titleEs}</Title>
           {review.titleOriginal && review.titleOriginal !== review.titleEs ? (
             <p class="review__original">{review.titleOriginal}</p>
@@ -97,7 +101,10 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
 
       {review.hasSpoilers ? (
         <p class="spoiler-warning" role="note">
-          <strong>Aviso:</strong> esta reseña contiene spoilers.
+          <Icon name="warning" size={18} />
+          <span>
+            <strong>Aviso:</strong> esta reseña contiene spoilers.
+          </span>
         </p>
       ) : null}
 
@@ -135,8 +142,9 @@ const PlatformSection: FC<{ review: ReviewDetail }> = ({ review }) => (
             {enlace ? (
               <a class="platform__link" href={enlace} rel="noopener noreferrer nofollow" target="_blank">
                 {content}
-                <span class="platform__ext" aria-hidden="true">
-                  ↗
+                <span class="platform__ext">
+                  <Icon name="external" size={15} />
+                  <span class="visually-hidden">Se abre en una pestaña nueva</span>
                 </span>
               </a>
             ) : (

@@ -18,8 +18,10 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Writable } from 'node:stream';
 
-const ITERATIONS = 210_000;
-const DB_NAME = 'tdl-db';
+// Debe coincidir con PBKDF2_ITERATIONS: Workers no verifica más de 100.000.
+const ITERATIONS = 100_000;
+// El binding vale en los tres entornos; el nombre de la base, no.
+const DB_NAME = 'DB';
 
 const args = process.argv.slice(2);
 const envIndex = args.indexOf('--env');

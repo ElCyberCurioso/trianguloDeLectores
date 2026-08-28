@@ -5,7 +5,7 @@ import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_RATING_HALF_STARS, formatStars,
+  MAX_RATING_HALF_STARS, formatScore,
 } from '../../../types/domain';
 import { variantUrl } from '../../lib/images';
 import { AdminPage, CsrfField, Field, Flash } from './shared';
@@ -180,11 +180,11 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                 </select>
               </Field>
 
-              <Field label="Puntuación" name="rating" hint="De 0 a 5 estrellas, con medias.">
+              <Field label="Puntuación" name="rating" hint="De 0 a 10, con medio punto de precisión.">
                 <select id="f-rating" class="select" name="rating">
                   {Array.from({ length: MAX_RATING_HALF_STARS + 1 }).map((_, value) => (
                     <option value={value} selected={(review?.rating ?? 0) === value}>
-                      {formatStars(value)} ★
+                      {formatScore(value)}
                     </option>
                   ))}
                 </select>

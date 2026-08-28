@@ -4,6 +4,7 @@ import type { Bindings } from '../../../types/env';
 import { CONTENT_TYPE_LABELS } from '../../../types/domain';
 import { variantUrl, coverSrcSet } from '../../lib/images';
 import { StarRating, formatDate } from './ui';
+import { Icon, MEDIA_ICON } from './icons';
 
 export interface ReviewCardProps {
   review: ReviewListItem;
@@ -11,6 +12,15 @@ export interface ReviewCardProps {
   /** primera fila del grid: se precarga la portada en vez de diferirla */
   priority?: boolean;
 }
+
+/** Contador de comentarios: icono para quien ve, texto para quien escucha. */
+const CommentCount: FC<{ total: number }> = ({ total }) => (
+  <span class="card__stat">
+    <Icon name="comment" size={13} />
+    <span aria-hidden="true">{total}</span>
+    <span class="visually-hidden">{total === 1 ? '1 comentario' : `${total} comentarios`}</span>
+  </span>
+);
 
 export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false }) => {
   const cover = variantUrl(env, review.coverKey, 'card');
@@ -39,7 +49,6 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
               <span>{review.titleEs.slice(0, 1)}</span>
             </div>
           )}
-          <span class="card__type">{CONTENT_TYPE_LABELS[review.contentType]}</span>
           {review.hasSpoilers ? (
             <span class="card__spoiler-flag" title="Contiene spoilers">
               Spoilers
@@ -48,6 +57,10 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
         </div>
 
         <div class="card__body">
+          <p class="card__type">
+            <Icon name={MEDIA_ICON[review.contentType] ?? 'bookmark'} size={13} />
+            {CONTENT_TYPE_LABELS[review.contentType]}
+          </p>
           <h2 class="card__title">{review.titleEs}</h2>
           <div class="card__meta">
             {review.year ? <span>{review.year}</span> : null}
@@ -60,7 +73,7 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
 
       <footer class="card__footer">
         <ul class="tags" aria-label="Géneros">
-          {review.genres.slice(0, 3).map((genre) => (
+          {review.genres.slice(0, 2).map((genre) => (
             <li>
               <a class="tag" href={`/?genre=${encodeURIComponent(genre.slug)}`}>
                 {genre.name}
@@ -69,14 +82,83 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
           ))}
         </ul>
         <div class="card__stats">
-          <span class="card__comments" title="Comentarios">
-            {review.commentCount} 💬
-          </span>
+          <CommentCount total={review.commentCount} />
           <time datetime={review.publishedAt ? new Date(review.publishedAt).toISOString() : undefined}>
             {formatDate(review.publishedAt ?? review.updatedAt)}
           </time>
         </div>
       </footer>
+    </article>
+  );
+};
+
+/**
+ * Pieza de apertura del catálogo: la reseña más reciente a lo ancho, como el
+ * reportaje que abre una revista. Sólo aparece en la primera página y sin
+ * filtros; entonces esa reseña se retira de la retícula para no repetirla.
+ *
+ * La portada es un enlace decorativo (`aria-hidden`, fuera del orden de
+ * tabulación): duplicar el mismo destino con dos nombres accesibles obliga a
+ * quien navega con teclado o lector de pantalla a oír la misma reseña dos veces.
+ */
+export const ReviewLead: FC<{ review: ReviewListItem; env: Bindings }> = ({ review, env }) => {
+  const cover = variantUrl(env, review.coverKey, 'hero');
+  const href = `/resena/${review.slug}`;
+
+  return (
+    <article class="lead" data-review-card data-slug={review.slug}>
+      <a class="lead__cover" href={href} data-review-open tabindex={-1} aria-hidden="true">
+        {cover ? (
+          <img
+            class="card__img"
+            src={cover}
+            alt={review.coverAlt ?? `Portada de ${review.titleEs}`}
+            width="600"
+            height="900"
+            fetchpriority="high"
+            decoding="async"
+          />
+        ) : (
+          <div class="card__img card__img--placeholder">
+            <span>{review.titleEs.slice(0, 1)}</span>
+          </div>
+        )}
+      </a>
+
+      <div class="lead__body">
+        <p class="eyebrow eyebrow--icon">
+          <Icon name={MEDIA_ICON[review.contentType] ?? 'bookmark'} size={13} />
+          Última reseña · {CONTENT_TYPE_LABELS[review.contentType]}
+        </p>
+        <h2 class="lead__title">
+          <a href={href} data-review-open aria-label={`Abrir reseña de ${review.titleEs}`}>
+            {review.titleEs}
+          </a>
+        </h2>
+        <StarRating rating={review.rating} size="md" />
+        {review.summary ? <p class="lead__summary">{review.summary}</p> : null}
+
+        <div class="lead__meta">
+          {review.year ? <span>{review.year}</span> : null}
+          {review.creator ? <span>{review.creator}</span> : null}
+          <CommentCount total={review.commentCount} />
+          <time datetime={review.publishedAt ? new Date(review.publishedAt).toISOString() : undefined}>
+            {formatDate(review.publishedAt ?? review.updatedAt)}
+          </time>
+        </div>
+
+        {review.genres.length ? (
+          <ul class="tags" aria-label="Géneros">
+            {review.genres.slice(0, 4).map((genre) => (
+              <li>
+                <a class="tag" href={`/?genre=${encodeURIComponent(genre.slug)}`}>
+                  {genre.name}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </article>
   );
 };

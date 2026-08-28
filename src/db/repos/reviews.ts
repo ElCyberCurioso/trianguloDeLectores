@@ -29,6 +29,7 @@ export interface ReviewListItem {
   titleOriginal: string | null;
   contentType: ContentType;
   year: number | null;
+  creator: string | null;
   rating: number;
   commentCount: number;
   publishedAt: number | null;
@@ -46,7 +47,6 @@ export interface ReviewListItem {
 
 export interface ReviewDetail extends ReviewListItem {
   otherTitles: string[];
-  creator: string | null;
   country: string | null;
   durationMin: number | null;
   episodes: number | null;
@@ -83,6 +83,7 @@ const listColumns = {
   titleOriginal: reviews.titleOriginal,
   contentType: reviews.contentType,
   year: reviews.year,
+  creator: reviews.creator,
   rating: reviews.rating,
   commentCount: reviews.commentCount,
   publishedAt: reviews.publishedAt,

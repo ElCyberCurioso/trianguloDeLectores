@@ -46,7 +46,7 @@ test('2-4. crea la reseña, sube portada y la publica', async ({ page }) => {
   await page.locator('#f-contentType').selectOption('MOVIE');
   await page.locator('#f-year').fill('2024');
   await page.locator('#f-creator').fill('Dirección de prueba');
-  await page.locator('#f-rating').selectOption('7'); // 3,5 estrellas
+  await page.locator('#f-rating').selectOption('7'); // 7,0 sobre 10
   await page.locator('#f-summary').fill('Resumen de la reseña de prueba.');
 
   // Editor enriquecido (contenteditable) + marca de spoiler.
@@ -89,8 +89,8 @@ test('5. la reseña es visible en el catálogo y en su modal', async ({ page }) 
   await expect(modal.getByText(TITULO)).toBeVisible();
   await expect(modal.getByText('Dónde verlo')).toBeVisible();
 
-  // Media estrella visible.
-  await expect(modal.locator('.star--half').first()).toBeVisible();
+  // La nota se publica sobre 10 y con coma, como manda el brand kit.
+  await expect(modal.locator('.score__value').first()).toHaveText('7,0');
 
   await page.keyboard.press('Escape');
   await expect(modal).not.toBeVisible();

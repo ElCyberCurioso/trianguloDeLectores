@@ -222,11 +222,13 @@ describe('catálogo público', () => {
     expect(html).toContain('contiene spoilers');
   });
 
-  it('muestra medias estrellas', async () => {
-    const { slug } = await createReview(session, { title: 'Media estrella', rating: 7 });
+  it('publica la nota sobre 10 y con coma', async () => {
+    const { slug } = await createReview(session, { title: 'Nota publicada', rating: 7 });
     const html = await (await SELF.fetch(`${ORIGIN}/resena/${slug}`, { headers: { Accept: 'text/html' } })).text();
-    expect(html).toContain('star--half');
-    expect(html).toContain('3,5 de 5 estrellas');
+    expect(html).toContain('7,0');
+    expect(html).toContain('/ 10');
+    // La escala publicada y la del marcado estructurado tienen que coincidir.
+    expect(html).toContain('"bestRating":10');
   });
 
   it('muestra las plataformas donde encontrarla', async () => {

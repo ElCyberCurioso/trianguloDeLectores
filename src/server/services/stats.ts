@@ -94,7 +94,13 @@ export class StatsService {
       const parsed = Number(cached);
       if (Number.isFinite(parsed)) return parsed;
     }
-    const value = await this.c.comments.countByStatus('PENDING');
+    // Lo que espera atención: comentarios sin moderar y recomendaciones sin
+    // revisar. Es un único aviso porque es un único gesto: entrar a resolverlo.
+    const [comentarios, recomendaciones] = await Promise.all([
+      this.c.comments.countByStatus('PENDING'),
+      this.c.recommendations.counters(),
+    ]);
+    const value = comentarios + recomendaciones.pending;
     await this.c.env.CACHE.put('stats:pending', String(value), { expirationTtl: 30 }).catch(() => undefined);
     return value;
   }

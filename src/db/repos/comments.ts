@@ -329,8 +329,11 @@ export class ReportRepository {
   }
 
   /**
-   * Inserta un reporte. El índice único (comment_id, reporter_hash) es la
-   * autoridad final anti-duplicado: si salta, ya había reportado.
+   * Inserta un reporte. El índice único (comment_id, reporter_hash) sigue siendo
+   * la autoridad final anti-duplicado, pero no se detecta leyendo el texto de la
+   * excepción: eso dependía del formato de error del driver y se rompió al
+   * actualizar el ORM. Con `ON CONFLICT DO NOTHING` la escritura no lanza, y
+   * después se comprueba qué fila quedó: si es la nuestra, la creamos nosotros.
    */
   async insert(input: {
     commentId: string;
@@ -338,22 +341,33 @@ export class ReportRepository {
     reason: ReportReason;
     details: string | null;
   }): Promise<{ created: boolean }> {
-    try {
-      await this.db.insert(commentReports).values({
-        id: crypto.randomUUID(),
+    const id = crypto.randomUUID();
+
+    await this.db
+      .insert(commentReports)
+      .values({
+        id,
         commentId: input.commentId,
         reporterHash: input.reporterHash,
         reason: input.reason,
         details: input.details,
         status: 'OPEN',
         createdAt: Date.now(),
-      });
-      return { created: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/UNIQUE|constraint/i.test(message)) return { created: false };
-      throw err;
-    }
+      })
+      .onConflictDoNothing();
+
+    const fila = await this.db
+      .select({ id: commentReports.id })
+      .from(commentReports)
+      .where(
+        and(
+          eq(commentReports.commentId, input.commentId),
+          eq(commentReports.reporterHash, input.reporterHash),
+        ),
+      )
+      .get();
+
+    return { created: fila?.id === id };
   }
 
   async countForComment(commentId: string): Promise<number> {

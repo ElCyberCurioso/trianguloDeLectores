@@ -93,6 +93,16 @@ export function formatStars(rating: number): string {
   return Number.isInteger(stars) ? `${stars}` : stars.toFixed(1).replace('.', ',');
 }
 
+/**
+ * La nota tal como la muestra el sitio: sobre 10 y con coma decimal, según el
+ * brand kit. Internamente se guarda como entero 0..10, así que la conversión
+ * es exacta y no se pierde precisión por el camino.
+ */
+export function formatScore(rating: number): string {
+  const nota = Math.round(Math.max(0, Math.min(MAX_RATING_HALF_STARS, rating)));
+  return `${nota},0`;
+}
+
 export const PAGE_SIZE = 12;
 export const MAX_PAGE_SIZE = 48;
 
@@ -132,3 +142,27 @@ export const WATCHLIST_SORT_LABELS: Record<WatchlistSort, string> = {
   oldest: 'Añadidos hace más tiempo',
   title: 'Título (A–Z)',
 };
+
+// ------------------------------------------------------ recomendaciones --
+
+export const RECOMMENDATION_STATUSES = ['PENDING', 'ACCEPTED', 'REJECTED'] as const;
+export type RecommendationStatus = (typeof RECOMMENDATION_STATUSES)[number];
+
+export const RECOMMENDATION_STATUS_LABELS: Record<RecommendationStatus, string> = {
+  PENDING: 'Por revisar',
+  ACCEPTED: 'Aceptada',
+  REJECTED: 'Descartada',
+};
+
+/** Qué se hizo con una recomendación aceptada. */
+export const RECOMMENDATION_RESOLUTIONS = ['REVIEW', 'WATCHLIST'] as const;
+export type RecommendationResolution = (typeof RECOMMENDATION_RESOLUTIONS)[number];
+
+export const RECOMMENDATION_RESOLUTION_LABELS: Record<RecommendationResolution, string> = {
+  REVIEW: 'Borrador de reseña',
+  WATCHLIST: 'Lista de pendientes',
+};
+
+/** Lo que el panel puede hacer con una recomendación. */
+export const RECOMMENDATION_ACTIONS = ['to-review', 'to-watchlist', 'reject', 'reopen', 'delete'] as const;
+export type RecommendationAction = (typeof RECOMMENDATION_ACTIONS)[number];

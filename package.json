@@ -13,7 +13,7 @@
     "preflight": "node scripts/preflight.mjs",
     "build:client": "node scripts/build-client.mjs",
     "build": "npm run build:client && wrangler deploy --dry-run --outdir=.wrangler/build",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.client.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
@@ -23,10 +23,10 @@
     "test:e2e": "node scripts/e2e-prepare.mjs --reset && playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply tdl-db --local",
-    "db:migrate:staging": "wrangler d1 migrations apply tdl-db --env staging --remote",
-    "db:migrate:prod": "wrangler d1 migrations apply tdl-db --env production --remote",
+    "db:migrate:staging": "wrangler d1 migrations apply DB --env staging --remote",
+    "db:migrate:prod": "wrangler d1 migrations apply DB --env production --remote",
     "db:seed:local": "wrangler d1 execute tdl-db --local --file=./scripts/seed.sql",
-    "db:seed:staging": "wrangler d1 execute tdl-db --env staging --remote --file=./scripts/seed.sql",
+    "db:seed:staging": "wrangler d1 execute DB --env staging --remote --file=./scripts/seed.sql",
     "db:reset:local": "node scripts/reset-local.mjs && npm run db:migrate:local && npm run db:seed:local",
     "db:studio": "drizzle-kit studio",
     "admin:create": "node scripts/create-admin.mjs",
@@ -37,13 +37,14 @@
     "test:e2e:ui": "node scripts/e2e-prepare.mjs && playwright test --ui"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38.4",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.6.20",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.6.4",
     "@cloudflare/workers-types": "^4.20250109.0",
+    "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.49.1",
     "@types/node": "^22.10.5",
     "@typescript-eslint/eslint-plugin": "^8.19.1",
@@ -53,7 +54,6 @@
     "eslint": "^9.17.0",
     "typescript": "^5.7.3",
     "vitest": "2.1.8",
-    "wrangler": "^4.0.0",
-    "@eslint/js": "^9.17.0"
+    "wrangler": "^4.0.0"
   }
 }

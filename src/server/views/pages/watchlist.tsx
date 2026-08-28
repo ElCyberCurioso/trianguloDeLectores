@@ -53,7 +53,7 @@ export const WatchlistPage: FC<WatchlistPageProps> = ({ env, items, tiposDisponi
         <EmptyState
           title="No hay nada en la lista ahora mismo"
           hint="Vuelve dentro de unos días: la cola se mueve."
-          icon="📋"
+          icon="list"
         />
       ) : (
         <>

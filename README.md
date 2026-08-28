@@ -275,7 +275,7 @@ Todas con clave primaria, claves foráneas con `ON DELETE` explícito, `UNIQUE` 
 
 Dos detalles que merecen mención:
 
-- **Puntuación**: se guarda como entero `0..10` (estrellas × 2). Permite medias estrellas exactas, ordenar por índice y validar con un `CHECK`, sin decimales flotantes.
+- **Puntuación**: se guarda como entero `0..10`, que es también la escala publicada. Permite ordenar por índice y validar con un `CHECK`, sin decimales flotantes. Se muestra con `formatScore` (sobre 10 y con coma).
 - **Comentarios**: árbol por *materialized path* (`path` = `<segmento padre>/<segmento propio>/`, con el segmento derivado del timestamp en base 36). Ordenar por `path` da recorrido en profundidad y cronológico; el subárbol es `path LIKE '<path>%'`, que **usa el índice**. Sin CTE recursivo en cada lectura pública.
 
 ### Comandos
@@ -523,50 +523,78 @@ Para llenar la lista de golpe, `/admin/pendientes` acepta un título por línea
 La página pública se cachea en el borde con su propio sello de versión
 (`cachever:watchlist`), independiente del de las reseñas.
 
-## 15c. Recursos de marca
+## 15c. Marca y sistema visual
 
-Los ficheros de `public/assets/brand/` se generan desde `triangulo_brand.zip`:
+El sitio implementa el brand kit **Modernist / rejilla editorial** con la marca
+**1C · Tres reglas** (`tdl_brandkit.zip`). Los tokens viven en
+`public/assets/styles.css` y se consumen siempre como variables CSS.
+
+### La marca
+
+Tres reglas horizontales de anchura 100 % / 66 % / 33 %, la tercera en acento,
+alineadas a la izquierda. Insinúan el triángulo sin dibujarlo. Proporciones
+fijas: grosor = 1/5 del alto del bloque, hueco = 0,6 × grosor, área de respeto
+= 1 × el alto del isotipo.
+
+Vive en **SVG en línea** (`src/server/views/components/brand.tsx`), no en
+ficheros de imagen: los rectángulos heredan `currentColor`, así que la misma
+marca sirve sobre fondo, sobre tinta y sobre acento sin duplicar versiones por
+tema ni descargar nada.
+
+| Sitio | Pieza |
+|---|---|
+| Cabecera (público y panel) | Lockup horizontal: isotipo + nombre |
+| Mancheta de portada | Lockup vertical + lema |
+| Acceso al panel | Lockup vertical |
+| Pie | Nombre en peso 800 |
+
+### Los mapas de bits
+
+Sólo lo que un navegador no resuelve con SVG en línea. Se generan con Pillow,
+que no es dependencia del proyecto:
 
 ```bash
 pip install Pillow
-python3 scripts/build-brand.py triangulo_brand.zip
+python3 scripts/build-brand.py
 ```
 
-No es parte del build: se ejecuta cuando cambia la marca y el resultado se
-versiona. Requiere Pillow, que no es dependencia del proyecto.
+`favicon.ico` (16/32/48), `apple-touch-icon.png`, `icon-192.png`,
+`icon-512.png` y `assets/brand/og-default.jpg` (1200×630). Todos llevan el
+isotipo **en caja de tinta**, nunca sobre fondo claro: a 16 px las reglas
+necesitan el contraste máximo.
 
-El pack original necesitaba tres arreglos, todos automatizados en el script:
+### Color y tipografía
 
-1. **Neblina blanca.** Los PNG «transparentes» traían un velo blanco a alpha 24
-   sobre todo el lienzo; sobre el tema oscuro se veía como un rectángulo gris.
-2. **Encuadre del icono.** `icon-1024.png` tenía el dibujo en la esquina
-   superior izquierda, ocupando 84–676 px de 1024. Se recorta y se recentra.
-3. **Contraste en tema oscuro.** La tinta de la marca es azul marino: invisible
-   sobre el fondo oscuro. Las variantes `-light` transforman el **alfa** (tinta
-   → marfil opaco, papel → transparente) en vez de recolorear, porque el
-   original es una rasterización con ruido JPEG y cualquier mapeo de color lo
-   convertía en suciedad visible. El dorado se respeta en ambas variantes.
+Fondo `#f3f2f2`, tinta `#201e1d`, acento `#ec3013`. Proporción de uso: ~90 %
+fondo y tinta, ~7 % grises de imagen, ~3 % acento. El rojo puro no alcanza
+contraste AA como texto pequeño ni como relleno de un botón de 14 px, así que
+esos dos casos usan `--color-accent-700`; el puro queda para filetes, cifras y
+marcas de estado.
 
-Dónde aparece cada pieza:
+El tema oscuro no viene en el kit: se deriva intercambiando hueso y tinta y
+subiendo el rojo un paso.
 
-| Sitio | Recurso |
-|---|---|
-| Cabecera | Marca suelta + nombre en tipografía display. El lockup completo es ilegible a la altura de una barra de navegación |
-| Mancheta de portada | Logotipo completo sobre banda de tinta, fija en ambos temas |
-| Pie | Lockup horizontal |
-| Acceso al panel | Lockup horizontal |
-| Pestaña del navegador | `favicon.ico` con placa marfil (la marca sola desaparecería en una barra oscura) |
-| iOS / PWA | `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` |
-| Redes sociales | `og-default.jpg` 1200×630 |
+Tipografía **Archivo** en todo, autoalojada en `public/assets/fonts/`
+(subconjunto latino, un solo fichero variable de 400 a 800). No se enlaza a
+Google Fonts: filtraría la IP de cada visitante a un tercero, que en la UE es
+un problema de RGPD.
 
-La paleta del sitio sale de los propios ficheros: tinta `#0d1a26`, dorado
-`#c8963e`, marfil `#f4efe4`. En tema claro el dorado se oscurece a `#96662a`
-para mantener el contraste AA sobre blanco.
+### Iconos
 
-Detalle de accesibilidad: los logotipos que dependen del tema van como fondo CSS
-—existen en dos versiones y así el navegador descarga sólo la que aplica— y el
-nombre accesible lo aporta texto real en el marcado, no un `alt` de imagen
-decorativa.
+Lucide, trazo 2,2 y remate recto, en `components/icons.tsx`. Un icono por medio
+y nunca dos medios con el mismo (`MEDIA_ICON`): película `film`, libro
+`book-open`, serie `tv`, videojuego `gamepad-2`, anime `sparkles`. El único
+icono propio es el de filtro —las tres reglas de la marca giradas—, reservado a
+controles de orden y filtrado.
+
+### Reglas que no se rompen
+
+Ninguna esquina redondeada · nada centrado · un solo rojo y siempre significa
+algo · las reglas de 1 y 2 px no se sustituyen por aire · las notas van sobre
+10 y con coma · las imágenes en blanco y negro · las tres reglas de la marca,
+100 / 66 / 33, en ese orden.
+
+---
 
 ## 16. Privacidad y RGPD
 
@@ -626,7 +654,7 @@ npm run test:e2e           # Playwright
 Para apuntar a un entorno desplegado:
 
 ```bash
-E2E_BASE_URL=https://staging.triangulodelectores.com npm run test:e2e
+E2E_BASE_URL=https://staging.triangulodelectores.site npm run test:e2e
 ```
 
 ---
@@ -714,10 +742,10 @@ npm run admin:create -- --env production
 ### Comprobaciones tras desplegar
 
 ```bash
-curl -s https://triangulodelectores.com/health
-curl -sI https://triangulodelectores.com | grep -i content-security-policy
-curl -sI https://triangulodelectores.com/admin | grep -i x-robots-tag
-curl -s https://triangulodelectores.com/robots.txt
+curl -s https://triangulodelectores.site/health
+curl -sI https://triangulodelectores.site | grep -i content-security-policy
+curl -sI https://triangulodelectores.site/admin | grep -i x-robots-tag
+curl -s https://triangulodelectores.site/robots.txt
 ```
 
 Y a mano: iniciar sesión, crear una reseña, subir portada, publicarla, comentar, reportar y moderar.

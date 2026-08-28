@@ -1,6 +1,6 @@
 import type { Bindings } from '../../types/env';
 import type { ReviewDetail } from '../../db/repos/reviews';
-import { ratingToStars, CONTENT_TYPE_LABELS } from '../../types/domain';
+import { CONTENT_TYPE_LABELS } from '../../types/domain';
 import { variantUrl } from './images';
 
 /** Mapea nuestro tipo de contenido al tipo de Schema.org más ajustado. */
@@ -51,8 +51,9 @@ export function reviewJsonLd(env: Bindings, review: ReviewDetail): string {
     itemReviewed,
     reviewRating: {
       '@type': 'Rating',
-      ratingValue: ratingToStars(review.rating),
-      bestRating: 5,
+      // La nota se guarda ya como entero 0..10, que es la escala publicada.
+      ratingValue: review.rating,
+      bestRating: 10,
       worstRating: 0,
     },
     commentCount: review.commentCount,

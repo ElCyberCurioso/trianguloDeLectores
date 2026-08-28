@@ -6,6 +6,7 @@ import { HomePage } from '../views/pages/home';
 import { ReviewPage } from '../views/pages/review';
 import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
 import { WatchlistPage } from '../views/pages/watchlist';
+import { RecommendPage } from '../views/pages/recommend';
 import { reviewQuerySchema } from '../../validation/schemas';
 import { CONTENT_TYPES, type ContentType } from '../../types/domain';
 import { edgeCached, CACHE_NS, NO_STORE } from '../lib/cache';
@@ -13,6 +14,7 @@ import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
 import { variantUrl } from '../lib/images';
 import { issueFormToken } from '../lib/formtoken';
 import { notFound } from '../lib/http';
+import { rateLimit } from '../middleware/ratelimit';
 import { htmlToText } from '../lib/sanitize';
 import { MediaService } from '../services/media';
 import { ReviewService } from '../services/reviews';
@@ -45,6 +47,9 @@ publicRoutes.get('/', async (c) => {
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: `${c.env.SITE_NAME} — ${settings['site.tagline']}`,
           description,
@@ -120,6 +125,9 @@ publicRoutes.get('/resena/:slug', async (c) => {
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: reviewSeoTitle(c.env, review),
           description,
@@ -164,6 +172,9 @@ publicRoutes.get('/pendientes', async (c) => {
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: `Pendientes por ver | ${c.env.SITE_NAME}`,
           description:
@@ -185,6 +196,51 @@ publicRoutes.get('/pendientes', async (c) => {
   });
 });
 
+// ---------------------------------------------------------- recomendaciones --
+/*
+  No se cachea: lleva un token de formulario firmado y por tanto irrepetible.
+  Servir una copia guardada dejaría el formulario inservible para el siguiente.
+*/
+publicRoutes.get('/recomendar', rateLimit('publicApi'), async (c) => {
+  const container = c.get('container');
+  const [settings, counters] = await Promise.all([
+    container.settings.all(),
+    container.recommendations.counters(),
+  ]);
+  const url = new URL(c.req.url);
+
+  return c.html(
+    <Layout
+      env={c.env}
+      nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
+      user={c.get('user')}
+      csrfToken={c.get('csrfToken')}
+      seo={{
+        title: `Recomienda una obra | ${c.env.SITE_NAME}`,
+        description:
+          'Cuenta qué deberíamos leer, ver o jugar. Cada propuesta se lee a mano y algunas acaban en el catálogo.',
+        canonical: `${c.env.SITE_URL.replace(/\/$/, '')}/recomendar`,
+        type: 'website',
+      }}
+    >
+      <RecommendPage
+        formToken={await issueFormToken(c.env, 'recommendation')}
+        turnstileSiteKey={
+          c.env.TURNSTILE_ENABLED === 'true' && settings['security.turnstile_comments']
+            ? c.env.TURNSTILE_SITE_KEY
+            : null
+        }
+        aceptadas={counters.accepted}
+        enviada={url.searchParams.get('enviada') === '1'}
+        error={url.searchParams.get('error') === 'validacion' ? 'Revisa el formulario: falta algún campo obligatorio.' : null}
+      />
+    </Layout>,
+    200,
+    { 'Cache-Control': NO_STORE },
+  );
+});
+
 // ------------------------------------------------------- páginas estáticas --
 publicRoutes.get('/sobre', async (c) =>
   edgeCached(c, { ns: CACHE_NS.taxonomy, edgeTtl: 3600, browserTtl: 600 }, async () =>
@@ -192,6 +248,9 @@ publicRoutes.get('/sobre', async (c) =>
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: `Sobre ${c.env.SITE_NAME}`,
           description: `Qué es ${c.env.SITE_NAME} y cómo se puntúan las reseñas.`,
@@ -210,6 +269,9 @@ publicRoutes.get('/privacidad', async (c) =>
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: `Política de privacidad | ${c.env.SITE_NAME}`,
           description: 'Qué datos trata este sitio, con qué base legal y durante cuánto tiempo.',
@@ -228,6 +290,9 @@ publicRoutes.get('/cookies', async (c) =>
       <Layout
         env={c.env}
         nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
         seo={{
           title: `Política de cookies | ${c.env.SITE_NAME}`,
           description: 'Cookies estrictamente necesarias que utiliza el sitio.',

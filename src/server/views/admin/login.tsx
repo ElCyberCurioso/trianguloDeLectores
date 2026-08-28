@@ -1,4 +1,5 @@
 import type { FC } from 'hono/jsx';
+import { BrandStack } from '../components/brand';
 
 export interface LoginPageProps {
   error?: string | null;
@@ -11,7 +12,7 @@ export interface LoginPageProps {
 export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, next, siteName }) => (
   <div class="wrap login">
     <div class="login__card">
-      <span class="login__logo" aria-hidden="true" />
+      <BrandStack siteName={siteName} markWidth={112} class="login__logo" />
       <h1 class="login__title visually-hidden">{siteName}</h1>
       <p class="login__subtitle">Acceso al panel de administración</p>
 
@@ -58,7 +59,9 @@ export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, 
         </div>
 
         {turnstileSiteKey ? (
-          <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="auto" />
+          <div class="turnstile-slot">
+          <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="auto" data-size="normal" />
+        </div>
         ) : null}
 
         <button type="submit" class="btn btn--primary btn--block">

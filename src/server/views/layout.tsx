@@ -1,6 +1,8 @@
 import type { FC, PropsWithChildren } from 'hono/jsx';
 import { raw } from 'hono/html';
 import type { Bindings } from '../../types/env';
+import { Icon } from './components/icons';
+import { BrandLockup } from './components/brand';
 
 export interface SeoMeta {
   title: string;
@@ -29,18 +31,23 @@ export interface LayoutProps {
   /** Token CSRF de la sesión: lo necesita el formulario de salida del panel. */
   csrfToken?: string | null;
   user?: { displayName: string; role: string } | null;
+  /** Ruta actual: marca la sección activa en la navegación. */
+  path?: string;
 }
 
 /**
- * Evita el "flash" de tema claro antes de que cargue el JS. Es un script en
- * línea, permitido por la CSP gracias al nonce por petición (no `unsafe-inline`).
+ * Fija el tema antes de pintar, para que no haya destello al cargar. El sitio
+ * es oscuro por omisión y sólo cambia si esa persona eligió el claro; no se
+ * consulta la preferencia del sistema. Es un script en línea, permitido por la
+ * CSP gracias al nonce por petición (no `unsafe-inline`).
  */
-const THEME_BOOTSTRAP = `try{var t=localStorage.getItem('tdl-theme');if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t}}catch(e){}`;
+const THEME_BOOTSTRAP = `try{var t=localStorage.getItem('tdl-theme');document.documentElement.dataset.theme=(t==='light')?'light':'dark'}catch(e){}`;
+
 
 export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   const {
     env, nonce, seo, children, scripts = [],
-    isAdmin = false, adminBadge = 0, user = null, csrfToken = null,
+    isAdmin = false, adminBadge = 0, user = null, csrfToken = null, path = '',
   } = props;
   const siteUrl = env.SITE_URL.replace(/\/$/, '');
   const ogImage = seo.image ?? `${siteUrl}/assets/brand/og-default.jpg`;
@@ -75,11 +82,18 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <meta name="twitter:description" content={seo.description} />
         <meta name="twitter:image" content={ogImage} />
 
-        <meta name="theme-color" content="#0d1420" />
+        <meta name="theme-color" content="#1b1a19" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
+
+        {/*
+          La familia del sistema se precarga: sin esto el navegador no la
+          descubre hasta haber leído la hoja de estilos y el texto parpadea al
+          cambiar de tipografía. Es un único fichero variable de 400 a 800.
+        */}
+        <link rel="preload" href="/assets/fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="stylesheet" href="/assets/styles.css" />
         <link rel="alternate" type="application/rss+xml" title={env.SITE_NAME} href={`${siteUrl}/rss.xml`} />
 
@@ -95,17 +109,20 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           Saltar al contenido
         </a>
 
-        {isAdmin ? (
-          <AdminHeader siteName={env.SITE_NAME} badge={adminBadge} user={user} csrfToken={csrfToken} />
-        ) : (
-          <PublicHeader siteName={env.SITE_NAME} tagline={null} />
-        )}
+        <SiteHeader
+          siteName={env.SITE_NAME}
+          path={path}
+          user={user}
+          csrfToken={csrfToken}
+          badge={adminBadge}
+          isAdmin={isAdmin}
+        />
 
         <main id="contenido" class="main">
           {children}
         </main>
 
-        <SiteFooter siteName={env.SITE_NAME} isAdmin={isAdmin} />
+        <SiteFooter siteName={env.SITE_NAME} />
 
         <div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false" />
 
@@ -118,98 +135,168 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
   );
 };
 
-const PublicHeader: FC<{ siteName: string; tagline: string | null }> = ({ siteName }) => (
-  <header class="site-header">
-    <div class="wrap site-header__inner">
-      {/*
-        En la cabecera va la marca suelta y el nombre como texto: el lockup
-        completo, con su línea de "libros · películas · series…", se vuelve
-        ilegible a la altura de una barra de navegación. El lockup entero se
-        reserva para la mancheta y el pie, donde tiene sitio.
+/** Sección activa de la navegación. La raíz sólo coincide de forma exacta. */
+function esActiva(href: string, path: string): boolean {
+  if (href === '/' || href === '/admin') return path === href;
+  return path === href || path.startsWith(`${href}/`);
+}
 
-        La marca va como fondo CSS y no como <img> porque existe en dos
-        versiones (tinta y marfil) y así el navegador descarga sólo la que toca.
-      */}
-      <a class="brand" href="/">
-        <span class="brand__icon" aria-hidden="true" />
-        <span class="brand__name">{siteName}</span>
-      </a>
-      <nav class="site-nav" aria-label="Principal">
-        <a href="/">Catálogo</a>
-        <a href="/pendientes">Pendientes</a>
-        <a href="/sobre">Sobre el sitio</a>
-      </nav>
-      <button
-        type="button"
-        class="theme-toggle"
-        data-theme-toggle
-        aria-label="Cambiar entre tema claro y oscuro"
-      >
-        <span class="theme-toggle__icon" aria-hidden="true" />
-      </button>
-    </div>
-  </header>
+const NAV_PUBLICA = [
+  { href: '/', label: 'Catálogo' },
+  { href: '/pendientes', label: 'Pendientes' },
+  { href: '/recomendar', label: 'Recomendar' },
+  { href: '/sobre', label: 'Sobre el sitio' },
+];
+
+const NAV_ADMIN = [
+  { href: '/admin', label: 'Panel' },
+  { href: '/admin/resenas', label: 'Reseñas' },
+  { href: '/admin/pendientes', label: 'Pendientes' },
+  { href: '/admin/comentarios', label: 'Comentarios' },
+  { href: '/admin/recomendaciones', label: 'Recomendaciones' },
+  { href: '/admin/taxonomias', label: 'Taxonomías' },
+  { href: '/admin/ajustes', label: 'Ajustes' },
+];
+
+/** El icono que se ve es el del tema al que se va a cambiar, no el actual. */
+const ThemeToggle: FC = () => (
+  <button
+    type="button"
+    class="icon-btn theme-toggle"
+    data-theme-toggle
+    aria-label="Cambiar entre tema claro y oscuro"
+  >
+    <Icon name="moon" size={18} class="icon--moon" />
+    <Icon name="sun" size={18} class="icon--sun" />
+  </button>
 );
 
-const AdminHeader: FC<{
-  siteName: string;
+/**
+ * Menú de la sesión abierta. Es un `<details>`: se abre, se cierra y se recorre
+ * con el teclado sin una línea de JavaScript, que además sólo lo mejora
+ * (cerrarlo con Escape o al pulsar fuera).
+ */
+const UserMenu: FC<{
+  user: { displayName: string; role: string };
+  csrfToken: string | null;
   badge: number;
+}> = ({ user, csrfToken, badge }) => (
+  <details class="usermenu" data-user-menu>
+    <summary class="usermenu__trigger" aria-haspopup="menu">
+      <span class="usermenu__avatar" aria-hidden="true">
+        {user.displayName.slice(0, 1).toUpperCase()}
+      </span>
+      <span class="usermenu__name">{user.displayName}</span>
+      {badge > 0 ? (
+        <span class="usermenu__dot" aria-label={`${badge} cosas pendientes de revisar`} />
+      ) : null}
+      <Icon name="chevron-down" size={14} class="usermenu__caret" />
+    </summary>
+
+    <div class="usermenu__panel" role="menu">
+      <p class="usermenu__head">
+        {user.displayName}
+        <span>{user.role === 'ADMIN' ? 'Administración' : 'Lectura'}</span>
+      </p>
+
+      <nav class="usermenu__nav" aria-label="Gestión del sitio">
+        {NAV_ADMIN.map((item) => (
+          <a role="menuitem" href={item.href}>
+            {item.label}
+            {item.href === '/admin/comentarios' && badge > 0 ? (
+              <span class="badge badge--alert">{badge}</span>
+            ) : null}
+          </a>
+        ))}
+      </nav>
+
+      <form method="post" action="/admin/logout" class="usermenu__salir">
+        {csrfToken ? <input type="hidden" name="_csrf" value={csrfToken} /> : null}
+        <button type="submit" class="btn btn--ghost btn--sm btn--block">
+          <Icon name="logout" size={14} />
+          Salir
+        </button>
+      </form>
+    </div>
+  </details>
+);
+
+/**
+ * Una única cabecera para todo el sitio. La navegación pública está siempre —
+ * también dentro del panel, para poder volver al catálogo de un clic— y la
+ * gestión cuelga del menú de usuario. En las páginas del panel se añade debajo
+ * una segunda barra con sus secciones.
+ */
+const SiteHeader: FC<{
+  siteName: string;
+  path: string;
   user: { displayName: string; role: string } | null;
   csrfToken: string | null;
-}> = ({ siteName, badge, user, csrfToken }) => (
-  <header class="site-header site-header--admin">
+  badge: number;
+  isAdmin: boolean;
+}> = ({ siteName, path, user, csrfToken, badge, isAdmin }) => (
+  <header class="site-header">
     <div class="wrap site-header__inner">
-      <a class="brand brand--admin" href="/admin">
-        <span class="brand__icon" aria-hidden="true" />
-        <span class="brand__name">{siteName} · Panel</span>
+      {/* Lockup horizontal de la marca «1C · Tres reglas»: isotipo y nombre. */}
+      <a class="brand" href={isAdmin ? '/admin' : '/'}>
+        <BrandLockup siteName={isAdmin ? `${siteName} · Panel` : siteName} />
       </a>
-      <nav class="site-nav" aria-label="Administración">
-        <a href="/admin">Dashboard</a>
-        <a href="/admin/resenas">Reseñas</a>
-        <a href="/admin/pendientes">Pendientes</a>
-        <a href="/admin/comentarios">
-          Comentarios
-          {badge > 0 ? (
-            <span class="badge badge--alert" aria-label={`${badge} comentarios pendientes`}>
-              {badge}
-            </span>
-          ) : null}
-        </a>
-        <a href="/admin/taxonomias">Taxonomías</a>
-        <a href="/admin/ajustes">Ajustes</a>
+
+      <nav class="site-nav" aria-label="Principal">
+        {NAV_PUBLICA.map((item) => (
+          <a href={item.href} aria-current={esActiva(item.href, path) ? 'page' : undefined}>
+            {item.label}
+          </a>
+        ))}
       </nav>
-      <div class="admin-user">
-        {user ? <span class="admin-user__name">{user.displayName}</span> : null}
-        <form method="post" action="/admin/logout">
-          {csrfToken ? <input type="hidden" name="_csrf" value={csrfToken} /> : null}
-          <button type="submit" class="btn btn--ghost btn--sm">
-            Salir
-          </button>
-        </form>
+
+      <div class="header-tools">
+        {user ? (
+          <UserMenu user={user} csrfToken={csrfToken} badge={badge} />
+        ) : path.startsWith('/admin') ? null : (
+          /* En la propia página de acceso el botón sobra: lleva a donde ya estás. */
+          <a class="btn btn--ghost btn--sm header-login" href="/admin/login" aria-label="Acceso al panel">
+            <Icon name="lock" size={14} />
+            {/* En móvil queda sólo el icono: el nombre lo da el `aria-label`. */}
+            <span class="header-login__text">Acceso</span>
+          </a>
+        )}
+        <ThemeToggle />
       </div>
     </div>
+
+    {isAdmin ? (
+      <div class="admin-bar">
+        <nav class="wrap admin-bar__inner" aria-label="Administración">
+          {NAV_ADMIN.map((item) => (
+            <a href={item.href} aria-current={esActiva(item.href, path) ? 'page' : undefined}>
+              {item.label}
+              {item.href === '/admin/comentarios' && badge > 0 ? (
+                <span class="badge badge--alert" aria-label={`${badge} cosas pendientes de revisar`}>
+                  {badge}
+                </span>
+              ) : null}
+            </a>
+          ))}
+        </nav>
+      </div>
+    ) : null}
   </header>
 );
 
-const SiteFooter: FC<{ siteName: string; isAdmin: boolean }> = ({ siteName, isAdmin }) => (
+const SiteFooter: FC<{ siteName: string }> = ({ siteName }) => (
   <footer class="site-footer">
     <div class="wrap site-footer__inner">
-      {!isAdmin ? (
-        <a class="footer-brand" href="/">
-          <span class="footer-brand__logo" aria-hidden="true" />
-          <span class="visually-hidden">{siteName}</span>
-        </a>
-      ) : null}
       <p class="site-footer__copy">
         © {new Date().getFullYear()} {siteName}
       </p>
-      {!isAdmin ? (
-        <nav aria-label="Legal">
-          <a href="/privacidad">Privacidad</a>
-          <a href="/cookies">Cookies</a>
-          <a href="/rss.xml">RSS</a>
-        </nav>
-      ) : null}
+      <nav class="site-footer__nav" aria-label="Enlaces del pie">
+        <a href="/sobre">Sobre el sitio</a>
+        <a href="/recomendar">Recomendar</a>
+        <a href="/rss.xml">RSS</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+      </nav>
     </div>
   </footer>
 );

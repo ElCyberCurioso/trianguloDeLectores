@@ -1,35 +1,40 @@
 import type { FC, PropsWithChildren } from 'hono/jsx';
-import { ratingToStars, formatStars } from '../../../types/domain';
+import { formatScore } from '../../../types/domain';
+import { Icon, type IconName } from './icons';
 
-/** Estrellas de 0 a 5 con medias estrellas exactas. Sin estilos en línea. */
+/**
+ * La nota, en la presentación del brand kit: cifra grande sobre 10, con coma
+ * decimal, y el denominador en gris al lado. Sustituye a las estrellas, que el
+ * sistema no contempla («las notas van sobre 10, con coma»).
+ *
+ * El tamaño sigue nombrándose sm/md/lg para no cambiar la firma en las decenas
+ * de sitios que la usan.
+ */
 export const StarRating: FC<{ rating: number; size?: 'sm' | 'md' | 'lg'; showValue?: boolean }> = ({
   rating,
   size = 'md',
-  showValue = true,
-}) => {
-  const stars = ratingToStars(rating);
-  const label = `${formatStars(rating)} de 5 estrellas`;
-  return (
-    <span class={`stars stars--${size}`} role="img" aria-label={label}>
-      {[1, 2, 3, 4, 5].map((position) => {
-        const fill = stars >= position ? 'full' : stars >= position - 0.5 ? 'half' : 'empty';
-        return <span class={`star star--${fill}`} aria-hidden="true" />;
-      })}
-      {showValue ? <span class="stars__value">{formatStars(rating)}</span> : null}
+}) => (
+  <span class={`score score--${size}`}>
+    <span class="score__value">{formatScore(rating)}</span>
+    <span class="score__max" aria-hidden="true">
+      / 10
     </span>
-  );
-};
+    <span class="visually-hidden">de 10</span>
+  </span>
+);
 
 export const Badge: FC<PropsWithChildren<{ tone?: 'neutral' | 'accent' | 'warn' | 'alert' | 'ok' }>> = ({
   tone = 'neutral',
   children,
 }) => <span class={`badge badge--${tone}`}>{children}</span>;
 
-export const EmptyState: FC<{ title: string; hint?: string; icon?: string }> = ({ title, hint, icon = '∅' }) => (
+export const EmptyState: FC<{ title: string; hint?: string; icon?: IconName }> = ({
+  title,
+  hint,
+  icon = 'book',
+}) => (
   <div class="empty">
-    <div class="empty__icon" aria-hidden="true">
-      {icon}
-    </div>
+    <Icon name={icon} size={30} class="empty__icon" />
     <p class="empty__title">{title}</p>
     {hint ? <p class="empty__hint">{hint}</p> : null}
   </div>

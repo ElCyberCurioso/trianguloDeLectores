@@ -41,6 +41,7 @@ app.notFound(async (c) => {
     <Layout
       env={c.env}
       nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
       seo={{
         title: `Página no encontrada · ${c.env.SITE_NAME}`,
         description: 'La página que buscas no existe.',

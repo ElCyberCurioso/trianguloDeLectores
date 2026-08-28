@@ -8,11 +8,20 @@
  * WebCrypto, y al ejecutarse en código nativo (no JS) el coste real es de pocas
  * decenas de ms. El número de iteraciones se guarda dentro del propio hash, así
  * que se puede subir en el futuro y re-hashear de forma transparente en el login.
+ *
+ * **Techo de la plataforma**: WebCrypto en Workers rechaza más de 100.000
+ * iteraciones (`NotSupportedError`). OWASP recomienda hoy 600.000, así que el
+ * factor de trabajo lo impone el runtime, no nosotros. Se compensa con lo que sí
+ * está en nuestra mano: límite de intentos por IP y global, bloqueo de la cuenta
+ * tras varios fallos y Turnstile en el formulario de acceso.
  */
 
 const enc = new TextEncoder();
 
-export const PBKDF2_ITERATIONS = 210_000;
+export const PBKDF2_ITERATIONS = 100_000;
+
+/** Máximo que acepta WebCrypto en Workers. Por encima lanza NotSupportedError. */
+const PBKDF2_MAX_ITERATIONS = 100_000;
 const PBKDF2_HASH = 'SHA-256';
 const KEY_LEN_BITS = 256;
 
@@ -110,7 +119,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
     return { valid: false, needsRehash: false };
   }
   const iterations = Number(parts[2]);
-  if (!Number.isInteger(iterations) || iterations < 1000 || iterations > 5_000_000) {
+  if (!Number.isInteger(iterations) || iterations < 1000 || iterations > PBKDF2_MAX_ITERATIONS) {
     return { valid: false, needsRehash: false };
   }
   let salt: Uint8Array;

@@ -1,7 +1,7 @@
 import type { FC } from 'hono/jsx';
 import type { Paginated, ReviewListItem } from '../../../db/repos/reviews';
 import type { Category } from '../../../db/schema';
-import { CONTENT_TYPES, CONTENT_TYPE_LABELS, REVIEW_SORTS, REVIEW_SORT_LABELS, formatStars } from '../../../types/domain';
+import { CONTENT_TYPES, CONTENT_TYPE_LABELS, REVIEW_SORTS, REVIEW_SORT_LABELS, formatScore } from '../../../types/domain';
 import { AdminPage, CsrfField } from './shared';
 import { Pagination, formatDateTime, EmptyState } from '../components/ui';
 
@@ -99,7 +99,7 @@ export const AdminReviewsPage: FC<AdminReviewsProps> = ({ results, categories, c
               </td>
               <td>{CONTENT_TYPE_LABELS[review.contentType]}</td>
               <td>{review.year ?? '—'}</td>
-              <td>{formatStars(review.rating)} ★</td>
+              <td class="table__score">{formatScore(review.rating)}</td>
               <td>
                 <span class={`badge badge--${review.status === 'PUBLISHED' ? 'ok' : 'neutral'}`}>
                   {review.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}

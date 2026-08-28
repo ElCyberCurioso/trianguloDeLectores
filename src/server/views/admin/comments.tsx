@@ -56,7 +56,7 @@ export const AdminCommentsPage: FC<AdminCommentsProps> = (props) => (
     </form>
 
     {props.items.length === 0 ? (
-      <EmptyState title="No hay comentarios con ese filtro" icon="💬" />
+      <EmptyState title="No hay comentarios con ese filtro" icon="comment" />
     ) : (
       <ul class="mod-list">
         {props.items.map((comment) => (
