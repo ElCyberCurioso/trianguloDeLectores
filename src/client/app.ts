@@ -277,6 +277,26 @@ function initConfirms(): void {
 // --------------------------------------------------------------- turnstile --
 let turnstileLoading = false;
 
+/**
+ * Cuánto se espera al script de Cloudflare antes de dar por hecho que no viene.
+ * Con una conexión mala tarda, pero si a los ocho segundos no está cargado, casi
+ * siempre es que algo lo está bloqueando.
+ */
+const TURNSTILE_TIMEOUT_MS = 8000;
+
+/**
+ * Destapa el aviso que ya está en el hueco del widget.
+ *
+ * Sin esto, un script bloqueado se traduce en un recuadro que no aparece, un
+ * formulario que se envía sin token y un error del servidor que no explica nada.
+ * Quien lo sufre no tiene forma de saber que la culpa es de su bloqueador.
+ */
+function reportTurnstileFailure(): void {
+  document.querySelectorAll<HTMLElement>('[data-turnstile-fallback]').forEach((el) => {
+    el.hidden = false;
+  });
+}
+
 function loadTurnstile(scope: ParentNode = document): void {
   if (!scope.querySelector('.cf-turnstile')) return;
   if (turnstileLoading || document.querySelector('script[data-turnstile]')) {
@@ -290,7 +310,15 @@ function loadTurnstile(scope: ParentNode = document): void {
   script.async = true;
   script.defer = true;
   script.dataset.turnstile = '1';
+  // Un bloqueador de red suele disparar `error`, pero uno que devuelve una
+  // respuesta vacía carga «bien» y deja `window.turnstile` sin definir: de ahí
+  // que haga falta además el plazo.
+  script.addEventListener('error', reportTurnstileFailure);
   document.head.appendChild(script);
+
+  window.setTimeout(() => {
+    if (!window.turnstile) reportTurnstileFailure();
+  }, TURNSTILE_TIMEOUT_MS);
 }
 
 function resetTurnstile(form: HTMLFormElement): void {

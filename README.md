@@ -26,6 +26,7 @@ Catálogo y plataforma de reseñas de **libros, novelas, películas, series, ani
 15. [SEO](#15-seo)
 15b. [Lista de pendientes](#15b-lista-de-pendientes)
 15c. [Recursos de marca](#15c-recursos-de-marca)
+15d. [Biblioteca privada (books.)](#15d-biblioteca-privada-books)
 16. [Privacidad y RGPD](#16-privacidad-y-rgpd)
 17. [Observabilidad y analítica](#17-observabilidad-y-analítica)
 18. [Testing](#18-testing)
@@ -175,6 +176,21 @@ quieres reconstruir la base sin arrancar el servidor).
 
 ---
 
+### Probar el subdominio privado en local
+
+`wrangler dev` responde a cualquier `Host`, pero el navegador necesita resolver
+el nombre. Basta con una línea en `/etc/hosts`:
+
+```text
+127.0.0.1   books.localhost
+```
+
+y entrar en `http://books.localhost:8787`. El host lo declara `BOOKS_URL` en
+`wrangler.jsonc`, porque en local el prefijo `books.` sobre `localhost:8787` no
+se puede deducir.
+
+---
+
 ## 5. Docker
 
 Docker es **sólo para desarrollo**: producción es Cloudflare, no un contenedor.
@@ -242,7 +258,8 @@ npm run build      # dry-run: valida bindings y empaqueta el Worker
 
 ## 7. Secretos y variables
 
-**Variables públicas** (en `wrangler.jsonc`, por entorno): `ENVIRONMENT`, `SITE_NAME`, `SITE_URL`, `SITE_LOCALE`, `TURNSTILE_SITE_KEY`, `TURNSTILE_ENABLED`, `IMAGE_RESIZING`, `LOG_LEVEL`, `MEDIA_PUBLIC_BASE` (opcional).
+**Variables públicas** (en `wrangler.jsonc`, por entorno): `ENVIRONMENT`, `SITE_NAME`, `SITE_URL`, `SITE_LOCALE`, `TURNSTILE_SITE_KEY`, `TURNSTILE_ENABLED`, `IMAGE_RESIZING`, `LOG_LEVEL`, `MEDIA_PUBLIC_BASE` (opcional),
+`BOOKS_URL` (origen del subdominio privado; si falta se deduce como `books.` + el host de `SITE_URL`).
 
 **Secretos** (nunca en el repositorio):
 
@@ -421,6 +438,35 @@ La identidad es la **IP pseudonimizada** (HMAC + pepper): se limita sin almacena
 
 ---
 
+### Cuando el recuadro de Turnstile no aparece
+
+El widget se carga desde `challenges.cloudflare.com`, y eso lo bloquean con
+frecuencia las extensiones de privacidad y el bloqueo de rastreadores de algunos
+navegadores. Cuando pasa, el recuadro no se pinta, el formulario viaja sin token
+y el servidor lo rechaza.
+
+Para que eso no sea un callejón sin salida:
+
+- el hueco del widget lleva dentro un aviso oculto que el JavaScript destapa si
+  a los ocho segundos el script no ha cargado;
+- el mensaje del servidor distingue los casos: sin token, token caducado o clave
+  mal configurada.
+
+Si el acceso al panel se queda bloqueado por esto, el interruptor de Turnstile
+está en `/admin/ajustes`… que a su vez está detrás del login. La salida sin
+navegador:
+
+```bash
+npm run turnstile:off -- --env production   # desactiva la comprobación del acceso
+npm run turnstile:on  -- --env production   # vuelve a activarla
+```
+
+Escribe en la tabla `settings` y purga la caché de ajustes en KV. Mientras está
+desactivado siguen en pie el límite de 5 intentos por IP cada 15 minutos, el
+límite global de 50 por hora y el bloqueo de la cuenta tras 5 fallos.
+
+---
+
 ## 13. DNS y SSL/TLS
 
 1. Añade el dominio a Cloudflare y apunta los nameservers.
@@ -591,8 +637,263 @@ controles de orden y filtrado.
 
 Ninguna esquina redondeada · nada centrado · un solo rojo y siempre significa
 algo · las reglas de 1 y 2 px no se sustituyen por aire · las notas van sobre
-10 y con coma · las imágenes en blanco y negro · las tres reglas de la marca,
+10 y con coma · las portadas en color y los fotogramas en blanco y negro · las
+tres reglas de la marca,
 100 / 66 / 33, en ese orden.
+
+---
+
+## 15d. Biblioteca privada (`books.`)
+
+Un subdominio autenticado, en el **mismo Worker** que el sitio público. El
+reparto se hace por host en `src/server/index.tsx`, antes de cualquier
+middleware: `books.<dominio>` entra en `booksApp` y el resto en `app`. Son dos
+aplicaciones Hono con cadenas separadas, no un prefijo de rutas, para que no se
+pueda colar una cabecera de una en la otra.
+
+Tiene dos mitades:
+
+**Documentos PDF.** Se suben (hasta 50 MB), se leen dentro de la aplicación con
+pdf.js autoalojado, y de cada uno se guarda por dónde va la lectura, sus notas y
+sus subrayados.
+
+**Biblioteca física.** Catálogo de los libros en papel, con alta por ISBN o
+leyendo el código de barras con la cámara, portada y ficha editable.
+
+### Acceso
+
+Misma tabla `users` y mismo login que el panel: PBKDF2, bloqueo por intentos,
+límite por IP y límite global. Lo que **no** se comparte es la sesión: la cookie
+lleva prefijo `__Host-`, que la ata al host exacto, así que entrar en `/admin` no
+abre la biblioteca ni al revés. Es deliberado — un fallo en un sitio no arrastra
+al otro.
+
+El guardián de autenticación va *antes* de las rutas, con lista de exenciones
+explícita, de modo que una ruta nueva nace protegida.
+
+### Cabeceras
+
+La CSP del subdominio se separa de la del sitio público en dos puntos, y sólo
+ahí:
+
+| Directiva | Cambio | Por qué |
+|---|---|---|
+| `script-src` | añade `'wasm-unsafe-eval'` | pdf.js descodifica JBIG2, JPEG2000 y perfiles de color en WebAssembly, que es justo lo que lleva un libro escaneado. Permite instanciar WASM y nada más: no habilita `eval()` ni `new Function()` |
+| `Permissions-Policy` | `camera=(self)` | el escáner de códigos de barras |
+
+Sigue sin `unsafe-inline` y sin `unsafe-eval`. Además, nada se cachea
+(`private, no-store`) y todo va con `X-Robots-Tag: noindex`.
+
+### Almacenamiento
+
+| Prefijo en R2 | Qué guarda | Cómo se sirve |
+|---|---|---|
+| `books/pdf/` | los PDF | ruta autenticada, con soporte de `Range` |
+| `books/covers/` | portadas de la biblioteca | ruta autenticada |
+| `backups/library/` | copias diarias | descarga autenticada |
+
+`isSafeMediaKey()` sólo reconoce `reviews/covers/`, así que **la ruta pública
+`/media/*` no puede servir nada de esto**, ni por error. Hay un test que lo fija.
+
+La subida va en streaming hacia R2: 50 MB en memoria no caben con holgura en un
+Worker. El cuerpo de la petición es el fichero en crudo — no multipart — y pasa
+por un `TransformStream` que comprueba que empieza por `%PDF-` y aborta en
+cuanto sabe que no. Como R2 exige longitud conocida, el flujo se encauza por
+`FixedLengthStream`.
+
+El visor pide rangos: sin respuestas `206` habría que descargar el libro entero
+antes de pintar la primera página.
+
+### Ordenar el catálogo
+
+La búsqueda de la biblioteca admite diez criterios: apellido del autor, título,
+nombre del autor, orden de alta, año de publicación (en los dos sentidos),
+número de páginas (ídem), estado y nota. Se eligen con un desplegable que
+conserva la búsqueda y el filtro de estado.
+
+**Por omisión se ordena por apellido del autor**, que es como está ordenada la
+biblioteca en papel: entrar y ver el catálogo en el mismo orden que la
+estantería es lo que permite localizar un libro sin pensar. El valor vive en
+`LIBRARY_SORT_DEFAULT` (`types/domain.ts`), del que tiran la validación, la
+ruta y el desplegable — declararlo en cada sitio acabaría con tres respuestas
+distintas.
+
+**La ordenación se hace en el Worker, no en SQL**, por dos motivos que no son de
+comodidad:
+
+- **SQLite no sabe ordenar en español.** Compara códigos de carácter, así que
+  «Álvarez» acaba detrás de «Zapata». `Intl.Collator('es')` sí, y el runtime
+  trae ICU completo.
+- **El apellido no es una columna.** `authors` es un texto con los autores
+  separados por coma, tal y como venía del catálogo de origen.
+
+El coste no cambia nada: la lista ya se traía entera —son cientos de fichas— y
+ordenar en memoria no añade ni una lectura a D1.
+
+El apellido se deriva con una heurística documentada en `lib/library-sort.ts`:
+**el nombre de pila es la primera palabra y el apellido es el resto**, quitando
+las partículas iniciales. Así «Miguel de Cervantes» se archiva por la C y
+«Gabriel García Márquez» por García Márquez, que es como se ordena en español.
+
+Lo que no tiene dato va **siempre al final**, se ordene ascendente o
+descendente: de las 229 fichas importadas, 137 no traen año y 66 no traen
+páginas, y verlas primero al pedir «más reciente» escondería el catálogo.
+
+Todos los criterios desempatan por título, para que la lista no cambie de orden
+entre recargas.
+
+### Importar un catálogo desde MyLibrary
+
+`scripts/import-mylibrary.py` trae a la biblioteca la exportación de MyLibrary,
+la aplicación de Android desde la que salió el catálogo. Su zip contiene una
+base SQLite con las tablas `BOOK` y `AUTHOR`, y un fichero aparte con las
+portadas en base64.
+
+```bash
+# Análisis: no escribe nada, dice qué encontraría
+python3 scripts/import-mylibrary.py mylibrary.zip --url https://books.triangulodelectores.site
+
+# Importación de verdad
+python3 scripts/import-mylibrary.py mylibrary.zip --url https://books.triangulodelectores.site --apply
+```
+
+**Por qué Python**: leer un fichero SQLite desde Node necesita `node:sqlite`,
+que no existe hasta Node 22, y el proyecto va con el 20. En Python está en la
+biblioteca estándar, igual que la lectura del zip. Ninguna dependencia nueva, y
+ya había precedente con `scripts/build-brand.py`.
+
+**Reparto de trabajo**: el script extrae y envía; la traducción de una ficha al
+vocabulario de la biblioteca la hace el servidor
+(`src/server/lib/mylibrary.ts`), porque ahí es donde están las decisiones
+discutibles y ahí se pueden probar.
+
+**Si el nombre no resuelve** justo después de publicar el subdominio, no es que
+esté caído: los routers domésticos cachean las respuestas negativas, y si se
+consultó el nombre antes de que existiera siguen contestando «no existe» durante
+un rato. Se comprueba con `dig +short <host>` contra el resolutor propio y
+contra `@1.1.1.1`; si sólo responde el segundo, es eso. `--ip <dirección>` salta
+el DNS del sistema para esa ejecución, manteniendo el nombre para el SNI y la
+cabecera `Host`.
+
+**Si el borde devuelve 403**, es Bot Fight Mode o una regla del WAF bloqueando a
+un cliente que no es un navegador. El script se identifica como
+`TrianguloDeLectores-Import/1.0`; se puede cambiar con `--agente`, o crear una
+regla «Skip» para tu IP mientras dure la importación. La salida distingue quién
+rechaza mirando `X-Request-Id`, que sólo ponemos nosotros — `cf-ray` no vale,
+porque lo lleva todo lo que pasa por Cloudflare.
+
+**Es reanudable y no duplica.** Guarda el progreso en `.import-mylibrary.json`,
+así que si se corta a mitad se vuelve a lanzar y sigue. Además, un ISBN que ya
+está en el catálogo devuelve 409 y se salta: la importación se puede repetir
+entera sin miedo.
+
+**Lo que no cabe en una columna se conserva en las notas** con su etiqueta:
+resumen, serie, categorías, comentarios, fechas de lectura, enlaces a tiendas y
+el identificador de origen. Un ISBN con el dígito de control mal se descarta
+—guardarlo como bueno rompería el antiduplicado— pero queda anotado, porque casi
+siempre es un dígito mal tecleado que se puede arreglar a mano.
+
+#### El enlace entre portada e imagen
+
+Es la parte frágil de la importación, y conviene saber por qué.
+
+El fichero de imágenes trae un `elementHashcode`, pero **no sirve para
+emparejar**: es el `hashCode()` de identidad de la JVM que hizo la exportación.
+Comprobado por dos vías — no coincide con el hash de ningún campo, ni con
+ninguna combinación de hasta cuatro campos usando la fórmula con la que Java
+combina varios valores.
+
+Lo único que queda es el orden, y **cuál es no está documentado**. La primera
+suposición (por ID de la ficha) resultó falsa contra la exportación real: 228
+imágenes para 228 libros con `COVER_PATH`, las cantidades cuadraban, y aun así
+los títulos no correspondían con las portadas. Que las cantidades coincidan es
+condición necesaria, no suficiente.
+
+Por eso **las portadas son opcionales y hay que decir con qué orden**:
+
+```bash
+# Vuelca muestras de cada hipótesis, una carpeta por orden
+python3 scripts/import-mylibrary.py miBiblioteca.zip --url … --diagnostico
+
+# En cada carpeta, el nombre del fichero es el título y el contenido la portada
+# que le tocaría. La carpeta en la que corresponden indica el orden bueno.
+python3 scripts/import-mylibrary.py miBiblioteca.zip --url … --portadas fichero --apply
+```
+
+Órdenes que se prueban: por ID, por nombre del fichero de imagen en orden
+alfabético (`1.png`, `10.png`, `100.png`…, que es lo que hace un listado de
+directorio), por título, **por apellido del autor** —con dos desempates
+posibles a igual autor, título u orden de alta—, por nombre completo del autor
+y por ID descendente.
+
+La comparación alfabética quita los acentos antes de ordenar. Con el valor en
+crudo se comparan códigos de carácter y «Álvarez» acaba detrás de «Zapata», que
+no es el orden de ninguna aplicación con configuración regional ni el de ninguna
+estantería.
+
+Sin `--portadas` no se sube ninguna imagen: se importan sólo las fichas. Una
+portada en el libro equivocado es peor que ninguna portada, y con 229 registros
+no se detectaría hasta mucho después.
+
+### Portadas de los PDF
+
+Cada documento de la estantería tiene portada. Por omisión es **su primera
+página**, rasterizada por pdf.js en el navegador justo después de subir el
+fichero —el Worker no puede hacerlo sin una librería de PDF entera, y el fichero
+ya está delante en ese momento—. Los documentos subidos antes de que existieran
+las portadas la reciben la primera vez que se abren en el lector, donde pdf.js
+ya está cargado.
+
+También se puede poner a mano: subiendo una imagen o indicando una dirección.
+
+**En los tres casos la imagen se guarda en R2.** Nunca se deja la URL de un
+tercero en un `src`: si mañana ese servidor la cambia, la borra o registra a
+quien la mira, el catálogo lo sufre. Lo que viaja al servidor es la dirección;
+lo que se queda es el fichero.
+
+Ir a buscar una imagen a una dirección que alguien escribe es superficie de
+SSRF, así que `lib/remote-image.ts` sólo admite http y https por los puertos 80
+y 443, rechaza direcciones privadas, de bucle, `.local`, `.internal`, los
+endpoints de metadatos de nube e IPv6 literal, **no sigue redirecciones** —el
+truco clásico para convertir una URL permitida en otra cosa— y corta la lectura
+al llegar al límite de tamaño aunque el servidor mienta en `Content-Length`.
+
+### Notas y subrayados
+
+Los rectángulos se guardan **normalizados de 0 a 1** respecto al tamaño de la
+página, no en píxeles: así el subrayado cae en su sitio con cualquier zoom y en
+cualquier pantalla. El texto seleccionado se guarda aparte como cita, y se pinta
+siempre con `textContent` — viene de un PDF, que puede llevar cualquier cosa
+dentro.
+
+La posición de lectura se guarda con retardo mientras se desplaza, y otra vez al
+ocultarse la pestaña con `keepalive`, que es lo único que sobrevive a cerrar la
+aplicación.
+
+### ISBN y cámara
+
+La ficha la consulta **el Worker** contra Open Library, nunca el navegador: así
+`connect-src 'self'` se mantiene y la IP de quien usa la aplicación no llega a un
+tercero. La portada también la descarga el servidor y la guarda en R2, con la
+misma validación por magic bytes que una imagen subida a mano.
+
+Para leer el código de barras se usa `BarcodeDetector` nativo donde existe
+(Chrome, Android). Donde no —Safari, Firefox— se carga ZXing en JavaScript puro,
+en un bundle aparte y sólo en ese momento: sin esa reserva la cámara no
+funcionaría justo en el iPhone, que es donde más sentido tiene escanear un libro.
+
+El ISBN se valida con su dígito de control y se normaliza siempre a ISBN-13. Un
+EAN-13 que no empiece por 978/979 se rechaza: es un código de barras, pero no de
+un libro.
+
+### Copia diaria
+
+Cuelga del cron que ya existía (`0 4 * * *`). Vuelca a
+`backups/library/<fecha>.json.gz` el catálogo, las fichas de los PDF, el progreso
+y las anotaciones, comprimido con `CompressionStream`. **Los ficheros PDF no
+entran**: ya están en R2, que es donde iría la copia, y duplicarlos gastaría
+cuota sin proteger de lo que de verdad puede perderse, que es la base de datos.
+Se conservan 30 días y se pueden descargar desde `/copias`.
 
 ---
 
@@ -772,12 +1073,14 @@ npx wrangler d1 export tdl-db-prod --env production --remote --output backup.sql
 src/
 ├── server/
 │   ├── index.tsx            # entrada del Worker: rutas, errores, cron, export de DO
-│   ├── routes/              # public.tsx · api-public.ts · admin.tsx
+│   ├── routes/              # public.tsx · api-public.ts · admin.tsx · books.tsx
 │   ├── middleware/          # security (CSP) · context · auth (RBAC/CSRF) · ratelimit
-│   ├── services/            # reglas de negocio: reviews, comments, media, stats
+│   ├── services/            # reglas de negocio: reviews, comments, media, stats,
+│   │                        #   documents, library, backup
 │   ├── lib/                 # crypto · sanitize · cache · images · seo · turnstile · …
-│   └── views/               # SSR con hono/jsx: layout, components, pages, admin
-├── client/                  # islas del navegador (app.ts, admin.ts) → esbuild
+│   └── views/               # SSR con hono/jsx: layout, components, pages, admin, books
+├── client/                  # islas del navegador (app.ts, admin.ts, books.ts,
+│                            #   scanner.ts) → esbuild
 ├── db/
 │   ├── schema.ts            # espejo tipado del SQL
 │   ├── client.ts            # Drizzle sobre D1

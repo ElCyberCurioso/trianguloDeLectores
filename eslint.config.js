@@ -6,6 +6,8 @@ export default [
   {
     ignores: [
       'node_modules/**', '.wrangler/**', 'public/assets/*.js', 'public/assets/*.js.map',
+      // pdf.js se copia tal cual del paquete: no es código nuestro y no se linta.
+      'public/assets/pdf/**',
       'coverage/**', 'test-results/**', 'playwright-report/**', 'dist/**',
     ],
   },

@@ -103,8 +103,10 @@ function initCoverUploader(): void {
   if (!uploader) return;
   const input = uploader.querySelector<HTMLInputElement>('[data-cover-input]');
   const keyField = uploader.querySelector<HTMLInputElement>('[data-cover-key]');
-  const preview = uploader.querySelector<HTMLImageElement>('[data-cover-preview]');
-  const empty = uploader.querySelector<HTMLElement>('[data-cover-preview-empty]');
+  // Mutables: la primera subida sustituye el hueco vacío por un `<img>`, y a
+  // partir de ahí las siguientes reutilizan ese mismo elemento.
+  let preview = uploader.querySelector<HTMLImageElement>('[data-cover-preview]');
+  let empty = uploader.querySelector<HTMLElement>('[data-cover-preview-empty]');
   const removeButton = uploader.querySelector<HTMLButtonElement>('[data-cover-remove]');
   const form = uploader.closest('form');
   if (!input || !keyField) return;
@@ -130,7 +132,7 @@ function initCoverUploader(): void {
         credentials: 'same-origin',
       });
       const payload = (await response.json()) as
-        | { ok: true; data: { key: string } }
+        | { ok: true; data: { key: string; url: string | null } }
         | { ok: false; error: { message: string } };
 
       if (!response.ok || payload.ok === false) {
@@ -139,18 +141,25 @@ function initCoverUploader(): void {
       }
 
       keyField.value = payload.data.key;
-      const objectUrl = URL.createObjectURL(file);
-      if (preview) {
-        preview.src = objectUrl;
-        preview.hidden = false;
-      } else if (empty) {
-        const img = document.createElement('img');
-        img.src = objectUrl;
-        img.width = 200;
-        img.height = 300;
-        img.alt = 'Portada seleccionada';
-        img.dataset.coverPreview = '1';
-        empty.replaceWith(img);
+      // La vista previa sale de la URL pública que devuelve el servidor, no de
+      // `URL.createObjectURL(file)`: la CSP declara `img-src 'self' data:` más
+      // el dominio de medios, y un `blob:` lo bloquea el navegador.
+      const previewUrl = payload.data.url;
+      if (previewUrl) {
+        if (preview) {
+          preview.src = previewUrl;
+          preview.hidden = false;
+        } else if (empty) {
+          const img = document.createElement('img');
+          img.src = previewUrl;
+          img.width = 200;
+          img.height = 300;
+          img.alt = 'Portada seleccionada';
+          img.dataset.coverPreview = '1';
+          empty.replaceWith(img);
+          preview = img;
+          empty = null;
+        }
       }
       toast('Portada subida. Recuerda guardar la reseña.', 'ok');
     } catch {

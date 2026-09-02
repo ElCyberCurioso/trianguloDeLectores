@@ -36,7 +36,11 @@ export type IconName =
   | 'download'
   | 'bookmark'
   | 'share'
-  | 'trash';
+  | 'trash'
+  | 'camera'
+  | 'plus'
+  | 'highlighter'
+  | 'note';
 
 interface IconSpec {
   /** Trazos del dibujo. */
@@ -99,6 +103,19 @@ const ICONS: Record<IconName, IconSpec> = {
   bookmark: { d: ['m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'] },
   share: { d: ['M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8', 'm16 6-4-4-4 4', 'M12 2v13'] },
   trash: { d: ['M3 6h18', 'M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6'] },
+  // El círculo del objetivo va como trazo cerrado y no como <circle>: así el
+  // icono sigue siendo una lista de `d` como todos los demás.
+  camera: {
+    d: [
+      'M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z',
+      'M15 13a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+    ],
+  },
+  plus: { d: ['M12 5v14', 'M5 12h14'] },
+  highlighter: {
+    d: ['m9 11-6 6v3h9l3-3', 'm22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4'],
+  },
+  note: { d: ['M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10l6-6V5a2 2 0 0 0-2-2z', 'M15 21v-6h6'] },
 };
 
 export interface IconProps {
@@ -114,6 +131,9 @@ export const Icon: FC<IconProps> = ({ name, size = '1em', class: className }) =>
 
   return (
     <svg
+      // Igual que en la marca: fuera del documento HTML, un SVG sin `xmlns` no
+      // es válido y no llega a pintarse.
+      xmlns="http://www.w3.org/2000/svg"
       class={className}
       width={size}
       height={size}

@@ -40,8 +40,12 @@ describe('subida de portadas a R2', () => {
     const response = await upload(pngFile());
     expect(response.status).toBe(201);
 
-    const payload = (await response.json()) as { data: { key: string; mime: string; width: number } };
+    const payload = (await response.json()) as { data: { key: string; mime: string; width: number; url: string } };
     expect(payload.data.mime).toBe('image/png');
+    // La vista previa del panel se pinta con esta URL. Un `blob:` lo bloquearía
+    // la CSP (`img-src 'self' data:` más el dominio de medios).
+    expect(payload.data.url).toBeTruthy();
+    expect(payload.data.url.startsWith('blob:')).toBe(false);
     expect(payload.data.width).toBe(800);
     expect(payload.data.key).toMatch(/^reviews\/covers\/\d{4}\/[0-9a-f]{2}\/[0-9a-f-]{36}\.png$/);
 

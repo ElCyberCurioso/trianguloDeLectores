@@ -357,6 +357,97 @@ export const recommendations = sqliteTable(
   }),
 );
 
+/**
+ * Biblioteca privada del subdominio `books.`. Espejo tipado de
+ * `0003_books.sql`. Si cambia una, cambia la otra.
+ */
+export const documents = sqliteTable(
+  'documents',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    author: text('author'),
+    r2Key: text('r2_key').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    checksum: text('checksum').notNull(),
+    pageCount: integer('page_count'),
+    coverKey: text('cover_key'),
+    notes: text('notes'),
+    addedBy: text('added_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    lastReadAt: integer('last_read_at'),
+  },
+  (t) => ({
+    recentIdx: index('idx_documents_recent').on(t.lastReadAt, t.createdAt),
+    checksumIdx: uniqueIndex('idx_documents_checksum').on(t.checksum),
+  }),
+);
+
+export const documentProgress = sqliteTable('document_progress', {
+  documentId: text('document_id')
+    .primaryKey()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  page: integer('page').notNull(),
+  scrollPct: integer('scroll_pct').notNull().default(0),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+export const documentAnnotations = sqliteTable(
+  'document_annotations',
+  {
+    id: text('id').primaryKey(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['HIGHLIGHT', 'NOTE'] }).notNull(),
+    page: integer('page').notNull(),
+    /** JSON con los rectángulos normalizados 0..1. Null en una nota suelta. */
+    rects: text('rects'),
+    quote: text('quote'),
+    body: text('body'),
+    color: text('color', { enum: ['YELLOW', 'RED', 'GREEN', 'BLUE'] }).notNull().default('YELLOW'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    docIdx: index('idx_annotations_doc').on(t.documentId, t.page, t.createdAt),
+    kindIdx: index('idx_annotations_kind').on(t.documentId, t.kind),
+  }),
+);
+
+export const libraryBooks = sqliteTable(
+  'library_books',
+  {
+    id: text('id').primaryKey(),
+    isbn13: text('isbn13'),
+    isbn10: text('isbn10'),
+    title: text('title').notNull(),
+    subtitle: text('subtitle'),
+    authors: text('authors'),
+    publisher: text('publisher'),
+    publishedYear: integer('published_year'),
+    pageCount: integer('page_count'),
+    language: text('language'),
+    coverKey: text('cover_key'),
+    location: text('location'),
+    status: text('status', { enum: ['OWNED', 'READING', 'READ', 'LENT', 'WISHLIST'] })
+      .notNull()
+      .default('OWNED'),
+    rating: integer('rating'),
+    notes: text('notes'),
+    source: text('source', { enum: ['MANUAL', 'OPENLIBRARY'] }).notNull().default('MANUAL'),
+    addedBy: text('added_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    isbnIdx: uniqueIndex('idx_library_isbn13').on(t.isbn13),
+    titleIdx: index('idx_library_title').on(t.title),
+    statusIdx: index('idx_library_status').on(t.status, t.createdAt),
+  }),
+);
+
 export type User = typeof users.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
 export type Category = typeof categories.$inferSelect;
@@ -370,3 +461,7 @@ export type AuditEntry = typeof auditLog.$inferSelect;
 export type MediaObject = typeof mediaObjects.$inferSelect;
 export type WatchlistItem = typeof watchlistItems.$inferSelect;
 export type Recommendation = typeof recommendations.$inferSelect;
+export type DocumentRow = typeof documents.$inferSelect;
+export type DocumentProgressRow = typeof documentProgress.$inferSelect;
+export type DocumentAnnotation = typeof documentAnnotations.$inferSelect;
+export type LibraryBook = typeof libraryBooks.$inferSelect;

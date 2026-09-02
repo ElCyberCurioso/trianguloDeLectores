@@ -1,6 +1,7 @@
 import type { FC } from 'hono/jsx';
 import { CONTENT_TYPES, CONTENT_TYPE_LABELS } from '../../../types/domain';
 import { Icon } from '../components/icons';
+import { TurnstileSlot } from '../components/ui';
 
 export interface RecommendPageProps {
   /** Token de formulario firmado: cierra el envío automático desde fuera. */
@@ -131,9 +132,7 @@ export const RecommendPage: FC<RecommendPageProps> = ({
       </div>
 
       {turnstileSiteKey ? (
-        <div class="turnstile-slot">
-          <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="auto" data-size="normal" />
-        </div>
+        <TurnstileSlot siteKey={turnstileSiteKey} />
       ) : null}
 
       <div class="recommend__actions">

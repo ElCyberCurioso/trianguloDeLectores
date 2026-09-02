@@ -4,6 +4,7 @@ import {
   COMMENT_STATUSES, MAX_RATING_HALF_STARS, PAGE_SIZE, MAX_PAGE_SIZE,
   WATCHLIST_STATUSES, WATCHLIST_SORTS, PRIORITIES,
   RECOMMENDATION_STATUSES, RECOMMENDATION_ACTIONS,
+  LIBRARY_SORTS, LIBRARY_SORT_DEFAULT,
 } from '../types/domain';
 
 /**
@@ -15,6 +16,17 @@ import {
 const trimmed = (max: number) => z.string().trim().max(max);
 const optionalText = (max: number) =>
   trimmed(max).optional().transform((v) => (v && v.length ? v : undefined));
+
+/**
+ * Igual que `optionalText`, pero acepta además `null`.
+ *
+ * `optional()` sólo admite `undefined`, y JSON no tiene ese valor: un cliente
+ * que quiere decir «este campo está vacío» manda `null`. Donde la columna de la
+ * base es nullable, el esquema tiene que admitirlo — si no, el campo vacío se
+ * convierte en un 400 sin explicación.
+ */
+const nullableText = (max: number) =>
+  trimmed(max).nullish().transform((v) => (v && v.length ? v : undefined));
 
 export const idSchema = z.string().uuid();
 
@@ -237,4 +249,147 @@ export type RecommendationQueryInput = z.infer<typeof recommendationQuerySchema>
 
 export const recommendationActionSchema = z.object({
   action: z.enum(RECOMMENDATION_ACTIONS),
+});
+
+// --------------------------------------------------- biblioteca privada --
+/**
+ * Entradas del subdominio `books.`. Mismos criterios que el resto: esquemas
+ * cerrados, nada de campos no declarados y ninguna confianza en lo que llegue
+ * del navegador, aunque detrás haya un login.
+ */
+
+export const documentMetaSchema = z.object({
+  title: trimmed(300).min(1, 'El título es obligatorio'),
+  author: optionalText(200),
+});
+
+export const documentPatchSchema = z.object({
+  title: trimmed(300).min(1, 'El título es obligatorio'),
+  author: optionalText(200),
+  notes: optionalText(2000),
+});
+
+/**
+ * Posición de lectura. `scrollPct` va en milésimas de página (0..1000) para
+ * guardar un entero y no un decimal, igual que la puntuación de las reseñas.
+ */
+export const readingProgressSchema = z.object({
+  page: z.coerce.number().int().min(1).max(100_000),
+  scrollPct: z.coerce.number().int().min(0).max(1000).default(0),
+});
+
+/** Rectángulo del subrayado, normalizado al tamaño de la página (0..1). */
+/**
+ * Los rectángulos llegan de medir el DOM, así que traen error de subpíxel: un
+ * `-0.0004` al seleccionar desde el borde izquierdo bastaba para tumbar la
+ * anotación entera con un 400. Aquí se recortan al margen en vez de rechazarse;
+ * lo que se descarta arriba, en el cliente, es lo que cae fuera de la página.
+ */
+const clampedRectSchema = z.object({
+  x: z.coerce.number().catch(0),
+  y: z.coerce.number().catch(0),
+  w: z.coerce.number().catch(0),
+  h: z.coerce.number().catch(0),
+}).transform((r) => ({
+  x: Math.min(1, Math.max(0, r.x)),
+  y: Math.min(1, Math.max(0, r.y)),
+  w: Math.min(1, Math.max(0, r.w)),
+  h: Math.min(1, Math.max(0, r.h)),
+}));
+
+export const annotationCreateSchema = z.object({
+  kind: z.enum(['HIGHLIGHT', 'NOTE']),
+  page: z.number().int().min(1).max(100_000),
+  // Un subrayado sin rectángulos no se podría pintar, y 200 por anotación es
+  // más de lo que ocupa cualquier selección razonable.
+  rects: z.array(clampedRectSchema).max(200).default([]),
+  quote: nullableText(2000),
+  body: nullableText(4000),
+  color: z.enum(['YELLOW', 'RED', 'GREEN', 'BLUE']).default('YELLOW'),
+});
+
+export const annotationPatchSchema = z.object({
+  body: nullableText(4000),
+  color: z.enum(['YELLOW', 'RED', 'GREEN', 'BLUE']).optional(),
+});
+
+/**
+ * ISBN tal y como llega del teclado o de la cámara. Aquí sólo se comprueba la
+ * forma: el dígito de control lo valida `parseIsbn()`.
+ */
+export const isbnSchema = z.object({
+  isbn: z.string().trim().max(20).regex(/^[\d\sXx-]+$/, 'Un ISBN sólo lleva dígitos, guiones y una X final'),
+});
+
+export const LIBRARY_STATUSES = ['OWNED', 'READING', 'READ', 'LENT', 'WISHLIST'] as const;
+
+export const libraryBookSchema = z.object({
+  isbn13: z.string().trim().max(20).optional().or(z.literal('')),
+  isbn10: z.string().trim().max(20).optional().or(z.literal('')),
+  title: trimmed(300).min(1, 'El título es obligatorio'),
+  subtitle: optionalText(300),
+  authors: optionalText(300),
+  publisher: optionalText(200),
+  publishedYear: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  pageCount: z.coerce.number().int().min(1).max(50_000).optional().nullable(),
+  language: optionalText(20),
+  location: optionalText(120),
+  status: z.enum(LIBRARY_STATUSES).default('OWNED'),
+  // Entero 0..10, la misma escala publicada que las reseñas.
+  rating: z.coerce.number().int().min(0).max(10).optional().nullable(),
+  notes: optionalText(4000),
+  coverKey: z.string().trim().max(120).optional().or(z.literal('')),
+  coverUrl: z.string().trim().max(500).optional().or(z.literal('')),
+});
+
+export const librarySearchSchema = z.object({
+  q: optionalText(120),
+  status: z.enum([...LIBRARY_STATUSES, 'ALL']).default('ALL'),
+  // Lista cerrada: el criterio elige un comparador ya escrito, nunca una
+  // columna ni un trozo de SQL que venga de la URL. La lista y el valor por
+  // omisión salen de `lib/library-sort.ts`, que es donde viven los
+  // comparadores: declararlos aquí otra vez sería tener dos fuentes.
+  sort: z.enum(LIBRARY_SORTS).catch(LIBRARY_SORT_DEFAULT).default(LIBRARY_SORT_DEFAULT),
+});
+
+export type DocumentMetaInput = z.infer<typeof documentMetaSchema>;
+export type ReadingProgressInput = z.infer<typeof readingProgressSchema>;
+export type AnnotationCreateInput = z.infer<typeof annotationCreateSchema>;
+export type LibraryBookInput = z.infer<typeof libraryBookSchema>;
+
+/**
+ * Dirección de una imagen que el servidor va a descargar para guardarla como
+ * portada. `httpUrl()` y no `z.string().url()`: este último acepta esquemas
+ * como `javascript:`. Las comprobaciones de destino —puertos, direcciones
+ * internas, redirecciones— están en `lib/remote-image.ts`.
+ */
+export const coverUrlSchema = z.object({
+  url: httpUrl(2000),
+});
+
+/**
+ * Ficha en el formato de MyLibrary, tal y como la manda el script de
+ * importación. Se valida igual de cerrada que cualquier otra entrada: que
+ * venga de un script propio no la convierte en de fiar.
+ */
+export const myLibraryBookSchema = z.object({
+  sourceId: z.coerce.number().int().min(0).max(1_000_000),
+  title: trimmed(500).min(1, 'El título es obligatorio'),
+  author: nullableText(300),
+  additionalAuthors: z.array(trimmed(300)).max(20).default([]),
+  isbn: nullableText(40),
+  pages: z.coerce.number().int().min(0).max(100_000).nullish(),
+  publishedDate: nullableText(100),
+  publisher: nullableText(300),
+  summary: nullableText(8000),
+  series: nullableText(300),
+  categories: z.array(trimmed(120)).max(40).default([]),
+  comments: z.array(trimmed(2000)).max(40).default([]),
+  readingDates: nullableText(500),
+  read: z.boolean().default(false),
+  inWishlist: z.boolean().default(false),
+  amazonUrl: nullableText(1000),
+  fnacUrl: nullableText(1000),
+  /** Clave de la portada, ya subida por `/api/portadas`. */
+  coverKey: z.string().trim().max(120).optional().or(z.literal('')),
 });

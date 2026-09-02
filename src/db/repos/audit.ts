@@ -13,6 +13,9 @@ export type AuditAction =
   | 'recommendation.status' | 'recommendation.delete'
   | 'recommendation.to_review' | 'recommendation.to_watchlist'
   | 'media.upload' | 'media.delete'
+  | 'document.upload' | 'document.update' | 'document.delete'
+  | 'library.create' | 'library.update' | 'library.delete'
+  | 'library.backup'
   | 'taxonomy.create' | 'taxonomy.update' | 'taxonomy.delete'
   | 'settings.update';
 

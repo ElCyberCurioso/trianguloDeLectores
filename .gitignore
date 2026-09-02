@@ -17,6 +17,10 @@ public/assets/app.js
 public/assets/app.js.map
 public/assets/admin.js
 public/assets/admin.js.map
+public/assets/books.js
+public/assets/books.js.map
+public/assets/scanner.js
+public/assets/scanner.js.map
 .idea/
 .vscode/
 
@@ -25,3 +29,15 @@ public/assets/admin.js.map
 .agents/
 .claude/
 skills-lock.json
+public/assets/pdf/
+
+# Progreso de la importación del catálogo: es local y reanudable.
+.import-mylibrary.json
+import-muestras/
+import-diagnostico/
+
+# Volcados de la base de producción: nunca al repositorio.
+backup-prod-*.sql
+
+# Caché de bytecode de los scripts de Python.
+__pycache__/

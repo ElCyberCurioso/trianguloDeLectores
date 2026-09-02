@@ -6,19 +6,28 @@ import { verifyCsrf } from '../lib/auth';
 /**
  * Sólo ADMIN. El rol se lee de la **sesión en base de datos**, jamás de nada que
  * envíe el cliente (cabeceras, campos ocultos, JWT sin verificar).
+ *
+ * La página de acceso es un parámetro porque hay dos: el panel vive en
+ * `/admin/login` y el subdominio de la biblioteca en `/login`. Cuando estaba
+ * fija, una petición sin sesión en la biblioteca rebotaba a `/admin/login`, que
+ * allí tampoco existe, y el navegador se quedaba dando vueltas.
  */
-export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
-  const user = c.get('user');
-  if (!user) {
-    if (c.req.header('Accept')?.includes('text/html')) {
-      const target = new URL(c.req.url);
-      return c.redirect(`/admin/login?next=${encodeURIComponent(target.pathname + target.search)}`, 302);
+export function requireAdminAt(loginPath: string) {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const user = c.get('user');
+    if (!user) {
+      if (c.req.header('Accept')?.includes('text/html')) {
+        const target = new URL(c.req.url);
+        return c.redirect(`${loginPath}?next=${encodeURIComponent(target.pathname + target.search)}`, 302);
+      }
+      throw unauthorized();
     }
-    throw unauthorized();
-  }
-  if (user.role !== 'ADMIN') throw forbidden('Esta sección requiere permisos de administrador');
-  await next();
-});
+    if (user.role !== 'ADMIN') throw forbidden('Esta sección requiere permisos de administrador');
+    await next();
+  });
+}
+
+export const requireAdmin = requireAdminAt('/admin/login');
 
 /**
  * CSRF en dos capas para toda operación con efectos:

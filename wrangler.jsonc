@@ -24,6 +24,11 @@
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "TURNSTILE_ENABLED": "false",
     "IMAGE_RESIZING": "false",
+    // Subdominio privado de la biblioteca. En local no vale el prefijo
+    // `books.` sobre `localhost:8787`, así que se declara entero: `wrangler
+    // dev` responde a cualquier Host, y basta con apuntar `books.localhost` a
+    // 127.0.0.1 en /etc/hosts para probarlo.
+    "BOOKS_URL": "http://books.localhost:8787",
     "LOG_LEVEL": "debug"
   },
   "d1_databases": [
@@ -60,11 +65,17 @@
         "SITE_LOCALE": "es-ES",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAEeDd1vqq7WZ1s-I",
         "TURNSTILE_ENABLED": "true",
-        "IMAGE_RESIZING": "true",
+        // Las transformaciones no están activadas en la zona: con `true`,
+        // `/cdn-cgi/image/…` devuelve 404 y no se ve ninguna portada. En
+        // `false` se sirve el original con caché inmutable. Vuelve a `true`
+        // cuando el producto esté activo en el panel.
+        "IMAGE_RESIZING": "false",
+        "BOOKS_URL": "https://books-staging.triangulodelectores.site",
         "LOG_LEVEL": "info"
       },
       "routes": [
-        { "pattern": "staging.triangulodelectores.site", "custom_domain": true }
+        { "pattern": "staging.triangulodelectores.site", "custom_domain": true },
+        { "pattern": "books-staging.triangulodelectores.site", "custom_domain": true }
       ],
       "d1_databases": [
         {
@@ -110,11 +121,18 @@
         "SITE_LOCALE": "es-ES",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAEeDMwghTFFCYU1g",
         "TURNSTILE_ENABLED": "true",
-        "IMAGE_RESIZING": "true",
+        // Igual que en staging: las Transformaciones de imagen no están
+        // activadas en la zona —no entran en el plan Free—, y con `true` cada
+        // portada pide `/cdn-cgi/image/…` y recibe un 404. En `false` se sirve
+        // el original con caché inmutable. Vuelve a `true` el día que se
+        // activen en el panel.
+        "IMAGE_RESIZING": "false",
+        "BOOKS_URL": "https://books.triangulodelectores.site",
         "LOG_LEVEL": "warn"
       },
       "routes": [
-        { "pattern": "triangulodelectores.site", "custom_domain": true }
+        { "pattern": "triangulodelectores.site", "custom_domain": true },
+        { "pattern": "books.triangulodelectores.site", "custom_domain": true }
       ],
       "d1_databases": [
         {
@@ -148,8 +166,15 @@
       },
       "version_metadata": { "binding": "CF_VERSION" },
       "observability": { "enabled": true, "head_sampling_rate": 0.5 },
-      "placement": { "mode": "smart" },
-      "limits": { "cpu_ms": 200 },
+      // Sin `limits: { cpu_ms: … }`: es de plan de pago. Aquí estuvo puesto en
+      // 200 y dejó el Worker roto en producción —toda petición con E/S (D1,
+      // KV, ASSETS) moría con `TypeError: Callback returned incorrect type;
+      // expected 'Promise'`, un error del runtime anterior a `onError`, así
+      // que el sitio devolvía 1101 y sólo respondía `/robots.txt`, el único
+      // handler sin E/S—. Desde entonces la API lo rechaza al desplegar
+      // (código 100328). Recupérable si algún día se pasa a plan de pago.
+      // El `placement` de Smart Placement se hereda del nivel superior y no da
+      // problemas: staging corre con él.
       // Mantenimiento diario: purga de sesiones caducadas y retención de auditoría.
       "triggers": { "crons": ["0 4 * * *"] }
     }

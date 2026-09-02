@@ -133,6 +133,24 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
 /** Orden de cola: alta primero. SQLite ordena texto, así que se mapea a número. */
 export const PRIORITY_WEIGHT: Record<Priority, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
+/**
+ * Criterios de ordenación del catálogo de la biblioteca.
+ *
+ * Aquí y no junto a los comparadores porque el vocabulario del dominio lo
+ * comparten la validación y la vista, igual que `REVIEW_SORTS` y
+ * `WATCHLIST_SORTS`. Los comparadores viven en `server/lib/library-sort.ts`.
+ *
+ * El primero es el de por omisión: el apellido del autor, que es como está
+ * ordenada la biblioteca en papel.
+ */
+export const LIBRARY_SORTS = [
+  'apellido', 'titulo', 'nombre', 'recientes',
+  'anyo-desc', 'anyo-asc', 'paginas-desc', 'paginas-asc',
+  'estado', 'nota',
+] as const;
+export type LibrarySort = (typeof LIBRARY_SORTS)[number];
+export const LIBRARY_SORT_DEFAULT: LibrarySort = 'apellido';
+
 export const WATCHLIST_SORTS = ['priority', 'recent', 'oldest', 'title'] as const;
 export type WatchlistSort = (typeof WATCHLIST_SORTS)[number];
 

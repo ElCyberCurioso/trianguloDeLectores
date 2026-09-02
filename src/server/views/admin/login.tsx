@@ -1,5 +1,6 @@
 import type { FC } from 'hono/jsx';
 import { BrandStack } from '../components/brand';
+import { TurnstileSlot } from '../components/ui';
 
 export interface LoginPageProps {
   error?: string | null;
@@ -7,14 +8,20 @@ export interface LoginPageProps {
   turnstileSiteKey: string | null;
   next?: string;
   siteName: string;
+  /** A dónde se envía el formulario. El subdominio de la biblioteca usa el suyo. */
+  action?: string;
+  subtitle?: string;
 }
 
-export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, next, siteName }) => (
+export const LoginPage: FC<LoginPageProps> = ({
+  error, email, turnstileSiteKey, next, siteName,
+  action = '/admin/login', subtitle = 'Acceso al panel de administración',
+}) => (
   <div class="wrap login">
     <div class="login__card">
       <BrandStack siteName={siteName} markWidth={112} class="login__logo" />
       <h1 class="login__title visually-hidden">{siteName}</h1>
-      <p class="login__subtitle">Acceso al panel de administración</p>
+      <p class="login__subtitle">{subtitle}</p>
 
       {error ? (
         <p class="flash flash--error" role="alert">
@@ -22,7 +29,7 @@ export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, 
         </p>
       ) : null}
 
-      <form method="post" action="/admin/login" class="login__form" autocomplete="on">
+      <form method="post" action={action} class="login__form" autocomplete="on">
         {next ? <input type="hidden" name="next" value={next} /> : null}
 
         <div class="field">
@@ -58,11 +65,7 @@ export const LoginPage: FC<LoginPageProps> = ({ error, email, turnstileSiteKey, 
           />
         </div>
 
-        {turnstileSiteKey ? (
-          <div class="turnstile-slot">
-          <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="auto" data-size="normal" />
-        </div>
-        ) : null}
+        {turnstileSiteKey ? <TurnstileSlot siteKey={turnstileSiteKey} /> : null}
 
         <button type="submit" class="btn btn--primary btn--block">
           Entrar

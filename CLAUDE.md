@@ -43,6 +43,16 @@ decisión. Estas son las reglas que no se negocian.
   `ON CONFLICT DO NOTHING` y comprueba el resultado.
 - Los formularios públicos llevan techo de tamaño (`assertBodySize`, 64 kB),
   token de formulario firmado, comprobación de origen, honeypot y Turnstile.
+- **El widget de Turnstile puede no llegar nunca** —lo bloquea una extensión, la
+  red falla— y entonces el formulario se envía sin token. Ese caso se cuenta:
+  el hueco lleva dentro un aviso oculto que el cliente destapa a los 8 segundos
+  (`data-turnstile-fallback`) y el servidor distingue los códigos de error en
+  `turnstileMessageForCodes()`. No lo devuelvas a un único mensaje genérico: sin
+  recuadro visible y sin explicación, no hay forma de entrar ni de saber por qué.
+- **El interruptor de Turnstile del panel está detrás del propio login.** Si
+  deja fuera a quien administra, la salida es `npm run turnstile:off -- --env
+  production`, que escribe en `settings` y purga la caché de KV sin navegador.
+  Siguen en pie el límite por IP, el global y el bloqueo de cuenta.
 - La cookie de sesión lleva prefijo `__Host-` fuera de desarrollo.
 - Sólo hay tres dependencias de runtime: `hono`, `zod` y `drizzle-orm`. Antes de
   añadir una cuarta, piénsalo dos veces; `npm audit` sobre ellas debe estar
@@ -67,8 +77,11 @@ Reglas que no se rompen:
    y bajo la cabecera, 1 px dentro de una sección.
 5. **Las notas van sobre 10 y con coma** (`formatScore`). Internamente siguen
    siendo un entero 0..10.
-6. **Las imágenes, en blanco y negro** (`filter: grayscale(1) contrast(1.08)`).
-   Portadas 2:3, fotogramas 16:10. Si falta material, marcador gris.
+6. **Las portadas, en color; los fotogramas del cuerpo, en blanco y negro**
+   (`filter: grayscale(1) contrast(1.08)` sólo en `.prose img`). Desvío
+   deliberado del kit, pedido: el kit pone todas las imágenes en gris, pero la
+   portada es identidad de la obra y se queda en color. Portadas 2:3,
+   fotogramas 16:10. Si falta material, marcador gris.
 7. **Las tres reglas de la marca: 100 / 66 / 33, en ese orden.** Nunca con
    puntas redondeadas, ni centrada, ni toda en rojo, ni invertida.
 
@@ -134,6 +147,130 @@ Reglas que no se rompen:
   cacheadas llevan `Vary: Cookie` para que el navegador tampoco reutilice una
   copia anónima después de iniciar sesión.
 
+## Reglas de la biblioteca privada (`books.`)
+
+Vive en el **mismo Worker** que el sitio público, repartida por host en
+`src/server/index.tsx`. `books.<dominio>` entra en `booksApp` y todo lo demás en
+`app`. Son dos aplicaciones Hono con cadenas de middleware separadas a
+propósito: ninguna cabecera, ninguna caché y ninguna ruta de una alcanza a la
+otra.
+
+- **La sesión no se comparte con el panel.** La cookie lleva prefijo `__Host-`,
+  que la ata al host exacto. Entrar en `/admin` no abre `books.` ni al revés, y
+  eso es la propiedad que se busca, no un efecto colateral.
+- **El login de la biblioteca no cierra la sesión del panel.** `attemptLogin()`
+  acepta `revokeOtherSessions: false` justo para eso: comparten tabla de
+  usuarios y se usan a la vez.
+- **El guardián va antes que las rutas**, con lista de exenciones explícita
+  (`PUBLIC_PATHS` y `/assets/`). Una ruta nueva nace protegida. No lo cambies
+  por comprobaciones ruta a ruta.
+- **La CSP del subdominio añade dos cosas y sólo ahí**: `'wasm-unsafe-eval'`
+  —lo pide pdf.js para JBIG2, JPEG2000 y color, que es lo que lleva un libro
+  escaneado— y `camera=(self)` en `Permissions-Policy`, para el escáner. Sigue
+  sin `unsafe-inline` y sin `unsafe-eval`. El dominio principal no cambia.
+- **`isSafeMediaKey()` sólo reconoce `reviews/covers/`. No lo amplíes.** Es lo
+  que impide que la ruta pública `/media/*` sirva un PDF o un backup. Lo de la
+  biblioteca vive en `books/pdf/`, `books/covers/` y `backups/library/`, y sale
+  únicamente por rutas autenticadas del subdominio.
+- **Los PDF se suben en streaming**, nunca con `parseBody()`: son hasta 50 MB y
+  bufferizarlos revienta la memoria del Worker. El cuerpo va en crudo y el
+  título viaja en la query. R2 exige longitud conocida, así que el flujo pasa
+  por `FixedLengthStream` — sin él falla con «Provided readable stream must have
+  a known length».
+- **El tipo se comprueba por los primeros bytes** (`%PDF-`), en un
+  `TransformStream` que aborta la subida en cuanto lo sabe. El `Content-Type`
+  declarado no decide nada, igual que en las portadas.
+- **La huella antiduplicado es el MD5 que calcula R2**, no un SHA-256 nuestro:
+  hacerlo aquí obligaría a tener el fichero entero en memoria. No es un control
+  de seguridad, sólo evita subir dos veces el mismo libro.
+- **Los subrayados se guardan en coordenadas normalizadas 0..1** respecto a la
+  página, nunca en píxeles: así caen en su sitio con cualquier zoom y en
+  cualquier pantalla.
+- **El id del documento va en el `WHERE` de toda operación sobre una
+  anotación**, además del id de la anotación. Sin eso, conocer un identificador
+  bastaría para borrar la anotación de otro documento.
+- **Las portadas se guardan siempre, nunca se enlazan.** Da igual el origen —la
+  primera página del PDF, un fichero subido o una dirección de otro sitio—:
+  todas pasan por `validateImage()` y acaban en R2 bajo `books/covers/`. Guardar
+  la URL de un tercero dejaría el catálogo a merced de que la cambie, la borre o
+  registre a quien la mira.
+- **La portada por omisión la pinta el navegador**, no el Worker: rasterizar un
+  PDF en el servidor exigiría traerse una librería entera y gastar CPU de la
+  petición. Se genera al subir el fichero, cuando ya está en el navegador, y el
+  lector la rellena para los documentos antiguos que aún no la tienen.
+- **Descargar una imagen de una URL es superficie de SSRF.** Las guardas están
+  en `lib/remote-image.ts`: sólo http/https, puertos 80 y 443, sin direcciones
+  privadas ni de metadatos, sin IPv6 literal, **sin seguir redirecciones** y con
+  techo real de bytes leídos. No relajes ninguna sin sustituirla por otra cosa.
+- **Los metadatos por ISBN los consulta el Worker**, no el navegador: la CSP
+  mantiene `connect-src 'self'` y la IP de quien usa la aplicación no llega a
+  Open Library. La portada también la descarga el servidor y la guarda en R2,
+  con la misma validación que una imagen subida a mano.
+- **pdf.js y ZXing se autoalojan** (`scripts/build-client.mjs` los copia a
+  `public/assets/`). Son dependencias de *desarrollo*: las de runtime siguen
+  siendo tres. El decodificador de códigos va en su propio bundle y sólo se
+  carga donde no existe `BarcodeDetector`.
+- **El catálogo se ordena en el Worker, no en SQL** (`lib/library-sort.ts`).
+  SQLite compara códigos de carácter y pone «Álvarez» detrás de «Zapata»;
+  además el apellido no es una columna, hay que derivarlo de `authors`. Lo que
+  no tiene dato va siempre al final y todos los criterios desempatan por título.
+  El criterio entra por una lista cerrada de Zod: elige un comparador ya
+  escrito, nunca una columna ni SQL que venga de la URL.
+- **La importación de MyLibrary la traduce el servidor**
+  (`src/server/lib/mylibrary.ts`), no el script: ahí están las decisiones
+  discutibles y ahí se pueden probar. El script (`scripts/import-mylibrary.py`,
+  en Python porque `node:sqlite` no existe en Node 20) sólo extrae y envía.
+- **Las portadas de esa importación son opcionales y llevan orden explícito**
+  (`--portadas <orden>`). El `elementHashcode` del fichero no sirve para
+  emparejar —es el `hashCode()` de identidad de la JVM que exportó, comprobado
+  contra todos los campos y combinaciones— y el orden bueno no está
+  documentado: la suposición del orden por ID falló contra la exportación real
+  **aunque las cantidades cuadrasen**. Que coincidan es condición necesaria, no
+  suficiente. Hay un `--diagnostico` que vuelca muestras de cada hipótesis para
+  compararlas a ojo. No pongas las portadas por omisión ni añadas heurísticas
+  que adivinen: una portada en el libro equivocado es peor que ninguna.
+- **El backup diario cuelga del cron que ya había** (`0 4 * * *`). Vuelca los
+  registros —no los ficheros— a `backups/library/<fecha>.json.gz` con
+  `CompressionStream`, y conserva 30 días.
+
+## Reglas de operación y despliegue
+
+La cuenta de Cloudflare está en **plan Free**, y eso decide cosas del código:
+
+- **Nada de `limits.cpu_ms` ni de funciones de pago en `wrangler.jsonc`.** Un
+  `cpu_ms` puesto ahí dejó el Worker de producción devolviendo 1101 en toda
+  petición que hiciera E/S —sólo respondía `/robots.txt`, el único handler sin
+  ella—, y hoy la API lo rechaza al desplegar con el código 100328.
+- **Las Transformaciones de imagen no están activas**, así que `IMAGE_RESIZING`
+  va en `false` en staging y en producción. Con `true`, cada portada pide
+  `/cdn-cgi/image/…` y recibe un 404. Si algún día se activan, se vuelve a
+  `true` en los dos.
+- **Bot Fight Mode bloquea en el borde a los clientes que se identifican como
+  scripts.** Un `User-Agent` de `Python-urllib` recibe un 403 que **no llega al
+  Worker**. Por eso `scripts/import-mylibrary.py` manda un agente propio. Para
+  distinguir quién rechaza, mira `X-Request-Id`: sólo lo ponemos nosotros —
+  `cf-ray` lo lleva todo lo que pasa por Cloudflare, respuestas nuestras
+  incluidas.
+
+Sobre los dominios:
+
+- **Un Custom Domain no se puede crear si el nombre ya tiene un registro DNS
+  propio.** El apex estuvo devolviendo 522 por eso: había un registro proxied
+  del registrador apuntando a un origen muerto. Se borra primero el registro y
+  luego se crea el dominio.
+- **Recién publicado un subdominio, los resolutores domésticos siguen
+  contestando «no existe» un rato.** Es caché negativa, no una caída: se
+  compara `dig +short <host>` con `dig @1.1.1.1 +short <host>`. El script de
+  importación trae `--ip` para saltárselo.
+- **El de staging es `books-staging.` y no `books.staging.`**: el certificado
+  universal de Cloudflare cubre un solo nivel de subdominio.
+
+Y una trampa de la que ya se ha salido dos veces:
+
+- **El interruptor de Turnstile del acceso vive detrás del propio acceso.** Si
+  deja fuera a quien administra, la salida sin navegador es
+  `npm run turnstile:off -- --env production`.
+
 ## Antes de dar algo por terminado
 
 ```bash
@@ -149,13 +286,21 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
 
 ## Estado del proyecto
 
-- Desplegado en **staging**: `https://staging.triangulodelectores.site`.
-  Producción configurada pero **sin desplegar**.
-- `wrangler.jsonc` no tiene marcadores pendientes: dominio, D1, KV y claves
+- Desplegado en **staging** y en **producción**:
+  `https://triangulodelectores.site` y `https://staging.triangulodelectores.site`,
+  con la biblioteca privada en `books.triangulodelectores.site` y
+  `books-staging.triangulodelectores.site`. Las cuatro migraciones aplicadas en
+  los dos entornos.
+- **El sitio público está vacío**: 0 reseñas y 0 pendientes en producción. Lo
+  que sí tiene contenido es la biblioteca privada, con el catálogo de 229 libros
+  importado desde MyLibrary.
+- `www.triangulodelectores.site` **devuelve 522**: le queda un registro DNS
+  apuntando a un origen muerto, el mismo caso que tuvo el apex. Sin resolver.
+- `wrangler.jsonc` no tiene marcadores pendientes: dominios, D1, KV, R2 y claves
   públicas de Turnstile son reales en los dos entornos.
-- Hay trabajo **sin commitear**: ver `CAMBIOS-PENDIENTES.md`, que resume qué
-  cambió, qué queda por hacer a mano en el panel de Cloudflare y qué decisiones
-  quedan abiertas.
+- Hay trabajo **sin commitear** —toda la biblioteca privada y su importación—, y
+  **producción está corriendo ese código**: no hay ningún punto de git al que
+  volver. `CAMBIOS-PENDIENTES.md` lo detalla.
 - El informe de auditoría con las mejoras aún no implementadas (páginas de
   categoría y género, canonical de las URLs filtradas, paginación de
   comentarios, buscador sobre FTS5, reseñas relacionadas) vive en un artefacto

@@ -7,6 +7,8 @@ import { AuditRepository } from '../../db/repos/audit';
 import { MediaRepository } from '../../db/repos/media';
 import { WatchlistRepository } from '../../db/repos/watchlist';
 import { RecommendationRepository } from '../../db/repos/recommendations';
+import { DocumentRepository } from '../../db/repos/documents';
+import { LibraryRepository } from '../../db/repos/library';
 import { SettingsService } from '../lib/settings';
 import { Logger } from '../lib/logger';
 
@@ -24,6 +26,9 @@ export class Container {
   readonly media: MediaRepository;
   readonly watchlist: WatchlistRepository;
   readonly recommendations: RecommendationRepository;
+  /** Biblioteca privada del subdominio `books.`: PDFs y libros en papel. */
+  readonly documents: DocumentRepository;
+  readonly library: LibraryRepository;
   readonly settings: SettingsService;
   readonly log: Logger;
 
@@ -37,6 +42,8 @@ export class Container {
     this.media = new MediaRepository(env);
     this.watchlist = new WatchlistRepository(env);
     this.recommendations = new RecommendationRepository(env);
+    this.documents = new DocumentRepository(env);
+    this.library = new LibraryRepository(env);
     this.settings = new SettingsService(env);
     this.log = new Logger(env, { requestId });
   }

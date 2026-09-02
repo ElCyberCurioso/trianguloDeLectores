@@ -14,20 +14,16 @@ import { AdminWatchlistPage, WatchlistEditorPage } from '../views/admin/watchlis
 import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { rateLimit } from '../middleware/ratelimit';
 import { NO_STORE } from '../lib/cache';
-import { clientIp, badRequest, forbidden, notFound, ok } from '../lib/http';
+import { badRequest, forbidden, notFound, ok } from '../lib/http';
 import {
-  loginSchema, reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
+  reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
   moderationActionSchema, categoryInputSchema, genreInputSchema, platformInputSchema,
   watchlistInputSchema, watchlistQuerySchema, watchlistActionSchema,
   recommendationQuerySchema, recommendationActionSchema,
   fieldErrors,
 } from '../../validation/schemas';
-import { verifyPassword, hashPassword, pseudonymize, PBKDF2_ITERATIONS } from '../lib/crypto';
-import {
-  createSession, writeSessionCookie, clearSessionCookie, revokeSession, revokeAllUserSessions,
-} from '../lib/auth';
-import { verifyTurnstile } from '../lib/turnstile';
-import { enforceRateLimit, resetRateLimit } from '../lib/ratelimit';
+import { attemptLogin } from '../lib/login';
+import { clearSessionCookie, revokeSession } from '../lib/auth';
 import { ReviewService } from '../services/reviews';
 import { CommentService } from '../services/comments';
 import { MediaService } from '../services/media';
@@ -36,16 +32,11 @@ import { WatchlistService, type WatchlistAction } from '../services/watchlist';
 import { RecommendationService } from '../services/recommendations';
 import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
+import { variantUrl } from '../lib/images';
 import * as F from '../lib/form';
 import type { CommentStatus, ContentType, Priority } from '../../types/domain';
 
 export const adminRoutes = new Hono<AppEnv>();
-
-/** Hash inválido con los parámetros reales: iguala el coste del login fallido. */
-const DUMMY_HASH = `pbkdf2$sha256$${PBKDF2_ITERATIONS}$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=`;
-
-const LOCK_AFTER_FAILURES = 5;
-const LOCK_MS = 15 * 60 * 1000;
 
 /** El panel jamás se cachea ni se indexa. */
 adminRoutes.use('*', async (c, next) => {
@@ -116,82 +107,9 @@ adminRoutes.get('/login', async (c) => {
 });
 
 adminRoutes.post('/login', rateLimit('login'), async (c) => {
-  const container = c.get('container');
   const body = await c.req.parseBody({ all: true });
-  const ip = clientIp(c);
-
-  // Límite global además del límite por IP: frena el credential stuffing
-  // distribuido, que el límite por IP no ve.
-  const globalDecision = await enforceRateLimit(c.env, 'loginGlobal', 'all');
-  if (!globalDecision.allowed) {
-    container.log.warn('login_global_limit');
-    return renderLoginError(c, 'Demasiados intentos de acceso. Inténtalo dentro de unos minutos.');
-  }
-
-  const parsed = loginSchema.safeParse({
-    email: F.strOrEmpty(body, 'email', 254),
-    password: F.strOrEmpty(body, 'password', 200),
-    turnstileToken: F.str(body, 'cf-turnstile-response', 2048),
-  });
-  if (!parsed.success) return renderLoginError(c, 'Revisa el email y la contraseña.');
-
-  const settings = await container.settings.all();
-  if (settings['security.turnstile_login']) {
-    const verdict = await verifyTurnstile(c.env, parsed.data.turnstileToken, ip, c.get('requestId'));
-    if (!verdict.success) {
-      container.log.warn('login_turnstile_failed', { errorCodes: verdict.errorCodes });
-      return renderLoginError(c, 'No hemos podido verificar la comprobación anti-bot.');
-    }
-  }
-
-  const ipHash = await pseudonymize(ip, c.env.HASH_PEPPER);
-  const user = await container.users.findByEmail(parsed.data.email);
-
-  // Mismo mensaje y coste similar exista o no el usuario: no filtramos cuentas.
-  if (!user || user.status !== 'ACTIVE') {
-    // Hash señuelo: se gasta el mismo tiempo de CPU exista o no la cuenta,
-    // para no ofrecer un oráculo de enumeración por tiempo de respuesta.
-    await verifyPassword(parsed.data.password, DUMMY_HASH);
-    await container.audit.record({
-      actorId: null, actorRole: null, action: 'auth.login.failure',
-      metadata: { reason: 'unknown_user' }, ipHash,
-    });
-    return renderLoginError(c, 'Credenciales incorrectas.');
-  }
-
-  if (user.lockedUntil && user.lockedUntil > Date.now()) {
-    await container.audit.record({
-      actorId: user.id, actorRole: user.role, action: 'auth.locked', ipHash,
-    });
-    return renderLoginError(c, 'Cuenta bloqueada temporalmente por intentos fallidos. Prueba en unos minutos.');
-  }
-
-  const check = await verifyPassword(parsed.data.password, user.passwordHash);
-  if (!check.valid) {
-    await container.users.registerFailedLogin(user.id, LOCK_AFTER_FAILURES, LOCK_MS);
-    await container.audit.record({
-      actorId: user.id, actorRole: user.role, action: 'auth.login.failure',
-      metadata: { reason: 'bad_password' }, ipHash,
-    });
-    return renderLoginError(c, 'Credenciales incorrectas.');
-  }
-
-  // Rehash transparente si suben los parámetros de coste.
-  if (check.needsRehash) {
-    await container.users.updatePasswordHash(user.id, await hashPassword(parsed.data.password));
-  }
-
-  // Rotación de sesión: cualquier sesión previa se invalida al autenticar,
-  // lo que cierra session fixation.
-  await revokeAllUserSessions(c.env, user.id);
-  const session = await createSession(c.env, user.id, { ip, userAgent: c.req.header('User-Agent') ?? null });
-  writeSessionCookie(c, session);
-
-  await container.users.registerSuccessfulLogin(user.id);
-  await resetRateLimit(c.env, 'login', (await pseudonymize(ip, c.env.HASH_PEPPER)) ?? ip ?? 'anonymous');
-  await container.audit.record({
-    actorId: user.id, actorRole: user.role, action: 'auth.login.success', ipHash,
-  });
+  const outcome = await attemptLogin(c, body);
+  if (!outcome.ok) return renderLoginError(c, outcome.message);
 
   const next = F.str(body, 'next', 300);
   const target = next && next.startsWith('/admin') && !next.startsWith('//') ? next : '/admin';
@@ -837,7 +755,9 @@ adminRoutes.post('/api/media/portada', rateLimit('upload', { identity: (c) => c.
 
   const service = new MediaService(c.get('container'));
   const result = await service.uploadCover(upload, c.get('user')!);
-  return ok(c, result, 201);
+  // La vista previa se pinta con esta URL, no con un `blob:` del propio
+  // fichero: la CSP no lleva `blob:` en `img-src` y el navegador la bloquearía.
+  return ok(c, { ...result, url: variantUrl(c.env, result.key, 'card') }, 201);
 });
 
 adminRoutes.delete('/api/media/portada', async (c) => {

@@ -193,3 +193,75 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   // La caché de ajustes vive en KV: se purga para que el cambio surta efecto.
   await env.CACHE.delete('settings:v1');
 }
+
+// ------------------------------------------------- biblioteca privada --
+export const BOOKS_ORIGIN = 'http://books.localhost:8787';
+
+/**
+ * Login en el subdominio de la biblioteca.
+ *
+ * Es una sesión distinta de la del panel a propósito: la cookie lleva prefijo
+ * `__Host-`, que la ata al host exacto. Que haga falta este helper aparte es
+ * justo la propiedad que se quiere.
+ */
+export async function loginAsBooks(): Promise<AdminSession> {
+  await seedBaseData();
+
+  const body = new URLSearchParams({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+  const response = await SELF.fetch(`${BOOKS_ORIGIN}/login`, {
+    method: 'POST',
+    body,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Origin: BOOKS_ORIGIN,
+      'Sec-Fetch-Site': 'same-origin',
+      'CF-Connecting-IP': `192.0.2.${Math.floor(Math.random() * 250) + 1}`,
+    },
+    redirect: 'manual',
+  });
+
+  if (response.status !== 303) {
+    throw new Error(`Login de biblioteca fallido: ${response.status} ${await response.text()}`);
+  }
+
+  const match = /tdl_session=([^;]+)/.exec(response.headers.get('Set-Cookie') ?? '');
+  if (!match) throw new Error('No se ha recibido la cookie de sesión de la biblioteca');
+  const cookie = `tdl_session=${match[1]}`;
+
+  const page = await SELF.fetch(`${BOOKS_ORIGIN}/`, { headers: { Cookie: cookie, Accept: 'text/html' } });
+  const csrf = /name="_csrf" value="([^"]+)"/.exec(await page.text())?.[1];
+  if (!csrf) throw new Error('No se ha encontrado el token CSRF en la biblioteca');
+  return { cookie, csrf };
+}
+
+/** Cabeceras de una petición autenticada dentro del subdominio. */
+export function booksHeaders(session: AdminSession, extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    Cookie: session.cookie,
+    Origin: BOOKS_ORIGIN,
+    'Sec-Fetch-Site': 'same-origin',
+    'X-CSRF-Token': session.csrf,
+    Accept: 'application/json',
+    ...extra,
+  };
+}
+
+/** PDF mínimo pero válido: cabecera, un objeto y el tráiler. */
+export function pdfBytes(marker = 'test'): Uint8Array {
+  const source =
+    `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n` +
+    `2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\n% ${marker}\n` +
+    `trailer<</Root 1 0 R>>\n%%EOF\n`;
+  const padded = source.padEnd(1024, ' ');
+  return new TextEncoder().encode(padded);
+}
+
+/** PNG mínimo válido, con las dimensiones escritas en la cabecera IHDR. */
+export function pngBytes(width = 400, height = 600): Uint8Array {
+  const bytes = new Uint8Array(512);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  return bytes;
+}

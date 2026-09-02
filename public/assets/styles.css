@@ -8,7 +8,7 @@
      3. Un solo rojo, y siempre significa algo.
      4. Las reglas de 1 y 2 px no se sustituyen por aire.
      5. Sin sombras, salvo cabecera fija y modal.
-     6. Las imágenes, en blanco y negro.
+     6. Las portadas, en color; los fotogramas del cuerpo, en blanco y negro.
 
    El handoff define un único tema claro. El tema oscuro que el sitio ya
    ofrecía se conserva como extensión: mismas proporciones, mismas reglas y el
@@ -321,15 +321,35 @@ p { margin: 0 0 var(--space-3); }
   font-size: 20px; letter-spacing: -0.025em; white-space: nowrap;
 }
 
-.site-nav { display: flex; align-items: center; gap: var(--space-4); margin-inline-start: auto; flex-wrap: wrap; }
+/*
+  La navegación se lee como una fila de la rejilla, no como una lista de
+  palabras sueltas: cada enlace es una celda de altura completa separada por un
+  filete de 1 px, y la página en la que estás se marca con la regla de 2 px roja
+  bajo el borde de la cabecera. El rojo sigue significando algo —posición— y no
+  se usa para el hover, que sólo sube el contraste del texto.
+*/
+.site-nav {
+  display: flex; align-items: stretch; align-self: stretch;
+  gap: 0; margin-inline-start: auto;
+}
 .site-nav a {
   display: inline-flex; align-items: center; gap: var(--space-1);
-  height: 34px;
-  color: inherit; text-decoration: none; font-size: 13px;
-  transition: color var(--fast) var(--ease);
+  padding-inline: var(--space-3);
+  border-inline-start: 1px solid var(--color-rule);
+  border-block-start: 2px solid transparent;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  text-decoration: none; white-space: nowrap;
+  font-family: var(--font-heading);
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
 }
-.site-nav a:hover, .site-nav a[aria-current="page"] { color: var(--color-accent-text); }
-.site-nav a[aria-current="page"] { font-weight: 600; }
+.site-nav a:last-child { border-inline-end: 1px solid var(--color-rule); }
+.site-nav a:hover { color: var(--color-text); border-block-start-color: var(--color-divider); }
+.site-nav a[aria-current="page"] {
+  color: var(--color-text); font-weight: 800;
+  border-block-start-color: var(--color-accent);
+}
 
 .header-tools { display: flex; align-items: center; gap: var(--space-2); }
 
@@ -599,8 +619,9 @@ p { margin: 0 0 var(--space-3); }
   position: relative; aspect-ratio: 2 / 3; overflow: hidden;
   background: var(--color-neutral-300); margin-bottom: var(--space-3);
 }
-/* Las imágenes van en blanco y negro. Regla del sistema. */
-.card__img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.08); }
+/* Las portadas van en color; el blanco y negro del sistema queda para los
+   fotogramas del cuerpo de la reseña (`.prose img`). */
+.card__img { width: 100%; height: 100%; object-fit: cover; }
 .card__img--placeholder {
   display: grid; place-items: center; width: 100%; height: 100%; filter: none;
   background: var(--color-neutral-300); color: var(--color-neutral-600);
@@ -785,7 +806,7 @@ p { margin: 0 0 var(--space-3); }
 
 .review__header { display: grid; gap: var(--space-6); grid-template-columns: 180px minmax(0, 1fr); align-items: start; }
 .review__cover { background: var(--color-neutral-300); }
-.review__img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; filter: grayscale(1) contrast(1.08); }
+.review__img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
 .review__img--placeholder {
   display: grid; place-items: center; aspect-ratio: 2 / 3; filter: none;
   background: var(--color-neutral-300); color: var(--color-neutral-600);
@@ -954,7 +975,7 @@ p { margin: 0 0 var(--space-3); }
 /* La prioridad alta se marca con un filete rojo; el resto no necesita color. */
 .pending--high { box-shadow: inset 3px 0 0 var(--color-accent); }
 .pending__cover { flex-shrink: 0; width: 72px; }
-.pending__img { width: 72px; height: 108px; object-fit: cover; background: var(--color-neutral-300); filter: grayscale(1) contrast(1.08); }
+.pending__img { width: 72px; height: 108px; object-fit: cover; background: var(--color-neutral-300); }
 .pending__img--placeholder {
   display: grid; place-items: center; filter: none;
   background: var(--color-neutral-300); color: var(--color-neutral-600);
@@ -1246,7 +1267,7 @@ p { margin: 0 0 var(--space-3); }
   .btn--sm { min-height: 40px; }
   .icon-btn { width: 44px; height: 44px; }
   .usermenu__trigger { height: 44px; }
-  .admin-bar a { min-height: 40px; }
+  .admin-bar a, .site-nav a { min-height: 40px; }
   .chip, .tag, .pagination__page, .pagination__step { min-height: 40px; }
   .chip, .pagination__page, .pagination__step { display: inline-flex; align-items: center; }
   .rte__btn { min-height: 40px; min-width: 40px; }
@@ -1278,8 +1299,7 @@ p { margin: 0 0 var(--space-3); }
      caben en una fila de 375 px y la cabecera crecía a tres filas. */
   .header-login__text { display: none; }
   .header-login { width: 44px; padding-inline: 0; justify-content: center; }
-  .site-nav { gap: var(--space-3); padding-block-end: var(--space-1); }
-  .site-nav a { height: 36px; font-size: 12px; }
+  .site-nav a { padding-inline: var(--space-2); font-size: 10px; }
   .admin-bar__inner { min-height: 34px; }
   .admin-bar a { height: 34px; font-size: 10px; }
 
@@ -1301,7 +1321,14 @@ p { margin: 0 0 var(--space-3); }
   .card { padding-inline: 0; }
   .pending { padding-inline: 0; }
   .site-header__inner { min-height: 52px; gap: var(--space-2); }
-  .site-nav { order: 3; width: 100%; margin-inline-start: 0; overflow-x: auto; gap: var(--space-4); }
+  /* En móvil la fila de celdas pasa a ocupar el ancho completo, con su propio
+     filete de 2 px arriba que la separa de la marca. */
+  .site-nav {
+    order: 3; width: 100%; margin-inline-start: 0; overflow-x: auto;
+    border-block-start: 2px solid var(--color-divider);
+  }
+  .site-nav a { min-height: 40px; }
+  .site-nav a:first-child { border-inline-start: 0; }
   .filters { position: static; }
   .filters__row { grid-template-columns: 1fr 1fr; }
   .field--search { grid-column: 1 / -1; }
@@ -1341,10 +1368,476 @@ p { margin: 0 0 var(--space-3); }
   .site-nav::-webkit-scrollbar { display: none; }
   .site-nav a { font-size: 12px; white-space: nowrap; }
   .site-footer__nav { gap: var(--space-2) var(--space-3); }
+
+  /* En la biblioteca, el nombre de quien ha entrado compite con el botón de
+     salir por los mismos píxeles. Sobra: sólo hay una cuenta. */
+  .body--books .admin-user__name { display: none; }
 }
 
 @media print {
   .site-header, .site-footer, .comments, .toasts, .filters { display: none; }
   body { background: #fff; color: #000; }
   .prose { max-width: none; }
+}
+
+/* ==========================================================================
+   Biblioteca privada (subdominio books.)
+
+   Mismo sistema visual que el resto del sitio: sin esquinas redondeadas, nada
+   centrado, filetes de 1 y 2 px en vez de aire, y el rojo sólo cuando dice
+   algo. Lo único que no comparte son las capas del visor de PDF, cuya
+   geometría la fija el propio pdf.js en píxeles.
+   ========================================================================== */
+
+.body--books .wrap { padding-block-end: var(--space-8); }
+.wrap--wide { max-width: none; padding-inline: var(--space-4); }
+
+.page-title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-heading); font-weight: 800; font-size: 32px; letter-spacing: -0.03em;
+}
+.page-lead { margin: 0; font-size: 14px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.panel__hint { margin: 0 0 var(--space-3); font-size: 13px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
+.field__hint { font-weight: 400; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.editor__footer { display: flex; gap: var(--space-2); margin-block-start: var(--space-4); }
+
+/* --------------------------------------------------------------- subida */
+.upload__status {
+  /* Hueco reservado antes de empezar: la barra aparece sin empujar el botón. */
+  min-height: 34px; margin-block: var(--space-3); opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+.upload__status--active { opacity: 1; }
+.upload__bar { height: 2px; background: var(--color-rule); }
+.upload__bar > span {
+  display: block; height: 100%; width: var(--progress, 0%);
+  background: var(--color-accent); transition: width var(--fast) linear;
+}
+.upload__text { margin: var(--space-1) 0 0; font-size: 12px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
+
+/* ----------------------------------------------------------- estantería */
+.doclist { list-style: none; margin: var(--space-6) 0 0; padding: 0; }
+.doc {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding-block: var(--space-3); border-bottom: 1px solid var(--color-rule);
+}
+.doc__link { display: flex; align-items: center; gap: var(--space-3); flex: 1; color: inherit; text-decoration: none; min-width: 0; }
+/* Portada del PDF. Proporción 2:3 como el resto de portadas del sitio, y en
+   color: la primera página de un libro escaneado en gris no se distingue de la
+   de al lado. El marcador ocupa exactamente lo mismo, así que la lista no
+   cambia de forma cuando llega la imagen. */
+.doc__cover { flex-shrink: 0; width: 48px; }
+.doc__img { display: block; width: 48px; height: 72px; object-fit: cover; background: var(--color-neutral-300); }
+.doc__img--placeholder { display: grid; place-items: center; color: var(--color-neutral-600); }
+.doc__cover-actions { display: flex; gap: var(--space-1); }
+/* El `label` que envuelve el selector de fichero se comporta como un botón. */
+.doc__cover-actions label { cursor: pointer; }
+.doc__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.doc__title { font-family: var(--font-heading); font-weight: 800; font-size: 17px; letter-spacing: -0.02em; }
+.doc__author { font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.doc__meta { font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.doc__side { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
+.doc__progress { display: flex; align-items: center; gap: var(--space-2); }
+.doc__progress-bar {
+  display: block; width: 80px; height: 2px; background: var(--color-rule);
+  /* El relleno es un degradado de dos paradas: sin elemento extra ni `style=`
+     en el marcado, el ancho llega por la variable que fija el JavaScript. */
+  background-image: linear-gradient(to right, var(--color-accent) var(--progress, 0%), transparent var(--progress, 0%));
+}
+.doc__progress-text { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.doc__progress-text--muted { color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.doc__link:hover .doc__title { color: var(--color-accent-text); }
+
+/* --------------------------------------------------------------- lector */
+.body--books.body--reader { overflow: hidden; }
+.reader { display: flex; flex-direction: column; height: 100svh; }
+.reader__bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 2px solid var(--color-divider); flex-shrink: 0;
+}
+.reader__title {
+  margin: 0; flex: 1; min-width: 0;
+  font-family: var(--font-heading); font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.reader__controls { display: flex; align-items: center; gap: var(--space-2); }
+.reader__zoom { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 40px; }
+.reader__pages { display: flex; align-items: center; gap: var(--space-1); }
+.reader__page-input { width: 64px; text-align: start; }
+.reader__page-total { font-size: 12px; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+
+.reader__body { display: flex; flex: 1; min-height: 0; }
+/*
+  Excepción consciente a «nada centrado»: esa regla es del sistema visual, y la
+  página de un PDF no es contenido nuestro sino un documento ajeno dentro de su
+  visor. Pegado a la izquierda deja todo el hueco sobrante a un lado y se lee
+  peor cuanto más ancha es la pantalla. La interfaz alrededor —barra, notas,
+  botones— sigue alineada a la izquierda.
+*/
+.reader__pane {
+  flex: 1; overflow: auto; padding: var(--space-4); background: var(--color-surface);
+  display: flex; flex-direction: column; align-items: center;
+}
+/* `flex-shrink: 0` para que una página más ancha que el panel no se encoja:
+   debe desbordar y poder desplazarse, no deformarse. */
+.pdfpage { flex-shrink: 0; }
+
+.reader__notes {
+  width: 320px; flex-shrink: 0; overflow-y: auto;
+  border-inline-start: 2px solid var(--color-divider); padding: var(--space-4);
+  display: none;
+}
+.reader--notes-open .reader__notes { display: block; }
+.reader__notes-empty { font-size: 13px; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+.reader__saved {
+  margin: 0; padding: var(--space-1) var(--space-4);
+  border-top: 1px solid var(--color-rule);
+  font-size: 11px; font-weight: 600; color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  flex-shrink: 0; min-height: 22px;
+}
+
+/* Las páginas del PDF: pdf.js fija su tamaño en píxeles desde JavaScript. */
+.pdfpage { position: relative; margin: 0 0 var(--space-4); background: #fff; box-shadow: 0 0 0 1px var(--color-rule); }
+.pdfpage__canvas { display: block; }
+/*
+  Capa de texto de pdf.js.
+  ------------------------------------------------------------------------
+  Estas reglas son las del visor oficial (`pdfjs-dist/web/pdf_viewer.css`),
+  reducidas a lo que usamos: sin capa de anotaciones, sin XFA y sin la interfaz
+  del visor. No son decorativas y no se pueden improvisar — la geometría de cada
+  fragmento de texto la calcula la librería contando con ellas.
+
+  Dos detalles que costaron un rato:
+
+  1. **La capa va opaca, y lo transparente es el texto.** Antes estaba al revés
+     (`opacity: 0.01` en toda la capa), y eso volvía invisible también el
+     resaltado de la selección: se podía seleccionar pero no se veía nada.
+
+  2. **`--total-scale-factor` es obligatoria.** El tamaño de cada fragmento es
+     `calc(var(--text-scale-factor) * var(--font-height))`, y sin esa variable
+     el `calc()` no es válido: los fragmentos quedaban con un tamaño que no
+     correspondía al de las letras dibujadas, así que la selección abarcaba
+     mucho más que el texto y dejaba huecos al final de cada línea. La fija el
+     JavaScript en cada página con la escala del visor.
+*/
+.pdfpage__text {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 0;
+
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.pdfpage__text :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdfpage__text > :not(.markedContent),
+.pdfpage__text .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdfpage__text .markedContent { display: contents; }
+.pdfpage__text span[role="img"] { user-select: none; cursor: default; }
+
+/* El resaltado de la selección. Deliberadamente **no** es el rojo de la marca:
+   ahí al lado hay subrayados en cuatro colores y uno de ellos es rojo, así que
+   teñir de rojo lo que estás seleccionando se confundiría con lo ya subrayado.
+   Se usa el color de selección del sistema, que es lo que se espera de un texto. */
+.pdfpage__text ::selection {
+  background: rgba(0 0 255 / 0.25);
+  background: color-mix(in srgb, AccentColor, transparent 75%);
+}
+.pdfpage__text br::selection { background: transparent; }
+
+/*
+  El truco del «fin de contenido», que también pone el visor oficial.
+
+  Los fragmentos de texto están posicionados en absoluto y su orden en el
+  documento no siempre es el orden visual. Sin esto, arrastrar el ratón hasta el
+  final de una línea hacía que el navegador extendiese la selección por huecos
+  vacíos. Mientras se arrastra, este bloque cubre la capa entera y la selección
+  se comporta como en un texto normal.
+*/
+.pdfpage__text .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+.pdfpage__text.selecting .endOfContent { top: 0; }
+.pdfpage__marks { position: absolute; inset: 0; pointer-events: none; }
+.pdfmark { position: absolute; mix-blend-mode: multiply; }
+.pdfmark--yellow { background: #ffe45e; }
+.pdfmark--green  { background: #9be59b; }
+.pdfmark--blue   { background: #9ecbff; }
+.pdfmark--red    { background: #ffb3a7; }
+
+/* Barra flotante de selección. Existe desde el primer pintado: se muestra. */
+.reader__selection {
+  position: fixed; z-index: 50; transform: translate(-50%, -100%);
+  display: flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1); background: var(--color-bg);
+  border: 2px solid var(--color-divider); box-shadow: var(--shadow-header);
+}
+.reader__selection[hidden] { display: none; }
+.swatch { width: 22px; height: 22px; border: 1px solid var(--color-divider); cursor: pointer; padding: 0; }
+.swatch--yellow { background: #ffe45e; }
+.swatch--green  { background: #9be59b; }
+.swatch--blue   { background: #9ecbff; }
+.swatch--red    { background: #ffb3a7; }
+
+.notelist { list-style: none; margin: var(--space-3) 0 0; padding: 0; }
+.note {
+  position: relative; padding: var(--space-2) var(--space-5) var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-rule);
+  /* El color del subrayado se repite como filete lateral: se localiza de un
+     vistazo sin teñir el texto. */
+  box-shadow: inset 3px 0 0 var(--color-rule);
+}
+.note--yellow { box-shadow: inset 3px 0 0 #ffe45e; }
+.note--green  { box-shadow: inset 3px 0 0 #9be59b; }
+.note--blue   { box-shadow: inset 3px 0 0 #9ecbff; }
+.note--red    { box-shadow: inset 3px 0 0 #ffb3a7; }
+.note__jump {
+  display: block; width: 100%; text-align: start; background: none; border: 0;
+  color: inherit; cursor: pointer; padding: 0; font: inherit;
+}
+.note__page { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.note__quote { display: block; font-size: 13px; margin-block-start: 2px; }
+.note__body { margin: var(--space-1) 0 0; font-size: 13px; font-weight: 600; }
+.note__delete {
+  position: absolute; inset-block-start: var(--space-2); inset-inline-end: 0;
+  background: none; border: 0; color: inherit; cursor: pointer; padding: 2px 4px; line-height: 1;
+}
+.note__delete:hover { color: var(--color-accent-text); }
+
+/* ----------------------------------------------------------- biblioteca */
+.library__actions { display: flex; gap: var(--space-2); margin-block: var(--space-4); }
+
+.booklist {
+  list-style: none; margin: var(--space-6) 0 0; padding: 0;
+  display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.bookcard { border-top: 2px solid var(--color-divider); padding-block-start: var(--space-3); }
+.bookcard__link { display: flex; gap: var(--space-3); color: inherit; text-decoration: none; }
+.bookcard__cover { flex-shrink: 0; width: 72px; }
+/* Las portadas van en color, igual que en el sitio público. */
+.bookcard__img { width: 72px; height: 108px; object-fit: cover; background: var(--color-neutral-300); display: block; }
+.bookcard__img--placeholder { display: grid; place-items: center; color: var(--color-neutral-600); }
+.bookcard__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bookcard__title { font-family: var(--font-heading); font-weight: 800; font-size: 16px; letter-spacing: -0.02em; }
+.bookcard__authors { font-size: 13px; font-weight: 600; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.bookcard__meta { font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.bookcard__tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-block-start: var(--space-1); }
+.tag--score { font-variant-numeric: tabular-nums; border-color: var(--color-accent); color: var(--color-accent-text); }
+.bookcard__link:hover .bookcard__title { color: var(--color-accent-text); }
+
+/* --------------------------------------------------- ISBN y escáner */
+.isbn { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; }
+.isbn .field { flex: 1; min-width: 180px; }
+.isbn__status { margin: var(--space-2) 0 0; font-size: 13px; min-height: 20px; }
+
+.scanner { position: relative; margin-block-start: var(--space-3); max-width: 480px; background: var(--color-neutral-100); }
+.scanner[hidden] { display: none; }
+.scanner__video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+/* Guía de encuadre: dos filetes rojos, que aquí sí dicen algo — dónde poner el código. */
+.scanner__frame {
+  position: absolute; inset: 30% 10%; pointer-events: none;
+  border-top: 2px solid var(--color-accent); border-bottom: 2px solid var(--color-accent);
+}
+.scanner__stop { position: absolute; inset-block-end: var(--space-2); inset-inline-start: var(--space-2); }
+
+/* --------------------------------------------------------------- copias */
+.backuplist { list-style: none; margin: var(--space-6) 0 0; padding: 0; }
+.backup {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding-block: var(--space-2); border-bottom: 1px solid var(--color-rule);
+}
+.backup__day { font-family: var(--font-heading); font-weight: 800; font-variant-numeric: tabular-nums; }
+.backup__size { flex: 1; font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+
+/* ======================================================================
+   Biblioteca en móvil
+
+   Lo que se rompía: la fila de la estantería es un cuerpo de texto flexible
+   entre una portada y cinco controles de ancho fijo. En 360 px al texto no le
+   quedaba sitio y el título se partía letra a letra. Aquí la fila pasa a
+   rejilla de dos columnas y dos filas —portada a la izquierda, texto arriba,
+   controles debajo— en vez de estirarse hasta romperse.
+   ====================================================================== */
+
+@media (max-width: 900px) {
+  /* Las notas tapan el documento en vez de partirlo: a este ancho, dos
+     columnas dejarían el PDF en una tira ilegible. */
+  .reader__notes {
+    position: fixed; inset-block: 0; inset-inline-end: 0; width: min(340px, 90vw);
+    background: var(--color-bg); z-index: 60;
+    box-shadow: var(--shadow-header);
+    padding-block-end: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+  .booklist { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 640px) {
+  /* --------------------------------------------------------- estantería */
+  /*
+    Dos filas en vez de una: el enlace —portada y texto— arriba, y los controles
+    debajo, alineados a la izquierda como todo lo demás.
+
+    Se hace envolviendo el flex, no con `display: contents` en el enlace: eso
+    habría dejado la fila en una sola rejilla, pero Safari anterior al 15.4 saca
+    del árbol de accesibilidad los enlaces con `display: contents`, y esta es la
+    única forma de abrir un documento.
+  */
+  .doc { flex-wrap: wrap; padding-block: var(--space-4); }
+  .doc__link { flex: 1 1 100%; align-items: flex-start; }
+  /* Los metadatos caben en dos líneas si hace falta, en vez de desbordar. */
+  .doc__meta { white-space: normal; }
+  .doc__side {
+    flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start;
+    gap: var(--space-2) var(--space-3);
+  }
+  .doc__progress { flex: 1 1 100%; }
+  .doc__progress-bar { flex: 1; width: auto; min-width: 80px; }
+
+  /* -------------------------------------------------------------- lector */
+  /*
+    En el lector se esconde la cabecera del sitio.
+
+    En una pantalla de 844 px, la marca y la navegación se comían la mitad antes
+    de que empezara el documento, y además dejaban dos zonas de desplazamiento
+    anidadas: la de la página y la del panel de páginas. Con la cabecera fuera,
+    el lector ocupa la ventana entera y sólo se desplaza el documento. No se
+    pierde navegación: la propia barra del lector lleva la vuelta a la
+    estantería.
+  */
+  .body--reader .site-header { display: none; }
+
+  .reader__bar {
+    flex-wrap: wrap;
+    padding-inline: max(var(--space-2), env(safe-area-inset-left)) max(var(--space-2), env(safe-area-inset-right));
+    gap: var(--space-2);
+  }
+  /* El título ocupa su propia fila y se queda: saber qué se está leyendo
+     importa más que ahorrar 20 px de alto. */
+  .reader__title { order: -1; flex: 1 1 100%; font-size: 13px; }
+  .reader__controls { flex: 1; justify-content: flex-start; gap: var(--space-1); }
+  .reader__zoom { min-width: 34px; font-size: 10px; }
+  .reader__page-input { width: 56px; }
+  /* «/ 3» partía en dos líneas y descuadraba la fila de controles. */
+  .reader__page-total { white-space: nowrap; }
+  .reader__pane { padding: var(--space-2); }
+  .reader__saved {
+    padding-inline: max(var(--space-2), env(safe-area-inset-left));
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+  .pdfpage { margin-block-end: var(--space-2); }
+
+  /* ---------------------------------------------------------- biblioteca */
+  /* `.section-rule` es una fila con el título y sus textos al lado. En 390 px
+     eso reparte las frases en columnas de cuatro palabras. Apilado se lee. */
+  .body--books .section-rule { flex-direction: column; gap: var(--space-1); }
+  .body--books .page-lead { max-width: none; }
+
+  .library__actions { flex-wrap: wrap; }
+  .library__actions .btn { flex: 1 1 auto; }
+  .isbn .field { min-width: 100%; }
+  .isbn .btn { flex: 1; }
+
+  /* -------------------------------------------------------------- copias */
+  .backup { flex-wrap: wrap; }
+  .backup__size { flex: 1 0 auto; }
+
+  /* Márgenes del subdominio con muesca y bordes redondeados de pantalla. */
+  .wrap--wide {
+    padding-inline: max(var(--space-3), env(safe-area-inset-left)) max(var(--space-3), env(safe-area-inset-right));
+  }
+}
+
+@media (pointer: coarse) {
+  /*
+    Lo que se pulsa con el dedo, a 44 px. Las muestras de color del lector
+    estaban a 22, la mitad de los 24 px que exige WCAG 2.2 SC 2.5.8, y son
+    justo lo que hay que acertar con el pulgar después de seleccionar texto.
+  */
+  .swatch { width: 44px; height: 44px; }
+  .reader__selection { padding: var(--space-2); gap: var(--space-2); }
+  .note__delete { min-width: 44px; min-height: 44px; display: grid; place-items: center; }
+  .note__jump { min-height: 44px; }
+  .doc__cover-actions .btn { min-height: 40px; min-width: 40px; }
+  /* El panel de notas se cierra tocando fuera; el botón de la barra también
+     debe ser cómodo de alcanzar. */
+  .reader__controls .icon-btn { width: 44px; height: 44px; }
+}
+
+/* Aviso de que la comprobación anti-bot no ha cargado. Vive dentro del hueco
+   reservado del widget, así que aparecer no mueve nada de su sitio. */
+.turnstile-slot__fallback {
+  margin: 0;
+  font-size: 12px; line-height: 1.4;
+  color: var(--color-accent-text);
+  border-inline-start: 2px solid var(--color-accent);
+  padding-inline-start: var(--space-2);
+}
+.turnstile-slot__fallback[hidden] { display: none; }
+
+.reader__notes-head { display: flex; align-items: center; gap: var(--space-2); justify-content: space-between; }
+.reader__notes-head .panel__title { margin: 0; }
+/* En pantalla ancha el panel convive con el documento y se cierra desde la
+   barra: el aspa sólo hace falta cuando el panel se abre encima de todo. */
+.reader__notes-close { display: none; }
+
+@media (max-width: 900px) {
+  .reader__notes-close { display: grid; }
+  .reader__notes {
+    padding-inline-end: max(var(--space-4), env(safe-area-inset-right));
+  }
+}
+
+/* Cabecera de un panel plegable. Mantiene el aspecto de `panel__title` y quita
+   el triángulo del navegador, que no encaja con el sistema. */
+.panel__title--summary { cursor: pointer; list-style: none; }
+.panel__title--summary::-webkit-details-marker { display: none; }
+.panel__title--summary::after { content: " +"; color: var(--color-accent); }
+[open] > .panel__title--summary::after { content: " −"; }
+
+/* Etiqueta que sustituye al botón nativo del selector de fichero. */
+.filepick { justify-content: flex-start; max-width: 100%; overflow: hidden; }
+.filepick > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* La rejilla de filtros del sitio público está pensada para cinco controles;
+   la biblioteca tiene tres. Con la de aquel, el botón caía en mitad de la fila
+   y sobraba una columna al final. */
+.filters--library .filters__row {
+  grid-template-columns: minmax(200px, 2fr) minmax(140px, 1fr) minmax(190px, 1.2fr) auto;
+}
+
+@media (max-width: 640px) {
+  /* En móvil cada control ocupa su línea: tres selectores en fila no caben sin
+     recortar las etiquetas, que es justo lo que hay que leer para elegir. */
+  .filters--library .filters__row { grid-template-columns: 1fr; }
+  .filters--library .filters__actions .btn { width: 100%; }
 }

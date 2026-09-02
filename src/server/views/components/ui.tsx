@@ -138,3 +138,38 @@ export function formatDateTime(ts: number | null | undefined): string {
 export function isoDate(ts: number | null | undefined): string | undefined {
   return ts ? new Date(ts).toISOString() : undefined;
 }
+
+/**
+ * Hueco del widget de Turnstile.
+ *
+ * Dos cosas que no son adorno:
+ *
+ *   - **El hueco existe antes de que llegue el widget** (`.turnstile-slot`, de
+ *     altura fija). Lo que se inserta después del primer pintado no puede
+ *     empujar el botón de enviar hacia abajo.
+ *   - **Lleva dentro un aviso oculto.** Si el script de Cloudflare no carga
+ *     —una extensión que lo bloquea, la red, el modo estricto de un navegador—
+ *     el recuadro no aparece, el formulario se envía sin token y el servidor lo
+ *     rechaza. Sin este aviso eso es un callejón sin salida: no se ve nada y el
+ *     error no dice qué hacer. El JavaScript lo destapa cuando detecta que el
+ *     widget no ha llegado.
+ *
+ * `data-refresh-expired="auto"` es explícito a propósito: el token caduca a los
+ * cinco minutos, y quien deja el formulario abierto se encontraba con un fallo
+ * de verificación sin haber tocado nada.
+ */
+export const TurnstileSlot: FC<{ siteKey: string }> = ({ siteKey }) => (
+  <div class="turnstile-slot">
+    <div
+      class="cf-turnstile"
+      data-sitekey={siteKey}
+      data-theme="auto"
+      data-size="normal"
+      data-refresh-expired="auto"
+    />
+    <p class="turnstile-slot__fallback" data-turnstile-fallback hidden role="alert">
+      No se ha podido cargar la comprobación anti-bot de Cloudflare. Suele bloquearla una extensión del
+      navegador o el bloqueo de rastreadores. Desactívalo para este sitio y recarga la página.
+    </p>
+  </div>
+);

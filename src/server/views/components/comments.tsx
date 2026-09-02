@@ -3,7 +3,7 @@ import { raw } from 'hono/html';
 import type { CommentNode } from '../../../db/repos/comments';
 import { renderCommentBody } from '../../lib/sanitize';
 import { REPORT_REASONS, REPORT_REASON_LABELS } from '../../../types/domain';
-import { formatDateTime } from './ui';
+import { formatDateTime, TurnstileSlot } from './ui';
 
 export interface CommentsSectionProps {
   reviewId: string;
@@ -104,9 +104,7 @@ const CommentItem: FC<{ node: CommentNode; props: CommentsSectionProps }> = ({ n
                   <textarea class="textarea" name="details" rows={2} maxlength={500} />
                 </label>
                 {props.turnstileSiteKey ? (
-                  <div class="turnstile-slot">
-                    <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" data-size="normal" />
-                  </div>
+                  <TurnstileSlot siteKey={props.turnstileSiteKey} />
                 ) : null}
                 <button type="submit" class="btn btn--sm btn--danger">
                   Enviar reporte
@@ -184,9 +182,7 @@ const CommentForm: FC<CommentsSectionProps & { parentId: string | null; compact?
     </label>
 
     {props.turnstileSiteKey ? (
-      <div class="turnstile-slot">
-                    <div class="cf-turnstile" data-sitekey={props.turnstileSiteKey} data-theme="auto" data-size="normal" />
-                  </div>
+      <TurnstileSlot siteKey={props.turnstileSiteKey} />
     ) : null}
 
     <div class="comment-form__actions">

@@ -1,159 +1,119 @@
 # Cambios pendientes de commitear
 
-Estado del árbol de trabajo respecto a `6a83857` (*feat: lista de pendientes e
-identidad de marca*). **79 ficheros**: 58 modificados, 12 nuevos, 9 borrados.
+Estado del árbol respecto a `ff298d3`. **60 ficheros**: 28 nuevos y 32
+modificados; unas 2.000 líneas añadidas sin contar los ficheros nuevos.
 
-`npm run preflight` pasa entero: lint, los cuatro typecheck, 251 tests
-unitarios y de integración, 65 E2E en escritorio y móvil, compilación y
-simulacro de despliegue en los tres entornos.
+Todo lo que había antes en este documento —el rediseño Modernist, la nota sobre
+10, las recomendaciones del público, la cabecera unificada— **ya está en
+`ff298d3` y desplegado**. Lo que queda aquí es sólo lo que todavía no está en
+git.
 
----
-
-## 1. Rediseño visual completo
-
-El sitio pasa del sistema anterior —azul marino y dorado, tipografías del
-sistema, tarjetas con caja— al **Modernist / rejilla editorial** del brand kit,
-con la marca **1C · Tres reglas**.
-
-- `public/assets/styles.css` reescrito entero (~1.200 líneas).
-- Tipografía **Archivo** autoalojada en `public/assets/fonts/`; fuera Fraunces
-  e Inter, que se usaron en una versión intermedia.
-- Marca en SVG en línea: `src/server/views/components/brand.tsx`.
-- Iconografía Lucide propia: `src/server/views/components/icons.tsx`.
-- `scripts/build-brand.py` ya no procesa `triangulo_brand.zip`: dibuja la marca
-  1C y genera favicon, iconos de aplicación y tarjeta social.
-- Se borran los PNG del logotipo antiguo (triángulo) de `public/assets/brand/`.
-
-**Decisión que se apartó del kit**: el contenido se centra a 1480 px en vez de
-los 1180 que especifica, y sin el lienzo gris. Fue una petición explícita.
-
-## 2. La nota pasa de estrellas a escala sobre 10
-
-Regla dura del brand kit. No toca la base de datos —ya se guardaba como entero
-0..10, que es la escala publicada— pero sí la presentación:
-
-- `formatScore()` en `src/types/domain.ts` sustituye a `formatStars()` en
-  catálogo, ficha, panel y editor.
-- El JSON-LD pasa de `bestRating: 5` a `bestRating: 10`.
-- Dos tests que comprobaban el diseño anterior (media estrella, `alt` del
-  logotipo) se actualizaron al nuevo sin debilitar lo que verifican.
-
-## 3. Cabecera unificada y menú de usuario
-
-- Una sola cabecera para todo el sitio: la navegación pública está siempre,
-  también dentro del panel.
-- Con sesión abierta, el botón de acceso se convierte en el nombre del usuario
-  con un menú desplegable (`<details>` nativo, sin JavaScript obligatorio).
-- Las secciones del panel bajan a una segunda barra.
-- Pie de una sola línea, idéntico en todo el sitio.
-
-## 4. Recomendaciones del público (funcionalidad nueva)
-
-Cualquiera puede proponer una obra; la propuesta entra en una bandeja interna y
-desde el panel se convierte en borrador de reseña, se manda a la lista de
-pendientes o se descarta.
-
-| Fichero | Qué es |
-|---|---|
-| `migrations/0002_recommendations.sql` | Tabla `recommendations`. **Migración aditiva sin aplicar en staging ni producción.** |
-| `src/db/repos/recommendations.ts` | Repositorio |
-| `src/server/services/recommendations.ts` | Lógica de conversión |
-| `src/server/views/pages/recommend.tsx` | Formulario público (`/recomendar`) |
-| `src/server/views/admin/recommendations.tsx` | Bandeja del panel |
-| `tests/integration/recommendations.test.ts` | 16 tests |
-
-Protegida igual que los comentarios: token de formulario firmado, comprobación
-de origen, honeypot, Turnstile, 5 por hora y por IP, y un segundo tope en base
-de datos. IP y agente de usuario pseudonimizados; ninguna consulta los expone.
-
-## 5. Seguridad — cuatro correcciones
-
-1. **Inyección SQL en `drizzle-orm`** (alta, GHSA-gpj5-g38j-94v9). Era la
-   versión 0.38.4, dependencia de producción. Actualizada a 0.45.2.
-2. **Identidad falsificable**: `clientIp()` aceptaba `X-Real-IP`, una cabecera
-   del cliente, y con ella se elegía la propia identidad ante el limitador.
-   Ahora sólo `CF-Connecting-IP`, que pone el borde.
-3. **Antiduplicado frágil**: la detección de reportes repetidos comparaba el
-   *texto* del error de base de datos. La actualización del ORM lo rompió en
-   silencio (500 en vez de 409). Reescrito con `ON CONFLICT DO NOTHING`.
-4. **Sin techo de tamaño** en los formularios públicos. Ahora 64 kB.
-
-Endurecimiento adicional: cookie de sesión con prefijo `__Host-` fuera de
-desarrollo; límite de peticiones en `/recomendar`.
-
-Los otros 17 avisos de `npm audit` son de herramientas (vitest, wrangler,
-esbuild, miniflare) y no se empaquetan en el Worker.
-
-## 6. Móvil
-
-- Fuera `dvh`, que cambia al plegarse la barra del navegador y hacía que la
-  página pareciera cambiar de tamaño sola. Todo en `svh`.
-- Cabecera de 102 px en cualquier móvil de 320 a 412 px (antes hasta 202).
-- Campos a 16 px: por debajo, Safari en iOS amplía la página al enfocarlos.
-- Objetivos táctiles de 44 px; ninguno por debajo de los 24 que pide WCAG 2.2.
-- Zonas seguras (`env(safe-area-inset-*)`) en márgenes, pie y avisos.
-- El widget de Turnstile vive en un hueco de altura fija: ya no mueve la
-  tarjeta al cargar. Verificado con las claves de prueba de Cloudflare.
-
-## 7. Otros arreglos de fondo
-
-- **PBKDF2 a 100.000 iteraciones**: WebCrypto en Workers rechaza más, y con
-  210.000 el login devolvía 500 en el runtime real. Un hash con más iteraciones
-  de las que admite la plataforma ahora rechaza el acceso en vez de reventar.
-- **`migrations/0001_watchlist.sql`**: un punto y coma dentro de un comentario
-  partía la sentencia para el troceador de D1 remoto. Sólo cambia el comentario.
-- **Los scripts de base de datos** usaban `tdl-db`, el nombre de la base de
-  desarrollo, junto con `--env staging`. Ahora usan el binding `DB`.
-- **Invalidación de caché por versión desplegada**: la clave incluye el id de
-  la versión del Worker (`version_metadata`), así que publicar código nuevo deja
-  atrás el HTML anterior. Antes convivían hasta una hora.
-- **`Vary: Cookie`** en las respuestas cacheadas: sin él, quien visitaba una
-  página sin sesión y entraba después seguía viendo su copia sin menú.
-- **Cuarto tsconfig** (`tsconfig.e2e.json`): el cuerpo de `page.evaluate()`
-  corre en el navegador y necesita `lib.DOM`, que en Node sigue prohibida.
-
-## 8. Configuración de despliegue
-
-`wrangler.jsonc` ya no tiene marcadores: dominio `triangulodelectores.site`,
-identificadores reales de D1 y KV en los dos entornos, y claves públicas de
-Turnstile.
+`npm run preflight -- --skip-e2e` pasa entero: secretos, lint, los cuatro
+typecheck, **369 tests** unitarios y de integración, compilación y simulacro de
+despliegue en los tres entornos.
 
 ---
 
-## Antes de desplegar
+## 1. Biblioteca privada (`books.`) — funcionalidad nueva
 
-```bash
-npm run db:migrate:staging   # aplica 0002_recommendations.sql
-npm run deploy:staging
-```
+Un subdominio autenticado dentro del mismo Worker, repartido por host en
+`src/server/index.tsx`. Dos mitades: los PDF que se leen dentro de la aplicación
+y el catálogo de los libros en papel.
 
-Pendiente y **no automatizable**:
+**Lector de PDF** con pdf.js autoalojado: subida en streaming hasta 50 MB,
+servicio por rangos, progreso de lectura, notas y subrayados en cuatro colores.
+Portada por omisión sacada de la primera página, o puesta a mano subiendo una
+imagen o indicando una dirección — que el servidor descarga y guarda, nunca
+enlaza.
 
-- [ ] Zona `triangulodelectores.site` activa en Cloudflare (NS delegados).
+**Catálogo en papel** con alta por ISBN contra Open Library, lectura del código
+de barras con la cámara y ordenación por diez criterios.
+
+**Copia diaria** del catálogo colgada del cron que ya existía.
+
+Ficheros nuevos: `migrations/0003_books.sql`, `src/server/routes/books.tsx`,
+`src/server/views/books/`, `src/server/services/{documents,library,backup}.ts`,
+`src/db/repos/{documents,library}.ts`, `src/client/{books,scanner}.ts` y seis
+módulos en `src/server/lib/`.
+
+## 2. Importación del catálogo de MyLibrary
+
+`scripts/import-mylibrary.py` vuelca la exportación de la aplicación de Android
+(229 libros con sus portadas en base64). La traducción de fichas la hace el
+servidor, donde se puede probar; el script sólo extrae y envía.
+
+El emparejamiento de las portadas **es por orden y hay que elegirlo**
+(`--portadas <orden>`): el `elementHashcode` del fichero de origen no sirve, y
+el orden bueno no está documentado. Hay un `--diagnostico` que vuelca muestras
+de cada hipótesis. El detalle está en el README.
+
+## 3. Correcciones sobre lo ya desplegado
+
+- **Login**: extraído a `src/server/lib/login.ts` y compartido por el panel y la
+  biblioteca. La comprobación anti-bot ya no se exige a un formulario que no
+  pinta el widget, que devolvía 401 en cada intento.
+- **Turnstile**: el hueco del widget lleva dentro un aviso que se destapa si el
+  script de Cloudflare no carga, y los mensajes de error distinguen entre falta
+  de token, token caducado y clave mal configurada.
+- **Vista previa de portadas**: sale de la URL que devuelve el servidor y no de
+  un `blob:`, que la CSP bloquea.
+- **Móvil**: la estantería, el lector y el catálogo, revisados en navegador real
+  a 390 px.
+- **SVG de la marca e iconos** llevan `xmlns`, para que sigan siendo válidos
+  fuera del documento.
+- **`extractYear`** compartido: la copia que había en el cliente de Open Library
+  perdía el año en las fechas tipo «c1998».
+
+## 4. Configuración
+
+- `wrangler.jsonc`: rutas y `BOOKS_URL` de los subdominios en los tres entornos;
+  fuera `limits.cpu_ms`, que no existe en plan Free y dejaba el Worker roto;
+  `IMAGE_RESIZING` a `false` en los dos entornos publicados.
+- `scripts/turnstile.mjs`: activa o desactiva la comprobación del acceso sin
+  navegador. El interruptor vivía detrás del propio login.
+
+---
+
+## Estado del despliegue
+
+Producción y staging están **al día** con este árbol: el último despliegue de
+producción es del 31 de agosto a las 20:07 UTC y la migración `0003_books.sql`
+está aplicada en los dos entornos.
+
+Si se toca código antes de commitear, hay que volver a desplegar. Y conviene
+commitear pronto: **producción está corriendo código que sólo existe en el árbol
+de trabajo**, así que ahora mismo no hay ningún punto de git al que volver.
+
+## Pendiente en el panel de Cloudflare
+
+No lo puede hacer ningún script.
+
+- [ ] **`www.triangulodelectores.site` devuelve 522.** Tiene un registro DNS
+      proxied apuntando a un origen que no responde — exactamente lo que le
+      pasaba al apex. Hay que borrar ese registro y crear una regla de
+      redirección al dominio raíz.
 - [ ] SSL/TLS en Full (Strict) y Always Use HTTPS.
-- [ ] Transformaciones de imagen activadas en la zona: `IMAGE_RESIZING` está en
-      `true` y sin ellas `/cdn-cgi/image/` devuelve 404.
 - [ ] Reglas del WAF y Rate Limiting (README §12).
 - [ ] Bucket R2 de producción **no** público.
-- [ ] Redirección de `www` al dominio raíz.
-- [ ] Copia de seguridad de D1 antes de migrar producción.
+- [ ] Transformaciones de imagen: no están activas y no entran en el plan Free.
+      Por eso `IMAGE_RESIZING` está en `false` en los dos entornos: con `true`,
+      cada portada pide `/cdn-cgi/image/…` y recibe un 404. Si algún día se
+      activan, hay que volver a ponerlo en `true` en staging y en producción.
+- [ ] Bot Fight Mode bloquea al script de importación con un 403 si se
+      identifica como cliente de Python. Está resuelto mandando un agente
+      propio, pero si vuelve a molestar, la salida limpia es una regla «Skip»
+      para la IP desde la que se importe.
 
-## Dos cosas que decidir
+## Contenido
 
-- **`triangulo_brand.zip` aparece como borrado** y no fui yo quien lo quitó del
-  árbol. Si lo moviste a propósito, el borrado entra en el commit; si no,
-  recupéralo con `git checkout -- triangulo_brand.zip`.
-- **`tdl_estilos.zip` y `tdl_brandkit.zip` están sin seguimiento.** Son el
-  material de diseño del que sale todo el rediseño; versionarlos deja la
-  procedencia clara, igual que se hizo con el pack de marca anterior.
+Producción tiene el catálogo de la biblioteca importado, pero **cero reseñas y
+cero pendientes**: el sitio público funciona y está vacío.
 
 ## Commit sugerido
 
-Todo esto es un cuerpo de trabajo grande pero coherente. Si prefieres partirlo:
+Es un cuerpo de trabajo grande pero coherente. Si se prefiere partirlo:
 
-1. Correcciones de seguridad y del runtime (PBKDF2, drizzle, `clientIp`,
-   antiduplicado, migración, scripts de base de datos).
-2. Rediseño visual y marca 1C.
-3. Recomendaciones del público.
-4. Adaptación a móvil.
-5. Configuración de dominio y despliegue.
+1. Biblioteca privada: subdominio, lector de PDF, catálogo y copia diaria.
+2. Importación desde MyLibrary.
+3. Correcciones sobre lo desplegado (login compartido, Turnstile, móvil, SVG).
+4. Configuración de despliegue y utilidades de operación.

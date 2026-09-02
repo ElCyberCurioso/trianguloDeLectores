@@ -30,6 +30,9 @@ export default defineWorkersConfig(async () => {
               ENVIRONMENT: 'development',
               SITE_NAME: 'Triángulo de Lectores',
               SITE_URL: 'http://localhost:8787',
+              // El subdominio privado se reparte por host, así que los tests
+              // necesitan saber cuál es el suyo.
+              BOOKS_URL: 'http://books.localhost:8787',
               SITE_LOCALE: 'es-ES',
               TURNSTILE_ENABLED: 'false',
               TURNSTILE_SITE_KEY: '1x00000000000000000000AA',

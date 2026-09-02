@@ -31,6 +31,12 @@ export interface Bindings {
   LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
   /** Dominio público opcional del bucket R2. Vacío => se sirve por el Worker. */
   MEDIA_PUBLIC_BASE?: string;
+  /**
+   * Origen del subdominio privado de la biblioteca. Si falta se deduce como
+   * `books.` + el host de `SITE_URL`. Existe para poder probarlo en local,
+   * donde el host es `localhost:8787` y el prefijo no vale.
+   */
+  BOOKS_URL?: string;
 
   // --- secrets (wrangler secret put, NUNCA en el repo) -----------------------
   /** Clave privada de Turnstile. */

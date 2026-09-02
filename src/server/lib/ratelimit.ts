@@ -18,7 +18,7 @@ const HOUR = 60 * MINUTE;
  */
 export const RATE_RULES: Record<string, RateRule> & {
   login: RateRule; loginGlobal: RateRule; comment: RateRule; report: RateRule;
-  upload: RateRule; adminWrite: RateRule; publicApi: RateRule;
+  upload: RateRule; adminWrite: RateRule; publicApi: RateRule; import: RateRule;
   recommendation: RateRule;
 } = {
   login: { limit: 5, windowMs: 15 * MINUTE, penaltyMs: 15 * MINUTE },
@@ -26,6 +26,13 @@ export const RATE_RULES: Record<string, RateRule> & {
   comment: { limit: 5, windowMs: 10 * MINUTE, penaltyMs: 10 * MINUTE },
   report: { limit: 10, windowMs: HOUR, penaltyMs: HOUR },
   upload: { limit: 30, windowMs: HOUR },
+  /*
+   * Importación masiva del catálogo. El límite de subida son 30 por hora, y
+   * traer 229 libros con sus portadas lo agotaría en el primer minuto. Es una
+   * ruta sólo para administradores y con techo igualmente: 1.500 por hora deja
+   * hacer la importación entera de una vez y sigue siendo un límite.
+   */
+  import: { limit: 1500, windowMs: HOUR },
   adminWrite: { limit: 120, windowMs: MINUTE },
   publicApi: { limit: 120, windowMs: MINUTE },
   // Recomendar es un acto ocasional: cinco por hora sobran de largo.
@@ -34,7 +41,7 @@ export const RATE_RULES: Record<string, RateRule> & {
 
 export type RateScope =
   | 'login' | 'loginGlobal' | 'comment' | 'report' | 'upload' | 'adminWrite' | 'publicApi'
-  | 'recommendation';
+  | 'recommendation' | 'import';
 
 function stubFor(env: Bindings, scope: RateScope, identity: string) {
   const id = env.RATE_LIMITER.idFromName(`${scope}:${identity}`);

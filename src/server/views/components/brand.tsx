@@ -31,6 +31,13 @@ export interface MarkProps {
 
 export const Mark: FC<MarkProps> = ({ width = 40, class: className, accentIndex = 2 }) => (
   <svg
+    /*
+     * `xmlns` es redundante mientras el SVG vive dentro del HTML —el analizador
+     * ya lo pone—, pero deja de serlo en cuanto algo lo extrae: una extensión
+     * de tema que lo carga como imagen, un «guardar imagen como», un pegado en
+     * un fichero. Sin él, ahí fuera no es un SVG válido y no se pinta.
+     */
+    xmlns="http://www.w3.org/2000/svg"
     class={`mark${className ? ` ${className}` : ''}`}
     width={width}
     height={Math.round((width * 21) / 100)}
