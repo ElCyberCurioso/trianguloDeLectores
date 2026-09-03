@@ -9,6 +9,7 @@ import { WatchlistRepository } from '../../db/repos/watchlist';
 import { RecommendationRepository } from '../../db/repos/recommendations';
 import { DocumentRepository } from '../../db/repos/documents';
 import { LibraryRepository } from '../../db/repos/library';
+import { DeviceRepository } from '../../db/repos/devices';
 import { SettingsService } from '../lib/settings';
 import { Logger } from '../lib/logger';
 
@@ -29,6 +30,8 @@ export class Container {
   /** Biblioteca privada del subdominio `books.`: PDFs y libros en papel. */
   readonly documents: DocumentRepository;
   readonly library: LibraryRepository;
+  /** Credenciales de los dispositivos móviles emparejados. */
+  readonly devices: DeviceRepository;
   readonly settings: SettingsService;
   readonly log: Logger;
 
@@ -44,6 +47,7 @@ export class Container {
     this.recommendations = new RecommendationRepository(env);
     this.documents = new DocumentRepository(env);
     this.library = new LibraryRepository(env);
+    this.devices = new DeviceRepository(env);
     this.settings = new SettingsService(env);
     this.log = new Logger(env, { requestId });
   }

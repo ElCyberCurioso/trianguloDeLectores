@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import {
-  ORIGIN, loginAsAdmin, resetAdminRateLimit, CATEGORY_ID, type AdminSession,
+  ORIGIN, loginAsAdmin, resetAdminRateLimit, createReview, CATEGORY_ID, type AdminSession,
 } from './helpers';
 
 let session: AdminSession;
@@ -222,7 +222,7 @@ describe('conversión en reseña', () => {
     // Nace como borrador: publicar sigue siendo un acto explícito.
     expect(review!.status).toBe('DRAFT');
     expect(review!.published_at).toBeNull();
-    expect(review!.rating).toBe(0);
+    expect(review!.rating_half).toBe(0);
     // La nota arranca el cuerpo, escapada.
     expect(review!.body_html).toContain('Para una tarde tranquila.');
 
@@ -386,6 +386,85 @@ describe('control de acceso', () => {
     });
     expect(response.status).toBe(403);
     await response.text();
+  });
+});
+
+describe('un pendiente y su reseña no coexisten', () => {
+  /**
+   * El caso que motivó todo esto: la reseña se escribe a mano, sin usar el
+   * botón de convertir, y la obra se quedaba anunciada como «por ver» en la
+   * portada mientras su propia reseña estaba publicada.
+   */
+  it('al crear la reseña, el pendiente del mismo título se enlaza y sale de la lista', async () => {
+    const titulo = `Pendiente reseñado ${crypto.randomUUID().slice(0, 8)}`;
+    const pendienteId = await crearPendiente({ titleEs: titulo, contentType: 'MOVIE', isPublic: '1' });
+
+    const antes = await (await SELF.fetch(`${ORIGIN}/pendientes`, { headers: { Accept: 'text/html' } })).text();
+    expect(antes).toContain(titulo);
+
+    const { id: reviewId } = await createReview(session, { title: titulo });
+
+    const item = await env.DB.prepare('SELECT status, review_id, completed_at FROM watchlist_items WHERE id = ?')
+      .bind(pendienteId)
+      .first<{ status: string; review_id: string; completed_at: number }>();
+    expect(item!.review_id).toBe(reviewId);
+    expect(item!.status).toBe('DONE');
+    expect(item!.completed_at).toBeTruthy();
+
+    const despues = await (await SELF.fetch(`${ORIGIN}/pendientes`, { headers: { Accept: 'text/html' } })).text();
+    expect(despues).not.toContain(titulo);
+  });
+
+  it('empareja ignorando mayúsculas y acentos', async () => {
+    const pendienteId = await crearPendiente({ titleEs: 'Amélie', contentType: 'MOVIE' });
+    await createReview(session, { title: 'amelie' });
+
+    const item = await env.DB.prepare('SELECT review_id FROM watchlist_items WHERE id = ?')
+      .bind(pendienteId)
+      .first<{ review_id: string | null }>();
+    expect(item!.review_id).toBeTruthy();
+  });
+
+  it('no toca un pendiente de otro tipo de contenido con el mismo título', async () => {
+    // Un libro y su adaptación comparten título y son dos obras distintas.
+    const libro = await crearPendiente({ titleEs: 'Dune libro y película', contentType: 'BOOK' });
+    await createReview(session, { title: 'Dune libro y película' }); // MOVIE
+
+    const item = await env.DB.prepare('SELECT review_id FROM watchlist_items WHERE id = ?')
+      .bind(libro)
+      .first<{ review_id: string | null }>();
+    expect(item!.review_id).toBeNull();
+  });
+
+  it('un pendiente con reseña no vuelve a la lista pública aunque se reabra', async () => {
+    const titulo = `Reabierto ${crypto.randomUUID().slice(0, 8)}`;
+    const pendienteId = await crearPendiente({ titleEs: titulo, contentType: 'MOVIE', isPublic: '1' });
+    await createReview(session, { title: titulo });
+
+    // Se devuelve a «pendiente» a mano: manda el vínculo, no el estado.
+    await env.DB.prepare('UPDATE watchlist_items SET status = ? WHERE id = ?').bind('PENDING', pendienteId).run();
+    await env.CACHE.delete('cachever:watchlist');
+
+    const html = await (await SELF.fetch(`${ORIGIN}/pendientes`, { headers: { Accept: 'text/html' } })).text();
+    expect(html).not.toContain(titulo);
+  });
+
+  it('un pendiente creado cuando la obra ya está reseñada nace enlazado', async () => {
+    const titulo = `Ya reseñada ${crypto.randomUUID().slice(0, 8)}`;
+    const { id: reviewId } = await createReview(session, { title: titulo });
+
+    // No se rechaza el alta: se guarda enlazada y terminada, y no llega a la
+    // lista pública.
+    const pendienteId = await crearPendiente({ titleEs: titulo, contentType: 'MOVIE', isPublic: '1' });
+
+    const item = await env.DB.prepare('SELECT status, review_id FROM watchlist_items WHERE id = ?')
+      .bind(pendienteId)
+      .first<{ status: string; review_id: string }>();
+    expect(item!.review_id).toBe(reviewId);
+    expect(item!.status).toBe('DONE');
+
+    const html = await (await SELF.fetch(`${ORIGIN}/pendientes`, { headers: { Accept: 'text/html' } })).text();
+    expect(html).not.toContain(titulo);
   });
 });
 

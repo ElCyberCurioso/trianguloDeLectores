@@ -4,6 +4,7 @@ import { securityHeaders, booksSecurityHeaders } from './middleware/security';
 import { requestContext, accessLog } from './middleware/context';
 import { publicRoutes } from './routes/public';
 import { booksRoutes } from './routes/books';
+import { mobileRoutes } from './routes/movil';
 import { publicApi } from './routes/api-public';
 import { adminRoutes } from './routes/admin';
 import { AppError } from './lib/http';
@@ -46,6 +47,19 @@ const booksApp = new Hono<AppEnv>();
 booksApp.use('*', booksSecurityHeaders);
 booksApp.use('*', requestContext);
 booksApp.use('*', accessLog);
+
+/**
+ * API de la aplicación Android, **antes** que el resto del subdominio.
+ *
+ * El orden importa y no es cosmético: las rutas de `booksRoutes` están detrás
+ * de un guardián de cookie y de la comprobación CSRF, que exige un `Origin` que
+ * un cliente nativo no manda. Montarla aquí delante le deja aplicar su propio
+ * guardián —token de dispositivo en `Authorization`, ver `lib/device-auth.ts`—
+ * sin relajar ni una sola comprobación del navegador. Lo que no case con
+ * ninguna ruta de `/api/movil` sigue cayendo en el guardián de la cookie, que
+ * responde 401: nada queda abierto por el camino.
+ */
+booksApp.route('/api/movil', mobileRoutes);
 booksApp.route('/', booksRoutes);
 
 /**
@@ -238,6 +252,10 @@ export default {
       (async () => {
         try {
           await purgeExpiredSessions(env);
+          // Dispositivos móviles caducados o revocados hace tiempo. Se
+          // conservan 30 días tras caducar para que la lista del panel siga
+          // contando qué se desemparejó y cuándo.
+          await container.devices.purgeExpired(30 * 24 * 60 * 60 * 1000);
           const retention = await container.settings.get('privacy.audit_retention_days');
           await container.audit.purgeOlderThan(retention);
 

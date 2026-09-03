@@ -48,6 +48,9 @@ describe('CRUD de reseñas', () => {
     expect(row!.status).toBe('PUBLISHED');
     expect(row!.published_at).toBeTruthy();
     expect(row!.category_id).toBe(CATEGORY_ID);
+    // La nota se guarda en medios puntos, y la columna heredada queda con el
+    // entero redondeado para que su CHECK siga cumpliéndose.
+    expect(row!.rating_half).toBe(18);
     expect(row!.rating).toBe(9);
     expect(slug).toBe('dune-completo');
 
@@ -229,6 +232,43 @@ describe('catálogo público', () => {
     expect(html).toContain('/ 10');
     // La escala publicada y la del marcado estructurado tienen que coincidir.
     expect(html).toContain('"bestRating":10');
+  });
+
+  it('el editor pinta la nota como estrellas y conserva el medio punto', async () => {
+    const { id } = await createReview(session, { title: 'Editor de estrellas', rating: 7.5 });
+    const html = await (await SELF.fetch(`${ORIGIN}/admin/resenas/${id}`, {
+      headers: { Cookie: session.cookie, Accept: 'text/html' },
+    })).text();
+
+    // El relleno de las estrellas sale de `data-half`, no de un `style=`: la
+    // CSP del sitio no admite estilos en línea.
+    expect(html).toContain('data-half="15"');
+    expect(html).not.toContain('style="width');
+
+    // Debajo sigue habiendo un control de verdad, que es lo que hace que
+    // funcione sin JavaScript y con el teclado.
+    expect(html).toContain('type="range"');
+    expect(html).toContain('name="ratingHalf"');
+    expect(html).toContain('aria-valuetext="7,5 sobre 10"');
+
+    // Y ya no hay desplegable de puntuación.
+    expect(html).not.toContain('<select id="f-ratingHalf"');
+
+    // Las estrellas son la superficie que recibe el puntero, y el botón de
+    // quitar la nota nace oculto: sin JavaScript sería un botón muerto.
+    expect(html).toContain('data-rating-stars');
+    expect(html).toContain('data-rating-clear');
+    expect(html).toMatch(/data-rating-clear[^>]*hidden/);
+  });
+
+  it('acepta el medio punto y lo publica tal cual', async () => {
+    const { slug } = await createReview(session, { title: 'Nota con medio punto', rating: 7.5 });
+    const html = await (await SELF.fetch(`${ORIGIN}/resena/${slug}`, { headers: { Accept: 'text/html' } })).text();
+
+    expect(html).toContain('7,5');
+    // El marcado estructurado publica la nota real, no el entero interno: un
+    // `ratingValue` de 15 sobre 10 sería un disparate para un buscador.
+    expect(html).toContain('"ratingValue":7.5');
   });
 
   it('muestra las plataformas donde encontrarla', async () => {

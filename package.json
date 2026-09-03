@@ -32,6 +32,7 @@
     "admin:create": "node scripts/create-admin.mjs",
     "turnstile:off": "node scripts/turnstile.mjs off",
     "turnstile:on": "node scripts/turnstile.mjs on",
+    "apk:publish": "node scripts/publish-apk.mjs",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings src/types/worker-configuration.d.ts",
     "deploy": "npm run build:client && wrangler deploy --env production",
     "deploy:staging": "npm run build:client && wrangler deploy --env staging",

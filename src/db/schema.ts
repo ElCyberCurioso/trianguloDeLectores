@@ -119,7 +119,15 @@ export const reviews = sqliteTable(
     episodes: integer('episodes'),
     volumes: integer('volumes'),
     /** 0..10 == estrellas * 2 */
+    /**
+     * Columna heredada: la nota redondeada a entero 0..10. Ya no la lee nadie
+     * —la verdad es `ratingHalf`—, pero se sigue escribiendo para que su CHECK
+     * y su NOT NULL se cumplan. Quitarla es un cambio destructivo y se hará a
+     * mano. Ver `0005_nota_media.sql`.
+     */
     rating: integer('rating').notNull().default(0),
+    /** La nota, en medios puntos: 0..20 son 0,0 a 10,0 de medio en medio. */
+    ratingHalf: integer('rating_half').notNull().default(0),
     summary: text('summary'),
     bodyHtml: text('body_html').notNull().default(''),
     hasSpoilers: integer('has_spoilers').notNull().default(0),
@@ -144,6 +152,7 @@ export const reviews = sqliteTable(
     slugIdx: uniqueIndex('idx_reviews_slug').on(t.slug),
     feedIdx: index('idx_reviews_feed').on(t.status, t.deletedAt, t.publishedAt),
     ratingIdx: index('idx_reviews_rating').on(t.status, t.deletedAt, t.rating),
+    ratingHalfIdx: index('idx_reviews_rating_half').on(t.status, t.deletedAt, t.ratingHalf),
     commentsIdx: index('idx_reviews_comments').on(t.status, t.deletedAt, t.commentCount),
     typeIdx: index('idx_reviews_type').on(t.contentType, t.status, t.deletedAt),
     categoryIdx: index('idx_reviews_category').on(t.categoryId, t.status, t.deletedAt),
@@ -409,10 +418,68 @@ export const documentAnnotations = sqliteTable(
     color: text('color', { enum: ['YELLOW', 'RED', 'GREEN', 'BLUE'] }).notNull().default('YELLOW'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
+    /**
+     * Lápida. Borrar de verdad haría reaparecer la anotación en el teléfono en
+     * la siguiente sincronización: él la tiene y el servidor ya no podría decir
+     * que se borró. Todas las lecturas filtran por `deleted_at IS NULL`.
+     */
+    deletedAt: integer('deleted_at'),
   },
   (t) => ({
     docIdx: index('idx_annotations_doc').on(t.documentId, t.page, t.createdAt),
     kindIdx: index('idx_annotations_kind').on(t.documentId, t.kind),
+    syncIdx: index('idx_annotations_sync').on(t.updatedAt),
+  }),
+);
+
+/**
+ * Páginas marcadas de un documento. Espejo de `0004_movil.sql`.
+ * Existen por la aplicación Android: el lector web no las tenía y meterlas
+ * como un `kind` más de las anotaciones habría obligado a rehacer su CHECK.
+ */
+export const documentBookmarks = sqliteTable(
+  'document_bookmarks',
+  {
+    id: text('id').primaryKey(),
+    documentId: text('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    page: integer('page').notNull(),
+    label: text('label'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    deletedAt: integer('deleted_at'),
+  },
+  (t) => ({
+    pageIdx: uniqueIndex('idx_bookmarks_doc_page').on(t.documentId, t.page),
+    syncIdx: index('idx_bookmarks_sync').on(t.updatedAt),
+  }),
+);
+
+/**
+ * Credencial de un dispositivo móvil. Espejo de `0004_movil.sql`.
+ *
+ * No es una fila de `sessions`: dura 90 días en vez de 12 horas y sólo abre la
+ * API del móvil. Se guarda el SHA-256 del token, nunca el token.
+ */
+export const deviceTokens = sqliteTable(
+  'device_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    deviceName: text('device_name').notNull(),
+    platform: text('platform', { enum: ['ANDROID'] }).notNull().default('ANDROID'),
+    ipHash: text('ip_hash'),
+    createdAt: integer('created_at').notNull(),
+    lastSeenAt: integer('last_seen_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+    revokedAt: integer('revoked_at'),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('idx_device_tokens_hash').on(t.tokenHash),
+    userIdx: index('idx_device_tokens_user').on(t.userId, t.createdAt),
+    expiresIdx: index('idx_device_tokens_expires').on(t.expiresAt),
   }),
 );
 
@@ -465,3 +532,5 @@ export type DocumentRow = typeof documents.$inferSelect;
 export type DocumentProgressRow = typeof documentProgress.$inferSelect;
 export type DocumentAnnotation = typeof documentAnnotations.$inferSelect;
 export type LibraryBook = typeof libraryBooks.$inferSelect;
+export type DocumentBookmark = typeof documentBookmarks.$inferSelect;
+export type DeviceToken = typeof deviceTokens.$inferSelect;

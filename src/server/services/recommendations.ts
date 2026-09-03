@@ -137,7 +137,7 @@ export class RecommendationService {
       durationMin: null,
       episodes: null,
       volumes: null,
-      rating: 0,
+      ratingHalf: 0,
       summary: null,
       bodyHtml: `<blockquote><p>${escapeHtml(item.note)}</p><p><em>${firma}</em></p></blockquote><p></p>`,
       hasSpoilers: 0,

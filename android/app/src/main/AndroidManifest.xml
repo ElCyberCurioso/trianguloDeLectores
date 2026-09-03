@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Un solo permiso: la red, para hablar con la biblioteca privada. No hay
+      permiso de almacenamiento porque no hace falta ninguno: los PDF del
+      teléfono se abren con el selector del sistema, que concede acceso a ese
+      fichero y a ninguno más. Pedir acceso a todo el almacenamiento para leer
+      un PDF sería pedir mucho más de lo que se necesita.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:name=".TdlApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${etiqueta}"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Tdl">
+
+        <!--
+          `allowBackup="false"`: la copia de seguridad de Android se llevaría el
+          token del dispositivo a los servidores de Google y lo restauraría en
+          otro teléfono. La credencial es de este aparato, y restaurarla en otro
+          sería justo lo que se quiere evitar.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="${etiqueta}"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Tdl">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+              Abrir un PDF desde otra aplicación (gestor de archivos, correo).
+              Es lo que convierte esto en «el lector de PDF del teléfono» en vez
+              de en una aplicación a la que hay que entrar primero.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

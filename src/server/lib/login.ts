@@ -64,6 +64,18 @@ export interface LoginOptions {
    * identificador nuevo al autenticar, que se hace en los dos casos.
    */
   revokeOtherSessions?: boolean;
+
+  /**
+   * Crear la sesión de navegador y escribir su cookie. Por omisión sí.
+   *
+   * La API de la aplicación Android pasa `false`: allí la credencial no es una
+   * cookie sino un token de dispositivo, con otra caducidad y revocable por
+   * separado. Lo que sí quiere es **todo lo demás** de esta función —límite
+   * global, hash señuelo, bloqueo por intentos, rehash, registro de auditoría—,
+   * que es justo el motivo de que la autenticación viva en un sitio y no
+   * copiada en cada ruta.
+   */
+  establishSession?: boolean;
 }
 
 export async function attemptLogin(
@@ -127,9 +139,11 @@ export async function attemptLogin(
     await container.users.updatePasswordHash(user.id, await hashPassword(parsed.data.password));
   }
 
-  if (options.revokeOtherSessions !== false) await revokeAllUserSessions(c.env, user.id);
-  const session = await createSession(c.env, user.id, { ip, userAgent: c.req.header('User-Agent') ?? null });
-  writeSessionCookie(c, session);
+  if (options.establishSession !== false) {
+    if (options.revokeOtherSessions !== false) await revokeAllUserSessions(c.env, user.id);
+    const session = await createSession(c.env, user.id, { ip, userAgent: c.req.header('User-Agent') ?? null });
+    writeSessionCookie(c, session);
+  }
 
   await container.users.registerSuccessfulLogin(user.id);
   await resetRateLimit(c.env, 'login', (await pseudonymize(ip, c.env.HASH_PEPPER)) ?? ip ?? 'anonymous');

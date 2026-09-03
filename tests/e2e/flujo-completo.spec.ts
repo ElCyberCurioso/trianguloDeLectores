@@ -46,7 +46,19 @@ test('2-4. crea la reseña, sube portada y la publica', async ({ page }) => {
   await page.locator('#f-contentType').selectOption('MOVIE');
   await page.locator('#f-year').fill('2024');
   await page.locator('#f-creator').fill('Dirección de prueba');
-  await page.locator('#f-rating').selectOption('7'); // 7,0 sobre 10
+  // La nota se pone **pulsando sobre las estrellas**, que es como se usa de
+  // verdad. Se apunta a tres cuartos del ancho: 0,75 de 20 medios puntos son
+  // 15, o sea un 7,5 — la nota que la escala vieja no admitía.
+  const estrellas = page.locator('[data-rating-stars]');
+  const caja = (await estrellas.boundingBox())!;
+  await estrellas.hover({ position: { x: caja.width * 0.75, y: caja.height / 2 } });
+  // Al pasar por encima se previsualiza, todavía sin fijar nada.
+  await expect(page.locator('[data-rating]')).toHaveClass(/rating--preview/);
+  await expect(page.locator('[data-rating-output]')).toHaveText('7,5');
+
+  await estrellas.click({ position: { x: caja.width * 0.75, y: caja.height / 2 } });
+  await expect(page.locator('#f-ratingHalf')).toHaveValue('15');
+  await expect(page.locator('[data-rating]')).toHaveAttribute('data-half', '15');
   await page.locator('#f-summary').fill('Resumen de la reseña de prueba.');
 
   // Editor enriquecido (contenteditable) + marca de spoiler.
@@ -90,7 +102,7 @@ test('5. la reseña es visible en el catálogo y en su modal', async ({ page }) 
   await expect(modal.getByText('Dónde verlo')).toBeVisible();
 
   // La nota se publica sobre 10 y con coma, como manda el brand kit.
-  await expect(modal.locator('.score__value').first()).toHaveText('7,0');
+  await expect(modal.locator('.score__value').first()).toHaveText('7,5');
 
   await page.keyboard.press('Escape');
   await expect(modal).not.toBeVisible();

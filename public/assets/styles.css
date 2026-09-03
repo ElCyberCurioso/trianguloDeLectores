@@ -1841,3 +1841,190 @@ p { margin: 0 0 var(--space-3); }
   .filters--library .filters__row { grid-template-columns: 1fr; }
   .filters--library .filters__actions .btn { width: 100%; }
 }
+
+/* Ficha técnica de la descarga del APK: pares etiqueta/valor separados por la
+   regla de 1 px de dentro de sección, nunca por aire. Las etiquetas van a la
+   izquierda y los valores empiezan donde empieza su columna: nada centrado. */
+.specs { margin: var(--space-6) 0; border-top: 1px solid var(--line); }
+.specs__row {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.specs dt { font-weight: 600; color: var(--color-neutral-600); }
+.specs dd { margin: 0; }
+
+/* La suma de comprobación son 64 caracteres que tienen que poder copiarse
+   enteros: se parte por donde sea antes que desbordar la columna. */
+.hash { font-family: var(--font-mono); font-size: 0.85em; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .specs__row { grid-template-columns: 1fr; gap: var(--space-1); }
+}
+
+
+/* ------------------------------------------------------- nota en estrellas --
+   El control del editor: diez estrellas con medio punto de precisión.
+
+   Debajo hay un `input[type=range]`, que es lo que hace el trabajo de verdad
+   —teclado, lectores de pantalla y un objetivo táctil grande—. Las estrellas
+   son dos capas idénticas superpuestas: la de abajo apagada, la de arriba en
+   acento y recortada al ancho de la nota.
+
+   El ancho sale de `data-half` con una regla por valor. Son veintiuna líneas y
+   podrían ser una sola con `attr()`, pero `attr()` todavía no vale para
+   longitudes: la alternativa sería un `style=` en línea, que la CSP no admite.
+*/
+.rating {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  /* La segunda fila es del botón de quitar la nota, que lo destapa el script.
+     Se reserva desde el principio para que al aparecer no empuje el resto del
+     formulario hacia abajo, igual que el hueco del widget de Turnstile. */
+  grid-template-rows: auto 44px;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  --rating-tamano: 30px;
+  --rating-relleno: 0%;
+}
+
+.rating__stars {
+  position: relative;
+  width: calc(var(--rating-tamano) * 10);
+  max-width: 100%;
+  height: var(--rating-tamano);
+  /* Sin JavaScript, las estrellas dejan pasar el puntero hasta el deslizador,
+     que es quien recoge el clic. Con JavaScript se invierte: ver `.rating--js`. */
+  pointer-events: none;
+}
+
+.rating__layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* La capa de acento se recorta: `overflow` es lo que dibuja la media estrella,
+   sin necesidad de un icono partido por la mitad. */
+.rating__layer--fill {
+  width: var(--rating-relleno);
+  overflow: hidden;
+  color: var(--color-accent);
+}
+
+.rating__layer--base {
+  color: var(--color-neutral-500);
+}
+
+.rating__star {
+  flex: 0 0 var(--rating-tamano);
+  width: var(--rating-tamano);
+  height: var(--rating-tamano);
+}
+
+/* El deslizador ocupa exactamente la caja de las estrellas y va encima, para
+   que arrastrar sobre ellas sea arrastrar el control. Invisible, no ausente:
+   quitarlo del flujo lo dejaría fuera del alcance del teclado. */
+.rating__range {
+  grid-column: 1;
+  grid-row: 1;
+  width: calc(var(--rating-tamano) * 10);
+  max-width: 100%;
+  height: var(--rating-tamano);
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rating__stars {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* El foco se ve sobre las estrellas, no sobre un control invisible. Funciona
+   porque el deslizador va antes que ellas en el marcado. */
+.rating__range:focus-visible ~ .rating__stars {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/*
+   Con JavaScript manda el puntero sobre las estrellas: el deslizador reparte su
+   anchura contando el ancho del pulgar, así que su mapeo y el de las estrellas
+   no coinciden y pulsar sobre la séptima podía dejar un 6,5. El deslizador se
+   queda para el teclado y los lectores de pantalla.
+*/
+.rating--js .rating__range { pointer-events: none; }
+.rating--js .rating__stars { pointer-events: auto; cursor: pointer; }
+
+/* Lo que se está señalando todavía no es la nota: se distingue de lo elegido. */
+.rating--preview .rating__layer--fill { opacity: 0.65; }
+
+/* El botón nace oculto y lo destapa la isla del navegador. Su fila está
+   reservada arriba, así que aparecer no mueve nada de sitio. */
+.rating__clear {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-neutral-600);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rating__clear:hover,
+.rating__clear:focus-visible {
+  color: var(--color-accent);
+}
+
+.rating__clear[hidden] { display: none; }
+
+.rating__value {
+  grid-column: 2;
+  grid-row: 1;
+  font-weight: 800;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rating[data-half="0"] { --rating-relleno: 0%; }
+.rating[data-half="1"] { --rating-relleno: 5%; }
+.rating[data-half="2"] { --rating-relleno: 10%; }
+.rating[data-half="3"] { --rating-relleno: 15%; }
+.rating[data-half="4"] { --rating-relleno: 20%; }
+.rating[data-half="5"] { --rating-relleno: 25%; }
+.rating[data-half="6"] { --rating-relleno: 30%; }
+.rating[data-half="7"] { --rating-relleno: 35%; }
+.rating[data-half="8"] { --rating-relleno: 40%; }
+.rating[data-half="9"] { --rating-relleno: 45%; }
+.rating[data-half="10"] { --rating-relleno: 50%; }
+.rating[data-half="11"] { --rating-relleno: 55%; }
+.rating[data-half="12"] { --rating-relleno: 60%; }
+.rating[data-half="13"] { --rating-relleno: 65%; }
+.rating[data-half="14"] { --rating-relleno: 70%; }
+.rating[data-half="15"] { --rating-relleno: 75%; }
+.rating[data-half="16"] { --rating-relleno: 80%; }
+.rating[data-half="17"] { --rating-relleno: 85%; }
+.rating[data-half="18"] { --rating-relleno: 90%; }
+.rating[data-half="19"] { --rating-relleno: 95%; }
+.rating[data-half="20"] { --rating-relleno: 100%; }
+
+@media (pointer: coarse) {
+  /* 44 px de alto en lo que se pulsa. El ancho lo da la pista entera del
+     deslizador, que se arrastra: no hay que acertar en media estrella. */
+  .rating__range { height: 44px; }
+  .rating { --rating-tamano: 28px; }
+}
+
+@media (max-width: 420px) {
+  .rating { --rating-tamano: 26px; }
+}

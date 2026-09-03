@@ -38,11 +38,15 @@ export async function runLibraryBackup(env: Bindings, requestId: string): Promis
   const payload = {
     generatedAt: now.toISOString(),
     environment: env.ENVIRONMENT,
-    schema: '0003_books',
+    schema: '0004_movil',
     libraryBooks: books,
     documents: documentData.documents,
     documentProgress: documentData.progress,
     documentAnnotations: documentData.annotations,
+    // Las páginas marcadas llegaron con la aplicación del móvil. Van aquí desde
+    // el primer día: una tabla que no entra en la copia es una tabla que se
+    // pierde entera, y sólo se descubre al restaurar.
+    documentBookmarks: documentData.bookmarks,
   };
 
   // `CompressionStream` es API web estándar y va nativa en el runtime: no hay
@@ -59,6 +63,7 @@ export async function runLibraryBackup(env: Bindings, requestId: string): Promis
       books: String(books.length),
       documents: String(documentData.documents.length),
       annotations: String(documentData.annotations.length),
+      bookmarks: String(documentData.bookmarks.length),
     },
   });
 

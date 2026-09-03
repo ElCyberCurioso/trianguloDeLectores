@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tinta y hueso de la marca. El rojo es el único acento y significa algo. -->
+    <color name="fondo">#1A1918</color>
+    <color name="tinta">#201E1D</color>
+    <color name="hueso">#F3F2F2</color>
+    <color name="acento">#EC3013</color>
+</resources>

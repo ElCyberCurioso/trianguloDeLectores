@@ -1,6 +1,6 @@
 import type { Bindings } from '../../types/env';
 import type { ReviewDetail } from '../../db/repos/reviews';
-import { CONTENT_TYPE_LABELS } from '../../types/domain';
+import { CONTENT_TYPE_LABELS, halfToScore } from '../../types/domain';
 import { variantUrl } from './images';
 
 /** Mapea nuestro tipo de contenido al tipo de Schema.org más ajustado. */
@@ -51,8 +51,12 @@ export function reviewJsonLd(env: Bindings, review: ReviewDetail): string {
     itemReviewed,
     reviewRating: {
       '@type': 'Rating',
-      // La nota se guarda ya como entero 0..10, que es la escala publicada.
-      ratingValue: review.rating,
+      /*
+       * La nota se guarda en medios puntos (0..20) y aquí se publica en la
+       * escala real, 0..10 con medio punto. `schema.org` espera el número tal
+       * como se muestra: mandar el entero interno anunciaría un 15 sobre 10.
+       */
+      ratingValue: halfToScore(review.ratingHalf),
       bestRating: 10,
       worstRating: 0,
     },

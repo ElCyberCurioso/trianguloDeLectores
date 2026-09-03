@@ -4,9 +4,9 @@ import type { SessionUser } from '../lib/auth';
 import type { WatchlistRow } from '../../db/repos/watchlist';
 import { notFound, badRequest, conflict } from '../lib/http';
 import { invalidateWatchlist } from '../lib/cache';
-import { uniqueSlug } from '../lib/slug';
+import { uniqueSlug, slugify } from '../lib/slug';
 import { escapeHtml } from '../lib/sanitize';
-import type { WatchlistStatus } from '../../types/domain';
+import type { ContentType, WatchlistStatus } from '../../types/domain';
 
 export type WatchlistAction =
   | 'start'
@@ -30,6 +30,16 @@ export class WatchlistService {
     const id = crypto.randomUUID();
     const now = Date.now();
 
+    /*
+     * Si la obra ya está reseñada, el pendiente nace enlazado y terminado.
+     *
+     * No se rechaza el alta: quien lo escribe no tiene por qué acordarse de lo
+     * que reseñó hace dos años, y un error que sólo dice «ya existe» obliga a
+     * ir a buscarlo. Se guarda, se enlaza y desaparece de la cola, que es el
+     * resultado que se quería. La lista pública no llega a verlo.
+     */
+    const yaResenada = await this.resenaDelMismoTitulo(input.titleEs, input.contentType);
+
     await this.c.watchlist.insert({
       id,
       titleEs: input.titleEs,
@@ -41,7 +51,9 @@ export class WatchlistService {
       note: input.note ?? null,
       sourceUrl: input.sourceUrl && input.sourceUrl.length ? input.sourceUrl : null,
       priority: input.priority,
-      status: input.status,
+      status: yaResenada ? 'DONE' : input.status,
+      reviewId: yaResenada?.id ?? null,
+      completedAt: yaResenada ? now : null,
       isPublic: input.isPublic ? 1 : 0,
       coverKey: input.coverKey ?? null,
       coverAlt: input.coverAlt ?? null,
@@ -142,6 +154,64 @@ export class WatchlistService {
     return {};
   }
 
+  /**
+   * Enlaza con su reseña el pendiente que trate de la misma obra.
+   *
+   * Se llama al crear una reseña. Sin esto, escribir la reseña «a mano» —sin
+   * usar el botón de convertir— dejaba el pendiente en la cola conviviendo con
+   * ella: la misma obra anunciada como «por ver» y publicada como reseña a la
+   * vez, que es lo que no puede pasar.
+   *
+   * El pendiente no se borra: queda como terminado y apuntando a su reseña, que
+   * es lo que permite saber de dónde salió y volver atrás si la reseña se
+   * elimina.
+   */
+  async enlazarPendienteDe(
+    reviewId: string,
+    titleEs: string,
+    contentType: ContentType,
+    actor: SessionUser,
+  ): Promise<string | null> {
+    const candidatos = await this.c.watchlist.activosSinResena(contentType);
+    const buscado = slugify(titleEs);
+    const item = candidatos.find((c) => slugify(c.titleEs) === buscado);
+    if (!item) return null;
+
+    const now = Date.now();
+    await this.c.watchlist.update(item.id, {
+      status: 'DONE',
+      reviewId,
+      completedAt: now,
+      updatedAt: now,
+    });
+
+    await this.c.audit.record({
+      actorId: actor.id,
+      actorRole: actor.role,
+      action: 'watchlist.link',
+      entityType: 'watchlist',
+      entityId: item.id,
+      metadata: { reviewId, titleEs: item.titleEs, automatico: true },
+    });
+
+    await invalidateWatchlist(this.c.env);
+    return item.id;
+  }
+
+  /**
+   * ¿Hay ya una reseña de esta obra? Se compara por título normalizado y tipo
+   * de contenido, no por slug: el slug de una reseña puede llevar sufijo o
+   * haberse editado a mano, y entonces dejaría de casar con su propio título.
+   */
+  private async resenaDelMismoTitulo(
+    titleEs: string,
+    contentType: ContentType,
+  ): Promise<{ id: string } | null> {
+    const buscado = slugify(titleEs);
+    const vivas = await this.c.reviews.titulosVivos(contentType);
+    return vivas.find((r) => slugify(r.titleEs) === buscado) ?? null;
+  }
+
   private async setStatus(id: string, status: WatchlistStatus, completedAt: number | null): Promise<void> {
     await this.c.watchlist.update(id, { status, completedAt, updatedAt: Date.now() });
   }
@@ -177,7 +247,7 @@ export class WatchlistService {
       durationMin: null,
       episodes: null,
       volumes: null,
-      rating: 0,
+      ratingHalf: 0,
       summary: null,
       bodyHtml,
       hasSpoilers: 0,

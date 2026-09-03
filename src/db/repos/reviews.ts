@@ -30,7 +30,8 @@ export interface ReviewListItem {
   contentType: ContentType;
   year: number | null;
   creator: string | null;
-  rating: number;
+  /** La nota en medios puntos: 0..20. Se pinta con `formatScore()`. */
+  ratingHalf: number;
   commentCount: number;
   publishedAt: number | null;
   updatedAt: number;
@@ -84,7 +85,7 @@ const listColumns = {
   contentType: reviews.contentType,
   year: reviews.year,
   creator: reviews.creator,
-  rating: reviews.rating,
+  ratingHalf: reviews.ratingHalf,
   commentCount: reviews.commentCount,
   publishedAt: reviews.publishedAt,
   updatedAt: reviews.updatedAt,
@@ -106,7 +107,7 @@ function orderFor(sort: ReviewSort) {
     case 'oldest':
       return [asc(publishedOrCreated)];
     case 'rating':
-      return [desc(reviews.rating), desc(publishedOrCreated)];
+      return [desc(reviews.ratingHalf), desc(publishedOrCreated)];
     case 'comments':
       return [desc(reviews.commentCount), desc(publishedOrCreated)];
     case 'recent':
@@ -273,7 +274,7 @@ export class ReviewRepository {
       durationMin: row.durationMin,
       episodes: row.episodes,
       volumes: row.volumes,
-      rating: row.rating,
+      ratingHalf: row.ratingHalf,
       summary: row.summary,
       bodyHtml: row.bodyHtml,
       hasSpoilers: row.hasSpoilers,
@@ -318,17 +319,30 @@ export class ReviewRepository {
     return this.findOne(eq(reviews.id, id), opts.includeDrafts === true);
   }
 
+  /**
+   * Reseñas vivas de un tipo de contenido, con lo justo para emparejarlas por
+   * título con la cola de pendientes. Se excluyen las borradas: una reseña en
+   * la papelera no debe impedir que su obra vuelva a la lista.
+   */
+  async titulosVivos(contentType: ContentType): Promise<Array<{ id: string; titleEs: string }>> {
+    return this.db
+      .select({ id: reviews.id, titleEs: reviews.titleEs })
+      .from(reviews)
+      .where(and(eq(reviews.contentType, contentType), isNull(reviews.deletedAt)))
+      .all();
+  }
+
   async slugIsFree(slug: string, exceptId?: string): Promise<boolean> {
     const row = await this.db.select({ id: reviews.id }).from(reviews).where(eq(reviews.slug, slug)).get();
     return !row || row.id === exceptId;
   }
 
   async insert(values: typeof reviews.$inferInsert): Promise<void> {
-    await this.db.insert(reviews).values(values);
+    await this.db.insert(reviews).values(conNotaHeredada(values));
   }
 
   async update(id: string, values: Partial<typeof reviews.$inferInsert>): Promise<void> {
-    await this.db.update(reviews).set(values).where(eq(reviews.id, id));
+    await this.db.update(reviews).set(conNotaHeredada(values)).where(eq(reviews.id, id));
   }
 
   async setGenres(reviewId: string, genreIds: string[]): Promise<void> {
@@ -409,4 +423,18 @@ export class ReviewRepository {
       .get();
     return row?.value ?? 0;
   }
+}
+
+/**
+ * Rellena la columna heredada `rating` a partir de la nota real.
+ *
+ * `reviews.rating` es un entero 0..10 con CHECK y NOT NULL que ya no lee nadie
+ * (ver `0005_nota_media.sql`), pero sigue existiendo y su restricción sigue
+ * viva: una fila escrita sin ella fallaría, y una escrita con el valor viejo
+ * mentiría. Se deriva **aquí**, en el único sitio por el que pasan todas las
+ * escrituras, para que ningún llamador tenga que acordarse.
+ */
+function conNotaHeredada<T extends { ratingHalf?: number }>(values: T): T {
+  if (values.ratingHalf === undefined) return values;
+  return { ...values, rating: Math.round(values.ratingHalf / 2) };
 }

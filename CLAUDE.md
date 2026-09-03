@@ -75,8 +75,9 @@ Reglas que no se rompen:
    llega a contraste AA.
 4. **Las reglas de 1 px y 2 px no se sustituyen por aire**: 2 px entre secciones
    y bajo la cabecera, 1 px dentro de una sección.
-5. **Las notas van sobre 10 y con coma** (`formatScore`). Internamente siguen
-   siendo un entero 0..10.
+5. **Las notas van sobre 10 y con coma** (`formatScore`), siempre con un
+   decimal: «8,0» y «7,5» ocupan lo mismo y una columna de notas no baila.
+   Internamente son un entero en **medios puntos**, 0..20.
 6. **Las portadas, en color; los fotogramas del cuerpo, en blanco y negro**
    (`filter: grayscale(1) contrast(1.08)` sólo en `.prose img`). Desvío
    deliberado del kit, pedido: el kit pone todas las imágenes en gris, pero la
@@ -127,9 +128,39 @@ Reglas que no se rompen:
 - Migraciones **aditivas** en el pipeline. Cualquier cambio destructivo se aplica
   a mano y con copia de seguridad.
 - El acceso a D1 vive sólo en `src/db/repos/*`. Ninguna vista ni ruta escribe SQL.
-- La puntuación se almacena como entero 0..10, que es también la escala
-  publicada. Se muestra con `formatScore()`. No la conviertas a decimal en la
-  base de datos.
+- **La puntuación se almacena en medios puntos**: un entero 0..20 en
+  `reviews.rating_half`, que son 0,0 a 10,0 de medio en medio. No la guardes
+  como decimal: 7,5 no tiene representación exacta en binario y un entero se
+  compara, se ordena y se indexa sin sorpresas. La conversión vive sólo en
+  `scoreToHalf()` / `halfToScore()` y se pinta con `formatScore()`.
+- **`reviews.rating` es columna heredada y no la lee nadie.** Sigue existiendo
+  con su CHECK 0..10 y su NOT NULL porque cambiarlos obliga a reconstruir la
+  tabla, que es destructivo. La rellena `conNotaHeredada()` en el repositorio
+  —el único sitio por el que pasan todas las escrituras— con la nota redondeada.
+  Retirarla se hará a mano y con copia de seguridad.
+- **El campo del formulario se llama `ratingHalf` y lleva el entero**, no la
+  nota con decimales: así no hay que decidir qué hacer cuando un teclado
+  español escribe «7,5» con coma en vez de «7.5».
+- **La nota se pone con estrellas, y debajo hay un `input[type=range]`**, no un
+  puñado de botones ni veintiún radios. Es lo que hace que el control funcione
+  sin JavaScript, se maneje con el teclado y tenga un objetivo táctil grande en
+  el teléfono, donde diez estrellas partidas por la mitad dejarían zonas de
+  pulsación de quince píxeles. Las estrellas son dos capas superpuestas y la de
+  acento se recorta: el `overflow` es lo que dibuja la media estrella.
+- **El relleno de las estrellas va por `data-half` y una regla de CSS por
+  valor**, nunca por `style=`: la CSP no lleva `unsafe-inline`. Son veintiuna
+  líneas porque `attr()` todavía no vale para longitudes.
+- **Con JavaScript, el puntero habla con las estrellas y no con el
+  deslizador** (`.rating--js` invierte los `pointer-events`). El deslizador
+  reparte su anchura contando el ancho del pulgar, así que su mapeo y el de las
+  estrellas no coinciden: pulsar sobre la séptima dejaba un 6,5. El deslizador
+  se queda para el teclado y los lectores de pantalla.
+- **Al señalar se previsualiza, no se fija** (`.rating--preview`). Sólo el ratón
+  previsualiza: un dedo que arrastra fija directamente.
+- **El cero se pone con un botón**, no pulsando en el borde: la mitad izquierda
+  de la primera estrella vale 0,5 y con el ratón no habría forma de volver a
+  «sin nota». Nace oculto y lo destapa la isla, con su fila reservada de
+  antemano para no empujar el formulario al aparecer.
 - **Un punto y coma dentro de un comentario SQL parte la sentencia** para el
   troceador de D1 remoto, aunque en local funcione. No los pongas.
 - Los comandos de base de datos usan el **binding** (`DB`), no el nombre de la
@@ -233,6 +264,91 @@ otra.
   registros —no los ficheros— a `backups/library/<fecha>.json.gz` con
   `CompressionStream`, y conserva 30 días.
 
+## Reglas de la lista de pendientes
+
+- **Un pendiente y su reseña no coexisten.** En cuanto una obra tiene reseña,
+  su entrada en la cola queda enlazada (`review_id`) y terminada, y **el
+  listado público filtra por el vínculo, no por el estado**: un item convertido
+  al que alguien devuelve a «pendiente» volvería a la portada conviviendo con
+  su propia reseña.
+- **El emparejado es automático en los dos sentidos** y por título normalizado
+  + tipo de contenido (`enlazarPendienteDe`, `resenaDelMismoTitulo`): al crear
+  o publicar una reseña, y al dar de alta un pendiente cuya obra ya está
+  reseñada. Antes esto sólo pasaba con el botón «convertir», así que escribir
+  la reseña a mano dejaba el duplicado.
+- **Los títulos se comparan con `slugify()` en el Worker, no con `LOWER()` en
+  SQL**: SQLite no toca los acentos, así que «Amélie» y «amelie» no le parecen
+  lo mismo.
+- **Dar de alta un pendiente ya reseñado no es un error**: se guarda enlazado y
+  fuera de la cola. Quien lo escribe no tiene por qué acordarse de lo que
+  reseñó hace dos años, y un «ya existe» obliga a ir a buscarlo.
+
+## Reglas de la aplicación Android (`android/`)
+
+Un lector de PDF para el teléfono, en el mismo repositorio. Funciona solo con
+documentos del dispositivo y, si se empareja, sincroniza con la biblioteca
+privada. El APK se descarga de `/aplicacion` del sitio público.
+
+- **La aplicación no usa la sesión del navegador.** La cookie caduca a las 2 h
+  de inactividad y el CSRF exige un `Origin` que un cliente nativo no manda.
+  Su credencial es un token de dispositivo en `Authorization: Bearer`
+  (`device_tokens`, migración `0004_movil.sql`), guardado **hasheado** con
+  SHA-256, de 90 días renovables y revocable de uno en uno. No relajes el CSRF
+  ni el prefijo `__Host-` para que entre el móvil: esa es exactamente la salida
+  que se descartó.
+- **El emparejamiento pasa por `attemptLogin()`** con `establishSession: false`.
+  Así hereda el límite global, el hash señuelo, el bloqueo por intentos y la
+  auditoría. No escribas un login paralelo para el móvil.
+- **El guardián de `/api/movil` va antes que sus rutas**, con una única
+  exención explícita (`POST /api/movil/sesion`). Se monta **antes** que
+  `booksRoutes` en `src/server/index.tsx` para poder aplicar el suyo, y lo que
+  no case cae igualmente en el guardián de la cookie, que responde 401.
+- **Los conflictos los decide SQLite, no JavaScript.** `mergeProgress`,
+  `mergeAnnotation` y `mergeBookmark` comparan dentro del `ON CONFLICT DO
+  UPDATE` (`setWhere`). Leer antes y decidir después deja una ventana entre la
+  lectura y la escritura.
+- **Las marcas de tiempo del cliente se recortan al reloj del servidor**, con un
+  minuto de margen. Un teléfono con la fecha adelantada ganaría todos los
+  conflictos futuros.
+- **Las anotaciones se borran en lógico** (`deleted_at`), y toda lectura filtra
+  por `IS NULL`. Sin lápida, lo borrado en la web revive en la siguiente
+  sincronización del teléfono.
+- **La bajada de sincronización devuelve `documentIds` entero.** Las fichas de
+  documento sí se borran de verdad, así que es la única forma de que el móvil
+  se entere de una baja.
+- **El teléfono sube y luego baja, en ese orden.** Al revés, lo del servidor
+  pisaría cambios locales todavía sin enviar.
+- **`PdfRenderer` no tiene capa de texto**, y eso es lo que decide la interfaz:
+  no hay selección de palabras, ni búsqueda, ni `quote` en las anotaciones. Los
+  subrayados se hacen arrastrando un recuadro y se guardan en las mismas
+  coordenadas normalizadas 0..1 que el lector web. No prometas selección de
+  texto sin cambiar de motor.
+- **El zoom es por botones y doble toque, nunca por pellizco**: el pellizco
+  compite con el arrastre, que es el gesto que dibuja un subrayado. Además así
+  la página se repinta al ampliar en vez de estirarse.
+- **El token se cifra con el Keystore de Android** (AES/GCM) y
+  `allowBackup="false"`. La copia de seguridad de Google no puede llevarse una
+  credencial de este teléfono a otro.
+- **Ningún permiso de almacenamiento.** Los PDF se abren con
+  `ACTION_OPEN_DOCUMENT` y permiso persistente sobre esa URI. Un `ACTION_VIEW`
+  que llega de otra aplicación no admite permiso persistente: se importa como
+  efímero y se dice por qué.
+- **Kotlin admite comentarios de bloque anidados**: un `/*` dentro de un KDoc
+  abre otro comentario que nunca se cierra y el fichero entero deja de
+  compilar con «Unclosed comment» al final. No escribas rutas con comodín
+  dentro de un comentario.
+- **La compilación contra staging lleva `applicationId` propio** (sufijo
+  `.staging`) y su nombre en el lanzador. Sin eso, instalar el APK de staging
+  encima del de producción lo sustituye —misma firma— y hereda su base de
+  datos: documentos de un entorno apuntando al otro.
+- **El almacén de claves de firma no vive en el repositorio.** Se pasa por
+  propiedades de Gradle (`-PtdlKeystore=…`). Sin ellas se compila igual, sin
+  firmar.
+- **`npm run apk:publish` lee la versión del `build.gradle.kts`**, no de un
+  argumento, y sube el manifiesto **después** del binario. Un manifiesto que
+  anuncia una versión y entrega otra no se nota hasta que alguien no recibe la
+  actualización.
+
 ## Reglas de operación y despliegue
 
 La cuenta de Cloudflare está en **plan Free**, y eso decide cosas del código:
@@ -286,21 +402,44 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
 
 ## Estado del proyecto
 
+*Al 3 de septiembre de 2026.*
+
 - Desplegado en **staging** y en **producción**:
   `https://triangulodelectores.site` y `https://staging.triangulodelectores.site`,
   con la biblioteca privada en `books.triangulodelectores.site` y
-  `books-staging.triangulodelectores.site`. Las cuatro migraciones aplicadas en
-  los dos entornos.
+  `books-staging.triangulodelectores.site`.
+- **Los dos entornos no llevan el mismo código.** Staging va por delante:
+  tiene las cinco migraciones (`0004_movil` y `0005_nota_media` incluidas), la
+  API de la aplicación Android, la descarga del APK, el medio punto en las notas
+  y el control de estrellas. **Producción se quedó en `f169a49`**: tres
+  migraciones y nada de eso. Desplegarla exige aplicar antes las dos migraciones
+  que le faltan.
 - **El sitio público está vacío**: 0 reseñas y 0 pendientes en producción. Lo
   que sí tiene contenido es la biblioteca privada, con el catálogo de 229 libros
   importado desde MyLibrary.
+- **La aplicación Android existe y compila**, en `android/`. El APK firmado está
+  publicado en el bucket de staging y se descarga de
+  `staging.triangulodelectores.site/aplicacion`. **Nunca se ha ejecutado en un
+  teléfono**: no hay dispositivo ni emulador en la máquina de desarrollo, así
+  que está verificada de compilación y firma, no de uso.
+- **El almacén de claves de firma vive fuera del repositorio**, en
+  `~/.tdl/tdl-release.jks`, con su contraseña en `~/.tdl/firma.properties`.
+  Perderlo significa no poder publicar más actualizaciones de la aplicación:
+  cópialo a un sitio seguro. El APK de staging lleva `applicationId` propio
+  (`…lector.staging`), así que convive con el de producción en el mismo teléfono.
 - `www.triangulodelectores.site` **devuelve 522**: le queda un registro DNS
   apuntando a un origen muerto, el mismo caso que tuvo el apex. Sin resolver.
 - `wrangler.jsonc` no tiene marcadores pendientes: dominios, D1, KV, R2 y claves
   públicas de Turnstile son reales en los dos entornos.
-- Hay trabajo **sin commitear** —toda la biblioteca privada y su importación—, y
-  **producción está corriendo ese código**: no hay ningún punto de git al que
-  volver. `CAMBIOS-PENDIENTES.md` lo detalla.
+- Hay trabajo **sin commitear** —la aplicación Android y su API, el medio punto
+  en las notas, la exclusividad entre pendientes y reseñas, y el control de
+  estrellas—, y **producción está corriendo código que sólo existe en el árbol
+  de trabajo**: no hay ningún punto de git al que volver.
+  `CAMBIOS-PENDIENTES.md` lo detalla.
+- Pendiente en el **panel de Cloudflare**, que ningún script puede hacer: borrar
+  el registro DNS de `www` y sustituirlo por una redirección al apex; SSL/TLS en
+  Full (Strict) y Always Use HTTPS; las reglas de WAF y Rate Limiting del
+  README §12; y comprobar que el bucket R2 de producción **no** es público.
 - El informe de auditoría con las mejoras aún no implementadas (páginas de
   categoría y género, canonical de las URLs filtradas, paginación de
   comentarios, buscador sobre FTS5, reseñas relacionadas) vive en un artefacto

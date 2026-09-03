@@ -264,7 +264,8 @@ async function readReviewForm(c: Context<AppEnv>) {
     durationMin: F.num(body, 'durationMin') ?? null,
     episodes: F.num(body, 'episodes') ?? null,
     volumes: F.num(body, 'volumes') ?? null,
-    rating: F.num(body, 'rating') ?? 0,
+    // La nota viaja en medios puntos: 0..20 son 0,0 a 10,0.
+    ratingHalf: F.num(body, 'ratingHalf') ?? 0,
     summary: F.str(body, 'summary', 600),
     bodyHtml: F.strOrEmpty(body, 'bodyHtml', 400_000),
     hasSpoilers: F.bool(body, 'hasSpoilers'),

@@ -19,7 +19,7 @@ const HOUR = 60 * MINUTE;
 export const RATE_RULES: Record<string, RateRule> & {
   login: RateRule; loginGlobal: RateRule; comment: RateRule; report: RateRule;
   upload: RateRule; adminWrite: RateRule; publicApi: RateRule; import: RateRule;
-  recommendation: RateRule;
+  recommendation: RateRule; mobileSync: RateRule;
 } = {
   login: { limit: 5, windowMs: 15 * MINUTE, penaltyMs: 15 * MINUTE },
   loginGlobal: { limit: 50, windowMs: HOUR, penaltyMs: 10 * MINUTE },
@@ -37,11 +37,19 @@ export const RATE_RULES: Record<string, RateRule> & {
   publicApi: { limit: 120, windowMs: MINUTE },
   // Recomendar es un acto ocasional: cinco por hora sobran de largo.
   recommendation: { limit: 5, windowMs: HOUR, penaltyMs: HOUR },
+  /*
+   * Sincronización de la aplicación Android. Se cuenta **por dispositivo**, no
+   * por IP: un teléfono en datos móviles comparte IP con media ciudad, y con
+   * identidad de IP el límite lo agotaría gente que no se conoce. Leer mientras
+   * se anota dispara una tanda cada pocos segundos, así que 600 por hora deja
+   * sitio de sobra y sigue siendo un techo.
+   */
+  mobileSync: { limit: 600, windowMs: HOUR },
 };
 
 export type RateScope =
   | 'login' | 'loginGlobal' | 'comment' | 'report' | 'upload' | 'adminWrite' | 'publicApi'
-  | 'recommendation' | 'import';
+  | 'recommendation' | 'import' | 'mobileSync';
 
 function stubFor(env: Bindings, scope: RateScope, identity: string) {
   const id = env.RATE_LIMITER.idFromName(`${scope}:${identity}`);

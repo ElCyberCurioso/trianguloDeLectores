@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+      El tema de Android sólo pinta lo que se ve **antes** de que Compose tome
+      el control: fondo de la ventana y barras del sistema. Todo lo demás vive
+      en `ui/theme/Tema.kt`. Sin este fondo, al abrir la aplicación en tema
+      oscuro se ve un fogonazo blanco.
+    -->
+    <style name="Theme.Tdl" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fondo</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="p">shortEdges</item>
+    </style>
+</resources>

@@ -1,6 +1,7 @@
 import { env, SELF } from 'cloudflare:test';
 import { hashPassword, pseudonymize } from '../../src/server/lib/crypto';
 import { issueFormToken } from '../../src/server/lib/formtoken';
+import { scoreToHalf } from '../../src/types/domain';
 
 export const ORIGIN = 'http://localhost:8787';
 export const ADMIN_EMAIL = 'admin@test.local';
@@ -98,6 +99,7 @@ export async function readCsrfToken(cookie: string): Promise<string> {
 export interface CreateReviewOptions {
   title?: string;
   status?: 'DRAFT' | 'PUBLISHED';
+  /** La nota tal como se escribe: de 0 a 10, admite medio punto. */
   rating?: number;
   hasSpoilers?: boolean;
   extra?: Record<string, string>;
@@ -115,7 +117,7 @@ export async function createReview(
     categoryId: CATEGORY_ID,
     year: '2021',
     creator: 'Denis Villeneuve',
-    rating: String(options.rating ?? 9),
+    ratingHalf: String(scoreToHalf(options.rating ?? 9)),
     status: options.status ?? 'PUBLISHED',
     commentsMode: 'INHERIT',
     summary: 'Una adaptación monumental.',

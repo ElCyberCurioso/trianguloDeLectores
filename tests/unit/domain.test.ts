@@ -1,38 +1,49 @@
 import { describe, it, expect } from 'vitest';
-import { ratingToStars, starsToRating, formatStars, CONTENT_TYPE_LABELS, CONTENT_TYPES } from '../../src/types/domain';
+import {
+  scoreToHalf, halfToScore, formatScore, scoreOptions, MAX_SCORE_HALF,
+  CONTENT_TYPE_LABELS, CONTENT_TYPES,
+} from '../../src/types/domain';
 import { slugify, uniqueSlug } from '../../src/server/lib/slug';
 import { decideTransition } from '../../src/do/moderation-rules';
 
-describe('puntuación en medias estrellas', () => {
-  it('convierte el entero interno a estrellas', () => {
-    expect(ratingToStars(0)).toBe(0);
-    expect(ratingToStars(1)).toBe(0.5);
-    expect(ratingToStars(5)).toBe(2.5);
-    expect(ratingToStars(9)).toBe(4.5);
-    expect(ratingToStars(10)).toBe(5);
+describe('la nota, en medios puntos', () => {
+  it('convierte la nota escrita a lo que se guarda', () => {
+    expect(scoreToHalf(0)).toBe(0);
+    expect(scoreToHalf(7.5)).toBe(15);
+    expect(scoreToHalf(8)).toBe(16);
+    expect(scoreToHalf(10)).toBe(20);
+  });
+
+  it('redondea al medio punto más cercano en vez de rechazar', () => {
+    // Una nota con más precisión de la que la escala admite se ajusta: es
+    // preferible a un 400 por escribir 7,3 en un campo que dice «de 0 a 10».
+    expect(scoreToHalf(7.3)).toBe(15);
+    expect(scoreToHalf(7.24)).toBe(14);
   });
 
   it('acota fuera de rango', () => {
-    expect(ratingToStars(-3)).toBe(0);
-    expect(ratingToStars(99)).toBe(5);
+    expect(scoreToHalf(-3)).toBe(0);
+    expect(scoreToHalf(99)).toBe(20);
+    expect(halfToScore(-1)).toBe(0);
+    expect(halfToScore(999)).toBe(10);
   });
 
-  it('convierte estrellas a entero interno', () => {
-    expect(starsToRating(0)).toBe(0);
-    expect(starsToRating(2.5)).toBe(5);
-    expect(starsToRating(5)).toBe(10);
-    expect(starsToRating(7)).toBe(10);
-  });
-
-  it('es reversible en los 11 valores válidos', () => {
-    for (let value = 0; value <= 10; value++) {
-      expect(starsToRating(ratingToStars(value))).toBe(value);
+  it('es reversible en los 21 valores de la escala', () => {
+    for (let half = 0; half <= MAX_SCORE_HALF; half++) {
+      expect(scoreToHalf(halfToScore(half))).toBe(half);
     }
   });
 
-  it('formatea con coma decimal en español', () => {
-    expect(formatStars(7)).toBe('3,5');
-    expect(formatStars(8)).toBe('4');
+  it('formatea siempre con un decimal y coma, como el brand kit', () => {
+    expect(formatScore(15)).toBe('7,5');
+    expect(formatScore(16)).toBe('8,0');
+    expect(formatScore(0)).toBe('0,0');
+    expect(formatScore(20)).toBe('10,0');
+  });
+
+  it('ofrece los 21 valores para pintar el desplegable', () => {
+    expect(scoreOptions()).toHaveLength(21);
+    expect(scoreOptions().at(-1)).toBe(20);
   });
 });
 

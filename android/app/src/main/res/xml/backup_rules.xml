@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  No hay copia de seguridad: `allowBackup="false"` en el manifiesto. Este
+  fichero existe sólo para dejarlo dicho en un sitio donde se busca.
+  La credencial del dispositivo no debe viajar a otro teléfono.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="credenciales.xml" />
+</full-backup-content>

@@ -6,6 +6,7 @@ import { invalidatePublicContent } from '../lib/cache';
 import type { SessionUser } from '../lib/auth';
 import type { ReviewDetail } from '../../db/repos/reviews';
 import { notFound, badRequest } from '../lib/http';
+import { WatchlistService } from './watchlist';
 
 /**
  * Reglas de negocio de las reseñas. El HTML del editor se sanea **aquí**, en
@@ -45,7 +46,7 @@ export class ReviewService {
       durationMin: input.durationMin ?? null,
       episodes: input.episodes ?? null,
       volumes: input.volumes ?? null,
-      rating: input.rating,
+      ratingHalf: input.ratingHalf,
       summary: summary ?? null,
       bodyHtml,
       hasSpoilers: input.hasSpoilers ? 1 : 0,
@@ -80,6 +81,15 @@ export class ReviewService {
       entityId: id,
       metadata: { slug, status: input.status },
     });
+
+    /*
+     * Si esta obra estaba en la cola de pendientes, el pendiente se enlaza y se
+     * da por terminado. La misma obra no puede estar anunciada como «por ver» y
+     * publicada como reseña a la vez, y hasta ahora eso pasaba en cuanto la
+     * reseña se escribía a mano en vez de con el botón de convertir.
+     */
+    await new WatchlistService(this.c).enlazarPendienteDe(id, input.titleEs, input.contentType, actor);
+
     if (publishing) await invalidatePublicContent(this.c.env);
     return id;
   }
@@ -106,7 +116,7 @@ export class ReviewService {
       durationMin: input.durationMin ?? null,
       episodes: input.episodes ?? null,
       volumes: input.volumes ?? null,
-      rating: input.rating,
+      ratingHalf: input.ratingHalf,
       summary: summary ?? null,
       bodyHtml,
       hasSpoilers: input.hasSpoilers ? 1 : 0,
@@ -139,6 +149,13 @@ export class ReviewService {
       entityId: id,
       metadata: { slug, status: input.status },
     });
+
+    // Al publicar se vuelve a intentar el emparejado con la cola de
+    // pendientes. Cubre las reseñas que ya existían como borrador antes de que
+    // esto existiera: entonces nadie enlazó nada al crearlas.
+    if (willPublish) {
+      await new WatchlistService(this.c).enlazarPendienteDe(id, input.titleEs, input.contentType, actor);
+    }
 
     // Invalidamos si estaba o pasa a estar publicada: en ambos casos cambia
     // lo que ve el público (o deja de verse).
@@ -187,7 +204,7 @@ export class ReviewService {
       durationMin: source.durationMin,
       episodes: source.episodes,
       volumes: source.volumes,
-      rating: source.rating,
+      ratingHalf: source.ratingHalf,
       summary: source.summary,
       bodyHtml: source.bodyHtml,
       hasSpoilers: source.hasSpoilers,

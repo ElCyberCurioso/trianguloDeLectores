@@ -5,9 +5,10 @@ import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_RATING_HALF_STARS, formatScore,
+  MAX_SCORE_HALF, formatScore,
 } from '../../../types/domain';
 import { variantUrl } from '../../lib/images';
+import { Icon } from '../components/icons';
 import { AdminPage, CsrfField, Field, Flash } from './shared';
 
 export interface ReviewEditorProps {
@@ -180,15 +181,7 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                 </select>
               </Field>
 
-              <Field label="Puntuación" name="rating" hint="De 0 a 10, con medio punto de precisión.">
-                <select id="f-rating" class="select" name="rating">
-                  {Array.from({ length: MAX_RATING_HALF_STARS + 1 }).map((_, value) => (
-                    <option value={value} selected={(review?.rating ?? 0) === value}>
-                      {formatScore(value)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <EstrellasNota half={review?.ratingHalf ?? 0} />
 
               <label class="check">
                 <input type="checkbox" name="hasSpoilers" value="1" checked={review?.hasSpoilers === 1} />
@@ -387,5 +380,80 @@ const PlatformRow: FC<{
     <button type="button" class="btn btn--link btn--danger" data-platform-remove aria-label="Quitar plataforma">
       ×
     </button>
+  </div>
+);
+
+
+/**
+ * La nota, en estrellas y con medio punto.
+ *
+ * Debajo hay un `input[type=range]` de verdad, no un puñado de botones: es lo
+ * que hace que el control funcione **sin JavaScript**, se pueda usar con el
+ * teclado (las flechas mueven de medio en medio) y tenga un objetivo táctil
+ * grande en un teléfono, donde diez estrellas partidas por la mitad dejarían
+ * zonas de pulsación de quince píxeles.
+ *
+ * Las estrellas son la piel: dos capas idénticas superpuestas —una apagada y
+ * otra en acento— de las que la de acento se recorta al ancho que corresponde a
+ * la nota. Ese ancho lo fija el CSS a partir de `data-half`, no un `style=`:
+ * la CSP no lleva `unsafe-inline` y los valores dinámicos van por atributos
+ * `data-*`.
+ *
+ * Sin JavaScript el relleno se queda en el valor guardado hasta que se envía el
+ * formulario. El control sigue siendo utilizable: lo que no se mueve es el
+ * adorno, no la nota.
+ */
+const EstrellasNota: FC<{ half: number }> = ({ half }) => (
+  <div class="field">
+    <label class="field__label" for="f-ratingHalf">
+      Puntuación
+    </label>
+
+    <div class="rating" data-rating data-half={half}>
+      <input
+        id="f-ratingHalf"
+        class="rating__range"
+        type="range"
+        name="ratingHalf"
+        min={0}
+        max={MAX_SCORE_HALF}
+        step={1}
+        value={half}
+        data-rating-range
+        // Un lector de pantalla leería «15 de 20», que no es la nota de nadie.
+        aria-valuetext={`${formatScore(half)} sobre 10`}
+      />
+
+      <div class="rating__stars" data-rating-stars aria-hidden="true">
+        <div class="rating__layer rating__layer--base">
+          {Array.from({ length: 10 }).map(() => (
+            <Icon name="star" class="rating__star" />
+          ))}
+        </div>
+        <div class="rating__layer rating__layer--fill">
+          {Array.from({ length: 10 }).map(() => (
+            <Icon name="star" class="rating__star" />
+          ))}
+        </div>
+      </div>
+
+      <output class="rating__value" for="f-ratingHalf" data-rating-output>
+        {formatScore(half)}
+      </output>
+
+      {/*
+        Con el ratón no hay forma de volver a «sin nota»: pulsar en el borde
+        izquierdo del todo da media estrella, no cero. Con el teclado sí (Inicio
+        o flecha abajo), pero eso no lo sabe nadie.
+
+        Nace oculto y lo destapa la isla del navegador: sin JavaScript sería un
+        botón que no hace nada, y un control muerto es peor que uno ausente.
+      */}
+      <button type="button" class="rating__clear" data-rating-clear hidden>
+        Quitar la nota
+      </button>
+    </div>
+
+    <p class="field__hint">De 0 a 10, con medio punto de precisión.</p>
   </div>
 );

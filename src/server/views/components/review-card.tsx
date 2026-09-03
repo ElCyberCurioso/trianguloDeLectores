@@ -66,7 +66,7 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
             {review.year ? <span>{review.year}</span> : null}
             {review.categoryName ? <span class="card__category">{review.categoryName}</span> : null}
           </div>
-          <StarRating rating={review.rating} size="sm" />
+          <StarRating rating={review.ratingHalf} size="sm" />
           {review.summary ? <p class="card__excerpt">{review.summary}</p> : null}
         </div>
       </a>
@@ -135,7 +135,7 @@ export const ReviewLead: FC<{ review: ReviewListItem; env: Bindings }> = ({ revi
             {review.titleEs}
           </a>
         </h2>
-        <StarRating rating={review.rating} size="md" />
+        <StarRating rating={review.ratingHalf} size="md" />
         {review.summary ? <p class="lead__summary">{review.summary}</p> : null}
 
         <div class="lead__meta">

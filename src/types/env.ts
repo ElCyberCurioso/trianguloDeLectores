@@ -1,6 +1,7 @@
 import type { RateLimiter } from '../do/rate-limiter';
 import type { ModerationCoordinator } from '../do/moderation';
 import type { SessionUser } from '../server/lib/auth';
+import type { ResolvedDevice } from '../db/repos/devices';
 
 export interface Bindings {
   // --- Cloudflare resources -------------------------------------------------
@@ -51,6 +52,12 @@ export interface Variables {
   user: SessionUser | null;
   sessionId: string | null;
   csrfToken: string | null;
+  /**
+   * Dispositivo móvil autenticado por token, cuando la petición viene de la
+   * aplicación Android. Es `null` en todo lo demás: la API del móvil y el
+   * navegador no comparten credencial ni por accidente.
+   */
+  device: ResolvedDevice | null;
   startedAt: number;
 }
 

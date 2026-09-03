@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   CONTENT_TYPES, AVAILABILITY, PLATFORM_KINDS, REPORT_REASONS, REVIEW_SORTS,
-  COMMENT_STATUSES, MAX_RATING_HALF_STARS, PAGE_SIZE, MAX_PAGE_SIZE,
+  COMMENT_STATUSES, MAX_SCORE_HALF, PAGE_SIZE, MAX_PAGE_SIZE,
   WATCHLIST_STATUSES, WATCHLIST_SORTS, PRIORITIES,
   RECOMMENDATION_STATUSES, RECOMMENDATION_ACTIONS,
   LIBRARY_SORTS, LIBRARY_SORT_DEFAULT,
@@ -89,8 +89,15 @@ export const reviewInputSchema = z.object({
   durationMin: z.coerce.number().int().min(1).max(100000).optional().nullable(),
   episodes: z.coerce.number().int().min(1).max(100000).optional().nullable(),
   volumes: z.coerce.number().int().min(1).max(100000).optional().nullable(),
-  /** 0..10 (medias estrellas) */
-  rating: z.coerce.number().int().min(0).max(MAX_RATING_HALF_STARS).default(0),
+  /**
+   * La nota, en **medios puntos**: 0..20 son 0,0 a 10,0.
+   *
+   * El campo del formulario se llama igual que lo que guarda, y no `rating`
+   * con decimales, por dos motivos: un `15` no se puede confundir con «quince
+   * sobre diez», y así no hay que decidir qué hacer cuando llega «7,5» con
+   * coma —lo que escribe un teclado español— frente a «7.5».
+   */
+  ratingHalf: z.coerce.number().int().min(0).max(MAX_SCORE_HALF).default(0),
   summary: optionalText(600),
   bodyHtml: z.string().max(400_000).default(''),
   hasSpoilers: z.coerce.boolean().default(false),
@@ -312,6 +319,86 @@ export const annotationPatchSchema = z.object({
   body: nullableText(4000),
   color: z.enum(['YELLOW', 'RED', 'GREEN', 'BLUE']).optional(),
 });
+
+/**
+ * Entradas de la aplicación Android.
+ *
+ * Mismos criterios que el resto —esquemas cerrados, nada de campos no
+ * declarados—, con una diferencia: aquí llegan **marcas de tiempo del
+ * cliente**, porque son las que deciden quién gana al fusionar lo que se
+ * escribió sin red. Se aceptan como números y se recortan en el handler contra
+ * el reloj del servidor: un teléfono con la fecha adelantada no puede quedarse
+ * con la última palabra para siempre.
+ */
+
+/** Nombre con el que la persona reconoce su teléfono en la lista. */
+export const deviceLoginSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Email inválido').max(254),
+  password: z.string().min(8, 'Mínimo 8 caracteres').max(200),
+  device: trimmed(80).min(1, 'Falta el nombre del dispositivo'),
+});
+
+/** Instante en milisegundos. Ni negativo ni fuera del rango de fechas de JS. */
+const timestamp = z.number().int().min(0).max(4_102_444_800_000);
+
+const syncAnnotationSchema = z.object({
+  id: idSchema,
+  documentId: idSchema,
+  kind: z.enum(['HIGHLIGHT', 'NOTE']),
+  page: z.number().int().min(1).max(100_000),
+  rects: z.array(clampedRectSchema).max(200).default([]),
+  quote: nullableText(2000),
+  body: nullableText(4000),
+  color: z.enum(['YELLOW', 'RED', 'GREEN', 'BLUE']).default('YELLOW'),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  /** Lápida. `null` es «viva»: el borrado viaja como un cambio más. */
+  deletedAt: timestamp.nullable().default(null),
+});
+
+const syncBookmarkSchema = z.object({
+  id: idSchema,
+  documentId: idSchema,
+  page: z.number().int().min(1).max(100_000),
+  label: nullableText(200),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  deletedAt: timestamp.nullable().default(null),
+});
+
+const syncProgressSchema = z.object({
+  documentId: idSchema,
+  page: z.number().int().min(1).max(100_000),
+  scrollPct: z.number().int().min(0).max(1000).default(0),
+  updatedAt: timestamp,
+});
+
+/**
+ * Lo que sube el teléfono de una vez. Los topes son por lote, no por día: si
+ * alguien vuelve de un mes sin red, la aplicación manda varias tandas. Sin
+ * techo, una sola petición podría intentar escribir la biblioteca entera.
+ */
+export const syncPushSchema = z.object({
+  progress: z.array(syncProgressSchema).max(200).default([]),
+  annotations: z.array(syncAnnotationSchema).max(500).default([]),
+  bookmarks: z.array(syncBookmarkSchema).max(500).default([]),
+});
+
+/** Marca de agua de la última sincronización que trajo el dispositivo. */
+export const syncPullSchema = z.object({
+  desde: z.coerce.number().int().min(0).max(4_102_444_800_000).default(0),
+});
+
+/** Páginas contadas por el visor del móvil, igual que hace el del navegador. */
+export const pageCountSchema = z.object({
+  pageCount: z.number().int().min(1).max(100_000),
+});
+
+export type DeviceLoginInput = z.infer<typeof deviceLoginSchema>;
+export type SyncPushInput = z.infer<typeof syncPushSchema>;
+export type SyncAnnotationInput = z.infer<typeof syncAnnotationSchema>;
+export type SyncBookmarkInput = z.infer<typeof syncBookmarkSchema>;
+export type SyncProgressInput = z.infer<typeof syncProgressSchema>;
 
 /**
  * ISBN tal y como llega del teclado o de la cámara. Aquí sólo se comprueba la

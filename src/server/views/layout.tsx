@@ -293,6 +293,7 @@ const SiteFooter: FC<{ siteName: string }> = ({ siteName }) => (
       <nav class="site-footer__nav" aria-label="Enlaces del pie">
         <a href="/sobre">Sobre el sitio</a>
         <a href="/recomendar">Recomendar</a>
+        <a href="/aplicacion">Android</a>
         <a href="/rss.xml">RSS</a>
         <a href="/privacidad">Privacidad</a>
         <a href="/cookies">Cookies</a>

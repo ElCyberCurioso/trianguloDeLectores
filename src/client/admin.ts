@@ -252,8 +252,117 @@ function initPendingBadge(): void {
   }, 60_000);
 }
 
+
+/**
+ * La nota en estrellas.
+ *
+ * El control ya funciona sin esto: debajo hay un `input[type=range]` de verdad,
+ * y el servidor pinta el relleno que corresponde al valor guardado. Lo que
+ * añade el navegador es lo que se espera de unas estrellas — pulsar sobre una
+ * para poner esa nota, y ver mientras pasas el ratón cuál vas a poner.
+ *
+ * En cuanto hay JavaScript, el puntero deja de hablar con el deslizador y pasa
+ * a hablar con las estrellas: el deslizador reparte su anchura contando el
+ * ancho del pulgar, así que su mapeo y el de las estrellas no coinciden del
+ * todo y pulsar sobre la séptima podía dejar un 6,5. El deslizador se queda
+ * para el teclado y los lectores de pantalla, que es donde hace falta.
+ *
+ * El relleno se cambia por `data-half`, no escribiendo en `style`: la CSP no
+ * lleva `unsafe-inline` y las anchuras viven en la hoja de estilos, una regla
+ * por valor.
+ */
+function initRatingStars(): void {
+  const rating = document.querySelector<HTMLElement>('[data-rating]');
+  if (!rating) return;
+
+  const range = rating.querySelector<HTMLInputElement>('[data-rating-range]');
+  const stars = rating.querySelector<HTMLElement>('[data-rating-stars]');
+  const output = rating.querySelector<HTMLElement>('[data-rating-output]');
+  const clear = rating.querySelector<HTMLButtonElement>('[data-rating-clear]');
+  if (!range) return;
+
+  const nota = (half: number): string => (half / 2).toFixed(1).replace('.', ',');
+
+  /** Pinta un valor sin tocar el control: es lo que hace la previsualización. */
+  const pintar = (half: number): void => {
+    rating.dataset.half = String(half);
+    if (output) output.textContent = nota(half);
+  };
+
+  const pintarValor = (): void => {
+    const half = Number(range.value);
+    pintar(half);
+    // Un lector de pantalla anunciaría «15 de 20» sin esto.
+    range.setAttribute('aria-valuetext', `${nota(half)} sobre 10`);
+  };
+
+  const fijar = (half: number): void => {
+    const acotado = Math.max(0, Math.min(20, half));
+    if (Number(range.value) === acotado) return;
+    range.value = String(acotado);
+    // El evento se dispara a mano: asignar `value` desde código no lo emite, y
+    // sin él nadie más se entera del cambio.
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  /**
+   * Qué media estrella hay bajo el puntero.
+   *
+   * `ceil` y no `round`: la mitad izquierda de la primera estrella tiene que
+   * dar 0,5, no 0. El cero se pone con el botón de al lado o con el teclado.
+   */
+  const halfEnPunto = (evento: PointerEvent | MouseEvent, caja: DOMRect): number => {
+    if (caja.width <= 0) return Number(range.value);
+    const proporcion = (evento.clientX - caja.left) / caja.width;
+    return Math.max(1, Math.min(20, Math.ceil(proporcion * 20)));
+  };
+
+  range.addEventListener('input', pintarValor);
+  range.addEventListener('change', pintarValor);
+  pintarValor();
+
+  if (stars) {
+    // A partir de aquí manda el puntero sobre las estrellas. La clase invierte
+    // en CSS quién recibe los eventos: hacerlo aquí y no en la hoja de estilos
+    // dejaría el control muerto en cuanto fallara este script.
+    rating.classList.add('rating--js');
+
+    stars.addEventListener('pointermove', (evento) => {
+      // Un dedo que arrastra no «previsualiza»: fija, y de eso se encarga el
+      // pointerdown. La previsualización es cosa del ratón.
+      if (evento.pointerType === 'touch') return;
+      rating.classList.add('rating--preview');
+      pintar(halfEnPunto(evento, stars.getBoundingClientRect()));
+    });
+
+    stars.addEventListener('pointerleave', () => {
+      rating.classList.remove('rating--preview');
+      pintarValor();
+    });
+
+    stars.addEventListener('pointerdown', (evento) => {
+      evento.preventDefault();
+      fijar(halfEnPunto(evento, stars.getBoundingClientRect()));
+      rating.classList.remove('rating--preview');
+      // El foco va al deslizador: quien acaba de pulsar una estrella puede
+      // seguir afinando con las flechas sin buscar el control.
+      range.focus();
+    });
+  }
+
+  if (clear) {
+    clear.hidden = false;
+    clear.addEventListener('click', () => {
+      fijar(0);
+      range.focus();
+    });
+  }
+}
+
+
 function boot(): void {
   initEditor();
+  initRatingStars();
   initCoverUploader();
   initPlatformRows();
   initSlugHelper();

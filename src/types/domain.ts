@@ -77,30 +77,47 @@ export const REVIEW_SORT_LABELS: Record<ReviewSort, string> = {
   comments: 'Más comentadas',
 };
 
-/** rating interno 0..10 == estrellas * 2 */
-export const MAX_RATING_HALF_STARS = 10;
+/**
+ * La nota.
+ *
+ * Se publica **sobre 10 y con medio punto de precisión**: 7,5 es una nota
+ * válida y 7,3 no. Por dentro se guarda en **medios puntos** —un entero 0..20—
+ * y no como decimal: un entero se compara, se ordena y se indexa sin sorpresas
+ * de coma flotante, y 7,5 no tiene representación exacta en binario.
+ *
+ * La conversión vive aquí y sólo aquí. La columna es `reviews.rating_half`.
+ */
+export const MAX_SCORE_HALF = 20;
 
-export function ratingToStars(rating: number): number {
-  return Math.round(Math.max(0, Math.min(MAX_RATING_HALF_STARS, rating))) / 2;
+/** Lo que se escribe en el formulario: de 0 a 10, de medio en medio. */
+export const MAX_SCORE = 10;
+export const SCORE_STEP = 0.5;
+
+/** De la nota que se escribe (7,5) a lo que se guarda (15). */
+export function scoreToHalf(score: number): number {
+  const acotada = Math.max(0, Math.min(MAX_SCORE, Number.isFinite(score) ? score : 0));
+  // Se redondea al medio punto más cercano: lo que llegue con más precisión de
+  // la que la escala admite se ajusta en vez de rechazarse.
+  return Math.round(acotada * 2);
 }
 
-export function starsToRating(stars: number): number {
-  return Math.round(Math.max(0, Math.min(5, stars)) * 2);
-}
-
-export function formatStars(rating: number): string {
-  const stars = ratingToStars(rating);
-  return Number.isInteger(stars) ? `${stars}` : stars.toFixed(1).replace('.', ',');
+/** De lo que se guarda (15) a la nota (7,5). */
+export function halfToScore(half: number): number {
+  return Math.round(Math.max(0, Math.min(MAX_SCORE_HALF, half))) / 2;
 }
 
 /**
- * La nota tal como la muestra el sitio: sobre 10 y con coma decimal, según el
- * brand kit. Internamente se guarda como entero 0..10, así que la conversión
- * es exacta y no se pierde precisión por el camino.
+ * La nota tal como la pinta el sitio: sobre 10 y con coma decimal, según el
+ * brand kit. Siempre con un decimal, también en los enteros — «8,0» y «7,5»
+ * ocupan lo mismo y una columna de notas no baila.
  */
-export function formatScore(rating: number): string {
-  const nota = Math.round(Math.max(0, Math.min(MAX_RATING_HALF_STARS, rating)));
-  return `${nota},0`;
+export function formatScore(half: number): string {
+  return halfToScore(half).toFixed(1).replace('.', ',');
+}
+
+/** Los 21 valores de la escala, para pintar un desplegable sin inventarlos. */
+export function scoreOptions(): number[] {
+  return Array.from({ length: MAX_SCORE_HALF + 1 }, (_, i) => i);
 }
 
 export const PAGE_SIZE = 12;

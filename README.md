@@ -2,7 +2,7 @@
 
 Catálogo y plataforma de reseñas de **libros, novelas, películas, series, anime, cómics, manga y videojuegos**, construido **para Cloudflare desde la primera línea**: no es una aplicación Node adaptada después.
 
-- Público: catálogo filtrable, ficha en modal accesible, puntuación de 0 a 5 con medias estrellas, spoilers ocultables, comentarios anidados y reportes. Y una **lista de pendientes** con lo que está en cola por ver, leer o jugar.
+- Público: catálogo filtrable, ficha en modal accesible, puntuación de 0 a 10 con medio punto de precisión, spoilers ocultables, comentarios anidados y reportes. Y una **lista de pendientes** con lo que está en cola por ver, leer o jugar — de la que una obra desaparece en cuanto tiene reseña.
 - Privado: panel en `/admin` con editor enriquecido, gestión de portadas en R2, cola de pendientes convertible en reseña de un clic, moderación con umbral automático de reportes y auditoría.
 
 ---
@@ -27,6 +27,7 @@ Catálogo y plataforma de reseñas de **libros, novelas, películas, series, ani
 15b. [Lista de pendientes](#15b-lista-de-pendientes)
 15c. [Recursos de marca](#15c-recursos-de-marca)
 15d. [Biblioteca privada (books.)](#15d-biblioteca-privada-books)
+15e. [Aplicación Android](#15e-aplicación-android)
 16. [Privacidad y RGPD](#16-privacidad-y-rgpd)
 17. [Observabilidad y analítica](#17-observabilidad-y-analítica)
 18. [Testing](#18-testing)
@@ -292,7 +293,15 @@ Todas con clave primaria, claves foráneas con `ON DELETE` explícito, `UNIQUE` 
 
 Dos detalles que merecen mención:
 
-- **Puntuación**: se guarda como entero `0..10`, que es también la escala publicada. Permite ordenar por índice y validar con un `CHECK`, sin decimales flotantes. Se muestra con `formatScore` (sobre 10 y con coma).
+- **Puntuación**: la escala publicada es `0..10` **con medio punto**, y se guarda como entero en **medios puntos** (`reviews.rating_half`, `0..20`). Un entero se ordena por índice y se valida con un `CHECK`; guardar `7,5` como decimal metería coma flotante donde no hace falta —ese número no tiene representación exacta en binario— para no ganar nada. Se convierte con `scoreToHalf` / `halfToScore` y se muestra con `formatScore` (sobre 10, con coma y siempre un decimal).
+
+  En el panel la nota se pone con **estrellas**: diez, con medio punto de precisión. Se pulsa sobre la estrella —o sobre su mitad— y al pasar el ratón se previsualiza la nota que se va a poner. Debajo hay un `input[type=range]` de verdad —no veintiún radios— porque es lo que la deja usable sin JavaScript, con el teclado y con el dedo; en cuanto hay JavaScript, el puntero pasa a hablar con las estrellas, porque el deslizador reparte su anchura contando el ancho del pulgar y pulsar sobre la séptima estrella dejaba un 6,5.
+
+  Las estrellas son dos capas superpuestas de las que la de acento se recorta al ancho de la nota, y ese ancho lo fija el CSS a partir de `data-half`, no un `style=` que la CSP rechazaría. El cero tiene su propio botón: la mitad izquierda de la primera estrella vale 0,5, así que con el ratón no habría forma de volver a «sin nota».
+
+  La columna `rating` sigue ahí, con su `CHECK 0..10`, como **herencia**: cambiar la restricción obliga a reconstruir la tabla, que es destructivo, y aquí el pipeline es aditivo. La rellena el repositorio con la nota redondeada y no la lee nadie. Ver `migrations/0005_nota_media.sql`.
+
+- **Un pendiente y su reseña no coexisten**: cuando una obra pasa a tener reseña, su entrada en la cola queda enlazada y terminada, y el listado público filtra **por el vínculo, no por el estado**. El emparejado es automático por título normalizado y tipo de contenido, en los dos sentidos: al crear o publicar una reseña, y al dar de alta un pendiente cuya obra ya está reseñada. Antes sólo lo hacía el botón «convertir», así que escribir la reseña a mano dejaba la misma obra anunciada como «por ver» y publicada a la vez.
 - **Comentarios**: árbol por *materialized path* (`path` = `<segmento padre>/<segmento propio>/`, con el segmento derivado del timestamp en base 36). Ordenar por `path` da recorrido en profundidad y cronológico; el subárbol es `path LIKE '<path>%'`, que **usa el índice**. Sin CTE recursivo en cada lectura pública.
 
 ### Comandos
@@ -897,6 +906,159 @@ Se conservan 30 días y se pueden descargar desde `/copias`.
 
 ---
 
+## 15e. Aplicación Android
+
+Un lector de PDF para el teléfono, en `android/`. Hace dos cosas que no se
+mezclan:
+
+- **abre los PDF del propio dispositivo**, sin cuenta y sin red, con
+  subrayados, notas y páginas marcadas que se quedan en el teléfono;
+- **se conecta con la biblioteca privada** y sincroniza en los dos sentidos la
+  posición de lectura, las anotaciones y los marcadores de los documentos que
+  vienen de ella.
+
+El APK se descarga de `https://triangulodelectores.site/aplicacion`. No está en
+Google Play: se publica en R2 y lo sirve el propio Worker.
+
+### Por qué una API aparte y no la sesión del navegador
+
+La biblioteca web se apoya en tres cosas que un cliente nativo no puede usar sin
+romperlas:
+
+| Mecanismo del navegador | Por qué no vale en el móvil |
+|---|---|
+| Cookie de sesión, 2 h de inactividad y 12 h absolutas | correcto para un panel abierto en un portátil, absurdo para una aplicación que se abre diez minutos cada noche |
+| CSRF con `Origin` / `Sec-Fetch-Site` | esas cabeceras las pone el navegador; un cliente nativo no las manda |
+| Prefijo `__Host-` atando la cookie al host | se quiere conservar tal cual para la web, no relajarlo |
+
+La salida no es aflojar ninguna de las tres, sino **otra credencial**: un token
+de dispositivo en `Authorization: Bearer`, que no lo manda el navegador solo y
+por tanto no hay CSRF contra el que defenderse. Vive en `device_tokens`
+(migración `0004_movil.sql`), se guarda **hasheado** con SHA-256, dura 90 días
+renovables mientras se use y se revoca de uno en uno sin tocar la contraseña ni
+cerrar la sesión del panel.
+
+El emparejamiento reutiliza `attemptLogin()` entera —límite global, hash señuelo,
+bloqueo por intentos, auditoría— con `establishSession: false`. Duplicar esa
+lógica para el móvil habría sido la forma más fácil de perder una de sus
+defensas por el camino.
+
+### La API
+
+Montada en `/api/movil` del subdominio `books.`, **antes** que el resto de sus
+rutas para que pueda aplicar su propio guardián sin relajar el de la cookie. Lo
+que no case con ninguna de sus rutas cae igualmente en el guardián de siempre,
+que responde 401.
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /api/movil/sesion` | empareja: email + contraseña → token de dispositivo |
+| `DELETE /api/movil/sesion` | retira este dispositivo |
+| `GET /api/movil/yo` | quién y qué dispositivo |
+| `GET /api/movil/documentos` | la estantería, con progreso |
+| `GET /api/movil/documentos/:id` | ficha + anotaciones + marcadores |
+| `GET /api/movil/documentos/:id/fichero` | el PDF, con `Range` |
+| `GET /api/movil/documentos/:id/portada` | la portada |
+| `PUT /api/movil/documentos/:id/paginas` | número de páginas contado por el visor |
+| `GET /api/movil/sincronizacion?desde=` | lo cambiado desde una marca de agua |
+| `POST /api/movil/sincronizacion` | lo escrito sin red |
+
+### Cómo se resuelven los conflictos
+
+Gana la escritura más reciente, y **la comparación la hace SQLite** dentro del
+propio `ON CONFLICT DO UPDATE` (`mergeProgress`, `mergeAnnotation`,
+`mergeBookmark`). Leer primero y decidir en JavaScript dejaría una ventana entre
+la lectura y la escritura por la que se cuela otra petición.
+
+Tres detalles que no son opcionales:
+
+- **Las marcas de tiempo del cliente se recortan al reloj del servidor**, con un
+  minuto de margen. Un teléfono con la fecha adelantada tres años ganaría todos
+  los conflictos futuros para siempre.
+- **Las anotaciones se borran en lógico** (`deleted_at`). Sin lápida, un
+  subrayado borrado en la web reaparece en el teléfono en la siguiente
+  sincronización: él lo tiene y el servidor ya no puede decir que se borró.
+- **La bajada trae `documentIds` entero**, no sólo lo cambiado. Las fichas de
+  documento sí se borran de verdad —se llevan el fichero de R2 por delante—, así
+  que es la única forma de que el teléfono se entere.
+
+La marca de agua es siempre un `serverTime` devuelto por la propia API. El reloj
+del teléfono no decide nada: con él como referencia, un desfase de minutos se
+traga cambios enteros sin que nadie se entere.
+
+El teléfono **sube y luego baja**, en ese orden. Bajando primero, lo del
+servidor sobrescribiría cambios locales que aún no se han enviado y se perderían
+sin dejar rastro.
+
+### La aplicación
+
+Kotlin y Compose, `minSdk` 26. Las dependencias están en
+`android/gradle/libs.versions.toml` y son las de andar por casa: Compose,
+navegación, OkHttp, kotlinx.serialization y WorkManager.
+
+Dos decisiones que explican media interfaz:
+
+- **`PdfRenderer`, el de Android, y no una librería de PDF.** No añade nada al
+  APK y es suficiente para pintar. Lo que no da es **capa de texto**: aquí no se
+  puede seleccionar una palabra, ni buscar dentro del documento, ni copiar una
+  cita. Por eso los subrayados se hacen **arrastrando un recuadro** sobre la
+  zona, y las coordenadas que produce son las mismas 0..1 que guarda el lector
+  web, así que un subrayado hecho en el teléfono se ve en el navegador y al
+  revés. Las anotaciones del móvil van sin `quote`.
+- **El zoom es por botones y doble toque, no por pellizco.** El pellizco compite
+  con el gesto de arrastrar, que es el que dibuja un subrayado. Además así cada
+  página se **repinta** al ampliar en vez de estirar el mapa de bits, y el texto
+  se sigue leyendo al 300 %.
+
+SQLite a pelo (`data/local/BaseDatos.kt`), sin ORM ni procesador de anotaciones,
+por el mismo criterio que en el servidor: el SQL se lee de un vistazo y ninguna
+pantalla lo escribe. El token se cifra con una clave del **Keystore de Android**
+(AES/GCM), que no sale del teléfono, y `allowBackup="false"` impide que la copia
+de seguridad de Google se lo lleve a otro aparato.
+
+Un solo permiso peligroso: ninguno. La red y poco más. Los PDF del teléfono se
+abren con el selector del sistema (`ACTION_OPEN_DOCUMENT`, con permiso
+persistente), que da acceso a ese fichero y a ninguno otro.
+
+### Compilar y publicar
+
+```bash
+cd android
+./gradlew assembleRelease            # APK sin firmar si no hay almacén de claves
+
+# Con firma propia (el almacén NO vive en el repositorio):
+./gradlew assembleRelease \
+  -PtdlKeystore=$HOME/.tdl/tdl-release.jks \
+  -PtdlKeystorePassword=… -PtdlKeyAlias=tdl -PtdlKeyPassword=…
+
+# Apuntar a staging en vez de a producción:
+./gradlew assembleRelease -PtdlBooksUrl=https://books-staging.triangulodelectores.site \
+  -PtdlSiteUrl=https://staging.triangulodelectores.site
+```
+
+La compilación contra staging es **otra aplicación**: `applicationId` con sufijo
+`.staging`, nombre «Triángulo (staging)» en el lanzador y su propia base de
+datos. Con el mismo identificador, instalar el APK de staging encima del de
+producción no da error —la firma es la misma— sino algo peor: lo sustituye y
+hereda su base de datos, así que la estantería se queda con documentos de un
+entorno apuntando al otro y con una credencial que allí no vale. Separados,
+conviven en el mismo teléfono.
+
+Publicar el APK sube el binario y su manifiesto a R2, y el sitio empieza a
+servirlo:
+
+```bash
+npm run apk:publish -- android/app/build/outputs/apk/release/app-release.apk --env production
+```
+
+La versión y el `versionCode` los lee el script del `build.gradle.kts`, no se
+escriben a mano: un manifiesto que anuncia una versión y entrega otra es el
+fallo que nadie mira hasta que alguien no recibe la actualización. El manifiesto
+se sube **después** del binario, para que un fallo a mitad deje el sitio
+sirviendo la versión anterior en vez de anunciando una que no está.
+
+---
+
 ## 16. Privacidad y RGPD
 
 Pensado para público de España y la UE:
@@ -1090,6 +1252,7 @@ src/
 └── validation/              # esquemas Zod
 
 migrations/                  # SQL aplicado a D1
+android/                     # aplicación Android (Kotlin + Compose), ver §15e
 public/                      # assets estáticos servidos por el Worker
 scripts/                     # build de cliente y de marca, seed, admin, reset, secretos
 tests/
@@ -1121,6 +1284,8 @@ npm run db:seed:local      # datos de ejemplo
 npm run db:reset:local     # reconstruir la base local
 npm run admin:create       # crear o actualizar el administrador
 
+npm run apk:publish -- <apk> --env production   # publicar el APK en R2
+
 npm run deploy:staging     # desplegar en staging
 npm run deploy             # desplegar en producción
 ```
@@ -1137,3 +1302,5 @@ Dicho con claridad, porque conviene saberlo antes y no después:
 - **Cloudflare Images (transformaciones)** se factura aparte y requiere activarlo en la zona. Con `IMAGE_RESIZING=false` el sitio funciona sirviendo originales, a costa de peso.
 - **Sin registro de usuarios**: el rol `USER` existe en el modelo de datos y en las comprobaciones de permisos, pero no hay pantalla de alta. Comentar es anónimo por diseño (minimización de datos).
 - **Paginación por `OFFSET`**: perfectamente válida a esta escala; con catálogos muy grandes convendría paginación por cursor.
+- **La aplicación Android no tiene capa de texto**: `PdfRenderer` pinta la página y no dice qué pone en ella, así que no hay selección de palabras, ni búsqueda dentro del documento, ni `quote` en sus anotaciones. Los subrayados marcan una zona, en las mismas coordenadas 0..1 que el lector web. Cambiar eso significa cambiar de motor de PDF y sumar unos diez megas al APK.
+- **La aplicación se distribuye fuera de Google Play**, así que quien instale tendrá que dar permiso para instalar desde el navegador y no hay actualizaciones automáticas: la propia aplicación consulta `/aplicacion/version.json` y avisa. La firma se hace con un almacén de claves que vive fuera del repositorio; perderlo obliga a publicar con otro `applicationId`.

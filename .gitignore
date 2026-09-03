@@ -41,3 +41,15 @@ backup-prod-*.sql
 
 # Caché de bytecode de los scripts de Python.
 __pycache__/
+
+# Aplicación Android: lo que genera Gradle y lo que no debe salir del teléfono
+# de quien compila. El almacén de claves de firma vive fuera del repositorio
+# (`~/.tdl/`), y perderlo significa no poder publicar más actualizaciones:
+# cópialo a un sitio seguro.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+*.jks
+*.keystore

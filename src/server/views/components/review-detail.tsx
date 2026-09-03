@@ -71,7 +71,7 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
           ) : null}
 
           <div class="review__rating">
-            <StarRating rating={review.rating} size="lg" />
+            <StarRating rating={review.ratingHalf} size="lg" />
           </div>
 
           <dl class="facts">

@@ -73,33 +73,33 @@ INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
 -- ------------------------------------------------- reseñas de ejemplo (dev)
 INSERT OR IGNORE INTO reviews
   (id, slug, title_es, title_original, other_titles, content_type, category_id, year, creator,
-   country, duration_min, episodes, volumes, rating, summary, body_html, has_spoilers, status,
+   country, duration_min, episodes, volumes, rating, rating_half, summary, body_html, has_spoilers, status,
    comments_mode, cover_key, cover_alt, seo_title, seo_description, comment_count, published_at,
    created_at, updated_at)
 VALUES
   ('44444444-4444-4444-8444-000000000001','dune','Dune','Dune','["Dune: Parte Uno"]','MOVIE',
-   '11111111-1111-4111-8111-000000000002',2021,'Denis Villeneuve','Estados Unidos',155,NULL,NULL,9,
+   '11111111-1111-4111-8111-000000000002',2021,'Denis Villeneuve','Estados Unidos',155,NULL,NULL,10,19,
    'Una adaptación monumental que por fin entiende que Arrakis es un personaje más.',
    '<p>Villeneuve resuelve lo que parecía irresoluble: convertir la densidad política de Herbert en imágenes que se sostienen solas.</p><h2>Lo mejor</h2><ul><li>El diseño de sonido.</li><li>El ritmo pausado, que respeta al espectador.</li></ul><p>Un aviso: <span class="spoiler">el final deja la historia a medias, porque es literalmente media novela</span>.</p>',
    0,'PUBLISHED','INHERIT',NULL,NULL,NULL,NULL,0,
    strftime('%s','now')*1000 - 86400000*20, strftime('%s','now')*1000 - 86400000*20, strftime('%s','now')*1000 - 86400000*20),
 
   ('44444444-4444-4444-8444-000000000002','frieren','Frieren: Beyond Journey''s End','Sousou no Frieren',NULL,'ANIME',
-   '11111111-1111-4111-8111-000000000004',2023,'Keiichirou Saitou','Japón',NULL,28,NULL,10,
+   '11111111-1111-4111-8111-000000000004',2023,'Keiichirou Saitou','Japón',NULL,28,NULL,10,20,
    'La fantasía más melancólica y luminosa de los últimos años.',
    '<p>Frieren invierte el esquema del shonen de aventuras: empieza donde otras acaban y convierte el duelo en motor narrativo.</p><blockquote>El tiempo de un elfo no es el tiempo de una persona.</blockquote><p>Su mayor virtud es la paciencia.</p>',
    0,'PUBLISHED','INHERIT',NULL,NULL,NULL,NULL,0,
    strftime('%s','now')*1000 - 86400000*10, strftime('%s','now')*1000 - 86400000*10, strftime('%s','now')*1000 - 86400000*10),
 
   ('44444444-4444-4444-8444-000000000003','la-carretera','La carretera','The Road',NULL,'BOOK',
-   '11111111-1111-4111-8111-000000000001',2006,'Cormac McCarthy','Estados Unidos',NULL,NULL,NULL,9,
+   '11111111-1111-4111-8111-000000000001',2006,'Cormac McCarthy','Estados Unidos',NULL,NULL,NULL,9,18,
    'Postapocalipsis despojado de todo adorno. Duele y no se olvida.',
    '<p>McCarthy elimina comillas, capítulos y casi toda la puntuación, y en ese vacío cabe el mundo entero.</p><p>Es un libro corto que se lee despacio.</p>',
    1,'PUBLISHED','INHERIT',NULL,NULL,NULL,NULL,0,
    strftime('%s','now')*1000 - 86400000*3, strftime('%s','now')*1000 - 86400000*3, strftime('%s','now')*1000 - 86400000*3),
 
   ('44444444-4444-4444-8444-000000000004','borrador-ejemplo','Reseña en borrador',NULL,NULL,'GAME',
-   '11111111-1111-4111-8111-000000000007',2024,'Estudio de ejemplo','España',NULL,NULL,NULL,0,
+   '11111111-1111-4111-8111-000000000007',2024,'Estudio de ejemplo','España',NULL,NULL,NULL,0,0,
    NULL,'<p>Pendiente de escribir.</p>',0,'DRAFT','INHERIT',NULL,NULL,NULL,NULL,0,NULL,
    strftime('%s','now')*1000, strftime('%s','now')*1000);
 

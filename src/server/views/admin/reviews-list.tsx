@@ -99,7 +99,7 @@ export const AdminReviewsPage: FC<AdminReviewsProps> = ({ results, categories, c
               </td>
               <td>{CONTENT_TYPE_LABELS[review.contentType]}</td>
               <td>{review.year ?? '—'}</td>
-              <td class="table__score">{formatScore(review.rating)}</td>
+              <td class="table__score">{formatScore(review.ratingHalf)}</td>
               <td>
                 <span class={`badge badge--${review.status === 'PUBLISHED' ? 'ok' : 'neutral'}`}>
                   {review.status === 'PUBLISHED' ? 'Publicada' : 'Borrador'}

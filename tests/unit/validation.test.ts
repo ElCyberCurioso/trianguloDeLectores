@@ -31,15 +31,20 @@ describe('reviewInputSchema', () => {
   it('aplica valores por defecto', () => {
     const parsed = reviewInputSchema.parse(base);
     expect(parsed.status).toBe('DRAFT');
-    expect(parsed.rating).toBe(0);
+    expect(parsed.ratingHalf).toBe(0);
     expect(parsed.genreIds).toEqual([]);
     expect(parsed.commentsMode).toBe('INHERIT');
   });
 
-  it('acota la puntuación al rango 0..10', () => {
-    expect(reviewInputSchema.safeParse({ ...base, rating: 11 }).success).toBe(false);
-    expect(reviewInputSchema.safeParse({ ...base, rating: -1 }).success).toBe(false);
-    expect(reviewInputSchema.parse({ ...base, rating: 7 }).rating).toBe(7);
+  it('acota la nota al rango de la escala (0..20 medios puntos)', () => {
+    expect(reviewInputSchema.safeParse({ ...base, ratingHalf: 21 }).success).toBe(false);
+    expect(reviewInputSchema.safeParse({ ...base, ratingHalf: -1 }).success).toBe(false);
+    // 15 medios puntos son un 7,5, que es lo que la escala vieja no admitía.
+    expect(reviewInputSchema.parse({ ...base, ratingHalf: 15 }).ratingHalf).toBe(15);
+  });
+
+  it('rechaza medios puntos fraccionarios: la escala llega hasta el medio', () => {
+    expect(reviewInputSchema.safeParse({ ...base, ratingHalf: 15.5 }).success).toBe(false);
   });
 
   it('rechaza tipos de contenido desconocidos (anti mass assignment)', () => {

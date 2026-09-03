@@ -5,6 +5,7 @@ import { Layout } from '../views/layout';
 import { HomePage } from '../views/pages/home';
 import { ReviewPage } from '../views/pages/review';
 import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
+import { AppPage } from '../views/pages/app';
 import { WatchlistPage } from '../views/pages/watchlist';
 import { RecommendPage } from '../views/pages/recommend';
 import { reviewQuerySchema } from '../../validation/schemas';
@@ -14,6 +15,8 @@ import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
 import { variantUrl } from '../lib/images';
 import { issueFormToken } from '../lib/formtoken';
 import { notFound } from '../lib/http';
+import { readApkManifest, isSafeApkKey, APK_FILENAME, APK_CONTENT_TYPE } from '../lib/apk';
+import { booksHost } from '../lib/books';
 import { rateLimit } from '../middleware/ratelimit';
 import { htmlToText } from '../lib/sanitize';
 import { MediaService } from '../services/media';
@@ -305,6 +308,103 @@ publicRoutes.get('/cookies', async (c) =>
   ),
 );
 
+// ---------------------------------------------------- aplicación Android --
+/**
+ * Página de descarga del APK.
+ *
+ * Vive en el sitio público a propósito: hay que poder llegar desde un teléfono
+ * recién estrenado, que todavía no tiene forma de entrar en ninguna parte. Lo
+ * que está detrás del acceso es la biblioteca, no el instalador.
+ *
+ * **No entra en la caché compartida**, y es la única página estática del sitio
+ * que se queda fuera. Lo que pinta sale de un manifiesto en R2 que cambia al
+ * publicar una versión, y esa publicación no toca el sello de contenido en KV
+ * ni la versión desplegada, que son las dos cosas que forman la clave de caché.
+ * Cacheada, el sitio anunciaría la versión anterior durante minutos después de
+ * publicar una nueva, que es la peor forma posible de repartir un binario. Leer
+ * un objeto pequeño de R2 en cada visita a una página que se abre cuatro veces
+ * al mes no es un problema.
+ */
+publicRoutes.get('/aplicacion', async (c) => {
+  const manifest = await readApkManifest(c.env);
+  const booksUrl = c.env.BOOKS_URL ?? `https://${booksHost(c.env)}`;
+
+  c.header('Cache-Control', 'public, max-age=60');
+  return c.html(
+      <Layout
+        env={c.env}
+        nonce={c.get('nonce')}
+        path={new URL(c.req.url).pathname}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
+        seo={{
+          title: `Aplicación para Android | ${c.env.SITE_NAME}`,
+          description:
+            'Lector de PDF para Android que funciona sin conexión y sincroniza la lectura con la biblioteca privada.',
+          canonical: `${c.env.SITE_URL.replace(/\/$/, '')}/aplicacion`,
+        }}
+      >
+      <AppPage siteName={c.env.SITE_NAME} booksUrl={booksUrl} manifest={manifest} />
+    </Layout>,
+  );
+});
+
+/**
+ * El binario.
+ *
+ * La clave del objeto sale del manifiesto y se vuelve a validar aquí con un
+ * patrón cerrado: aunque el manifiesto lo escribimos nosotros, es un fichero
+ * de un bucket, y lo que decide qué objeto se sirve no puede depender de que
+ * nadie lo haya tocado.
+ *
+ * Sin caché compartida larga: publicar una versión nueva debe llegar a quien
+ * descargue a continuación, y son unos pocos megas al mes.
+ */
+publicRoutes.get('/aplicacion/descargar', async (c) => {
+  const manifest = await readApkManifest(c.env);
+  if (!manifest || !isSafeApkKey(manifest.key)) throw notFound('Todavía no hay ninguna versión publicada');
+
+  const object = await c.env.MEDIA.get(manifest.key);
+  if (!object) throw notFound('Todavía no hay ninguna versión publicada');
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': APK_CONTENT_TYPE,
+      'Content-Length': String(object.size),
+      // `attachment`: un APK no se abre en el navegador, se guarda.
+      'Content-Disposition': `attachment; filename="${APK_FILENAME}"`,
+      'Cache-Control': 'public, max-age=300',
+      'X-Content-Type-Options': 'nosniff',
+      etag: object.httpEtag,
+    },
+  });
+});
+
+/**
+ * Manifiesto en JSON. Lo consulta la propia aplicación para avisar de que hay
+ * versión nueva -- sin Play Store no hay quien lo haga por ella.
+ */
+publicRoutes.get('/aplicacion/version.json', async (c) => {
+  const manifest = await readApkManifest(c.env);
+  if (!manifest) throw notFound('Todavía no hay ninguna versión publicada');
+
+  return c.json(
+    {
+      version: manifest.version,
+      versionCode: manifest.versionCode,
+      sizeBytes: manifest.sizeBytes,
+      sha256: manifest.sha256,
+      publishedAt: manifest.publishedAt,
+      minSdk: manifest.minSdk,
+      notes: manifest.notes,
+      // La clave de R2 no sale: el enlace de descarga es el que se publica.
+      url: `${c.env.SITE_URL.replace(/\/$/, '')}/aplicacion/descargar`,
+    },
+    200,
+    { 'Cache-Control': 'public, max-age=300' },
+  );
+});
+
 // ------------------------------------------------------------------ media --
 publicRoutes.get('/media/*', async (c) => {
   const key = decodeURIComponent(new URL(c.req.url).pathname.replace(/^\/media\//, ''));
@@ -345,6 +445,7 @@ publicRoutes.get('/sitemap.xml', async (c) =>
     const urls = [
       { loc: `${siteUrl}/`, lastmod: new Date().toISOString(), priority: '1.0' },
       { loc: `${siteUrl}/pendientes`, lastmod: new Date().toISOString(), priority: '0.6' },
+      { loc: `${siteUrl}/aplicacion`, lastmod: undefined, priority: '0.5' },
       { loc: `${siteUrl}/sobre`, lastmod: undefined, priority: '0.3' },
       { loc: `${siteUrl}/privacidad`, lastmod: undefined, priority: '0.2' },
       { loc: `${siteUrl}/cookies`, lastmod: undefined, priority: '0.2' },

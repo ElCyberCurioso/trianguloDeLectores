@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, like, or, sql, count } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, like, or, sql, count } from 'drizzle-orm';
 import { getDb, type Db } from '../client';
 import { watchlistItems, categories, reviews } from '../schema';
 import type { Bindings } from '../../types/env';
@@ -107,7 +107,16 @@ export class WatchlistRepository {
     const perPage = Math.min(100, Math.max(1, query.perPage ?? 50));
     const conditions = [];
 
-    if (query.onlyPublic) conditions.push(eq(watchlistItems.isPublic, 1));
+    if (query.onlyPublic) {
+      conditions.push(eq(watchlistItems.isPublic, 1));
+      /*
+       * Lo que ya tiene reseña deja de ser un pendiente, esté en el estado que
+       * esté. El filtro por estado no basta: un item convertido al que alguien
+       * devuelve a «pendiente» volvería a la lista pública conviviendo con su
+       * propia reseña, que es justo lo que no puede pasar. Manda el vínculo.
+       */
+      conditions.push(isNull(watchlistItems.reviewId));
+    }
 
     const status = query.status ?? 'ACTIVE';
     if (status === 'ACTIVE') {
@@ -162,6 +171,28 @@ export class WatchlistRepository {
     return row ?? null;
   }
 
+  /**
+   * Pendientes que todavía no tienen reseña, de un tipo de contenido.
+   *
+   * Se traen todos y se comparan los títulos **en el Worker**, no en SQL: hace
+   * falta normalizar acentos y mayúsculas, y `LOWER()` de SQLite no toca los
+   * acentos —«Amélie» y «amelie» no le parecen lo mismo—. Son unas decenas de
+   * filas como mucho: la cola de pendientes de una persona, no un catálogo.
+   */
+  async activosSinResena(contentType: ContentType): Promise<Array<{ id: string; titleEs: string; status: WatchlistStatus }>> {
+    return this.db
+      .select({ id: watchlistItems.id, titleEs: watchlistItems.titleEs, status: watchlistItems.status })
+      .from(watchlistItems)
+      .where(
+        and(
+          eq(watchlistItems.contentType, contentType),
+          isNull(watchlistItems.reviewId),
+          inArray(watchlistItems.status, ['PENDING', 'IN_PROGRESS']),
+        ),
+      )
+      .all();
+  }
+
   async insert(values: typeof watchlistItems.$inferInsert): Promise<void> {
     await this.db.insert(watchlistItems).values(values);
   }
@@ -210,7 +241,13 @@ export class WatchlistRepository {
       .select({ type: watchlistItems.contentType, total: count() })
       .from(watchlistItems)
       .where(
-        and(eq(watchlistItems.isPublic, 1), inArray(watchlistItems.status, ['PENDING', 'IN_PROGRESS'])),
+        and(
+          eq(watchlistItems.isPublic, 1),
+          inArray(watchlistItems.status, ['PENDING', 'IN_PROGRESS']),
+          // Mismo criterio que el listado: si contara los ya reseñados, los
+          // números de las pestañas no cuadrarían con lo que se ve debajo.
+          isNull(watchlistItems.reviewId),
+        ),
       )
       .groupBy(watchlistItems.contentType)
       .all();
