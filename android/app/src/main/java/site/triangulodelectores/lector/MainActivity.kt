@@ -16,6 +16,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import site.triangulodelectores.lector.ui.AjustesScreen
 import site.triangulodelectores.lector.ui.AjustesViewModel
+import site.triangulodelectores.lector.ui.BibliotecaScreen
+import site.triangulodelectores.lector.ui.BibliotecaViewModel
 import site.triangulodelectores.lector.ui.EstanteriaScreen
 import site.triangulodelectores.lector.ui.EstanteriaViewModel
 import site.triangulodelectores.lector.ui.LectorScreen
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
                             modelo = modelo,
                             alAbrir = { documento -> navegacion.navigate("lector/${documento.id}") },
                             alIrAAjustes = { navegacion.navigate("ajustes") },
+                            alIrABiblioteca = { navegacion.navigate("biblioteca") },
                         )
                     }
 
@@ -89,6 +92,14 @@ class MainActivity : ComponentActivity() {
                         LectorScreen(
                             modelo = modelo,
                             cache = contenedor.cachePaginas,
+                            alVolver = { navegacion.popBackStack() },
+                        )
+                    }
+
+                    composable("biblioteca") {
+                        val modelo: BibliotecaViewModel = viewModel(factory = fabrica(contenedor))
+                        BibliotecaScreen(
+                            modelo = modelo,
                             alVolver = { navegacion.popBackStack() },
                         )
                     }
@@ -116,6 +127,7 @@ private fun fabrica(contenedor: Contenedor) = object : ViewModelProvider.Factory
     override fun <T : ViewModel> create(modelClass: Class<T>): T = when {
         modelClass.isAssignableFrom(EstanteriaViewModel::class.java) -> EstanteriaViewModel(contenedor) as T
         modelClass.isAssignableFrom(AjustesViewModel::class.java) -> AjustesViewModel(contenedor) as T
+        modelClass.isAssignableFrom(BibliotecaViewModel::class.java) -> BibliotecaViewModel(contenedor) as T
         else -> throw IllegalArgumentException("Modelo desconocido: ${modelClass.name}")
     }
 }

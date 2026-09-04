@@ -163,6 +163,14 @@ Reglas que no se rompen:
   antemano para no empujar el formulario al aparecer.
 - **Un punto y coma dentro de un comentario SQL parte la sentencia** para el
   troceador de D1 remoto, aunque en local funcione. No los pongas.
+- **Un `--` dentro de un comentario de bloque se come el `*/`.** El troceador de
+  D1 remoto borra desde `--` hasta el final de la línea sin mirar si está dentro
+  de un `/* … */`, así que el comentario se queda abierto y SQLite sigue
+  comentando hasta el siguiente `*/`. En `0004_movil.sql` eso se llevó por
+  delante las columnas `device_name` y `platform` de `device_tokens`, y el
+  emparejamiento del móvil fallaba con un 500 en el `INSERT` **en los dos
+  entornos remotos**. Ni los tests ni el entorno local lo ven: sólo pasa por el
+  troceador lo que se aplica en remoto. Nada de `--` dentro de un comentario.
 - Los comandos de base de datos usan el **binding** (`DB`), no el nombre de la
   base: `tdl-db` sólo existe en desarrollo y falla con `--env staging`.
 - Toda URL que vaya a acabar en un `href` se valida con `httpUrl()`, no con
@@ -318,14 +326,77 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   se entere de una baja.
 - **El teléfono sube y luego baja, en ese orden.** Al revés, lo del servidor
   pisaría cambios locales todavía sin enviar.
+- **La cabecera de la estantería es una sola fila.** Con dos filas y la marca
+  bajo el título se gastaban unos 130 dp antes del primer documento, y la lista
+  —que es lo que se viene a ver— empezaba fuera de la pantalla. Sólo «Abrir PDF»
+  se queda a la vista; «Sincronizar» vive en el menú porque se pulsa de tarde en
+  tarde y además la sincronización automática ya la hace sola. La marca se mudó
+  a la pantalla de estantería vacía, donde sobra sitio.
+- **Una pantalla sin `Surface` pinta el texto en negro.** `LocalContentColor`
+  vale negro fijo en Material 3 y **no** se deriva del esquema de color: lo
+  cambia un `Surface`, no `MaterialTheme`. La estantería se libraba porque su
+  `Scaffold` lleva uno dentro; los ajustes y el lector eran `Column` pelados y
+  salían en negro sobre el fondo oscuro. Un `Modifier.background` arregla el
+  fondo y no el texto: hace falta el `Surface`, con `color` y `contentColor`.
+- **El ancho de las páginas se mide fuera del scroll horizontal.**
+  `horizontalScroll` mide su contenido con anchura infinita y `Box` baja el
+  mínimo a cero, así que un `fillMaxWidth()` por dentro se queda en cero: la
+  lista no llegaba a componerse y el lector salía en blanco con cualquier PDF.
 - **`PdfRenderer` no tiene capa de texto**, y eso es lo que decide la interfaz:
   no hay selección de palabras, ni búsqueda, ni `quote` en las anotaciones. Los
   subrayados se hacen arrastrando un recuadro y se guardan en las mismas
   coordenadas normalizadas 0..1 que el lector web. No prometas selección de
   texto sin cambiar de motor.
-- **El zoom es por botones y doble toque, nunca por pellizco**: el pellizco
-  compite con el arrastre, que es el gesto que dibuja un subrayado. Además así
-  la página se repinta al ampliar en vez de estirarse.
+- **El zoom se ancla al punto medio entre los dedos**, nunca a una esquina.
+  Ampliar es acercarse a algo, y ese algo es lo que hay entre los dedos: ese
+  punto del documento se queda quieto debajo. `transformOrigin` sigue en la
+  esquina —es lo que hace que la anchura escalada sea una multiplicación y el
+  encuadre se pueda acotar con una cuenta—, así que la compensación se hace a
+  mano en los dos ejes con el factor **ya recortado** por el techo y el suelo:
+  con el factor pedido, seguir pellizcando en el tope movería el documento sin
+  ampliarlo. El eje vertical lo lleva la lista, que mide en píxeles de
+  rasterizado, de ahí la división por la escala.
+- **El techo de rasterizado sale de la memoria concedida, no de una constante.**
+  `Runtime.maxMemory()` va de 96 MB a 512 según el teléfono; un número fijo o se
+  queda corto en el bueno o tira el malo. Se reserva como mucho un octavo del
+  montón para una sola página. Por encima de unos tres aumentos la página se
+  estira en vez de repintarse: se ve más blanda, y es el precio de llegar a ocho
+  aumentos sin reventar el proceso.
+- **El zoom que se ve y el zoom al que se pinta son dos cosas distintas.**
+  `estado.zoom` sigue al dedo y lo aplica la GPU con `graphicsLayer`;
+  `zoomRaster` es la escala de los mapas de bits y sólo se mueve cuando el gesto
+  para, 180 ms después. Rasterizar en cada paso del pellizco era lo que daba el
+  tirón. Al cambiar `zoomRaster` hay que **recolocar el scroll**: la lista mide
+  en píxeles de rasterizado y el alto de cada página cambia con el ancho, así
+  que sin recolocarlo la página salta al soltar los dedos.
+- **El mapa de bits de una página se recuerda por página, nunca por ancho.** Con
+  el ancho en la clave, cada cambio de zoom lo ponía a nulo y la página se
+  quedaba en blanco hasta terminar de repintarse. El anterior tiene que seguir
+  en pantalla, estirado, hasta que el nuevo esté listo.
+- **Un único detector se ocupa de todos los gestos** (`gestosDeLectura`). Con un
+  contenedor de scroll horizontal por fuera y una lista vertical por dentro,
+  Compose ata cada gesto a una orientación y **no hay diagonal**: hay que
+  repartir a mano las dos componentes del mismo arrastre. Con un dedo sólo actúa
+  si hay zoom —sin él conviene dejar que la lista se desplace sola, con su
+  inercia—; con dos, siempre, y consumiendo sólo cuando el pellizco ya ha movido
+  algo, para que un segundo dedo apoyado no congele la lectura. Va por la pasada
+  `Initial`, que baja de fuera adentro; en la principal la lista ya se habría
+  quedado el gesto. Se desactiva en modo subrayado.
+- **La biblioteca en papel también se gestiona desde el teléfono**, con las
+  mismas reglas: el alta pasa por `LibraryService`, no por una segunda
+  implementación, así que hereda el antiduplicado por ISBN (409, no 400: el
+  móvil dice «ya lo tienes» en vez de «revisa los campos»), la descarga de la
+  portada a R2 y la auditoría. **La consulta a Open Library la hace el Worker**,
+  igual que en la web: la dirección de quien usa la aplicación no llega a un
+  tercero. El orden del catálogo también es del Worker, por lista cerrada.
+- **El catálogo no se guarda en local.** Se lee de la biblioteca cada vez. La
+  estantería de PDF sí se guarda, porque se lee sin red; el catálogo se consulta
+  delante de las baldas, se edita poco y son fichas de texto. Guardarlo sería
+  otra sincronización que mantener a cambio de casi nada.
+- **Los campos de texto opcionales se envían vacíos, nunca nulos.** «Opcional»
+  en Zod significa que puede faltar, no que pueda valer `null`: un nulo
+  explícito devuelve un 400 sin explicación. La cadena vacía sí la entiende. Los
+  numéricos sí admiten nulo, que es como se dice «sin año».
 - **El token se cifra con el Keystore de Android** (AES/GCM) y
   `allowBackup="false"`. La copia de seguridad de Google no puede llevarse una
   credencial de este teléfono a otro.

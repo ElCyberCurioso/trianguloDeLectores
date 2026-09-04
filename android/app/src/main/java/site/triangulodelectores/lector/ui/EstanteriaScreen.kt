@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,6 +49,7 @@ fun EstanteriaScreen(
     modelo: EstanteriaViewModel,
     alAbrir: (Documento) -> Unit,
     alIrAAjustes: () -> Unit,
+    alIrABiblioteca: () -> Unit,
 ) {
     val estado by modelo.estado.collectAsState()
     val avisos = remember { SnackbarHostState() }
@@ -78,6 +80,7 @@ fun EstanteriaScreen(
                 alAbrirPdf = { selector.launch(arrayOf("application/pdf")) },
                 alSincronizar = { modelo.sincronizar() },
                 alIrAAjustes = alIrAAjustes,
+                alIrABiblioteca = alIrABiblioteca,
             )
 
             if (estado.documentos.isEmpty() && !estado.cargando) {
@@ -107,6 +110,20 @@ fun EstanteriaScreen(
     }
 }
 
+/**
+ * Cabecera de la estantería: una sola fila.
+ *
+ * Ocupaba dos, más la marca debajo del título y un botón de ancho completo por
+ * cada acción; en un teléfono eso son unos ciento treinta dp gastados antes del
+ * primer documento, y la estantería —que es lo que se viene a ver— empezaba
+ * fuera de la pantalla. Ahora la fila lleva el título, la acción que de verdad
+ * se repite y un menú con el resto.
+ *
+ * «Sincronizar» se va al menú a propósito. Se pulsa de tarde en tarde, y además
+ * la sincronización automática ya la hace sola: tenerla siempre a la vista
+ * costaba más de lo que valía. Cuando está en marcha se dice en la propia fila,
+ * que para eso hay sitio.
+ */
 @Composable
 private fun CabeceraEstanteria(
     sincronizando: Boolean,
@@ -114,46 +131,75 @@ private fun CabeceraEstanteria(
     alAbrirPdf: () -> Unit,
     alSincronizar: () -> Unit,
     alIrAAjustes: () -> Unit,
+    alIrABiblioteca: () -> Unit,
 ) {
+    var menuAbierto by remember { mutableStateOf(false) }
+
     Column {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Triángulo de Lectores", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(6.dp))
-                MarcaTresReglas(ancho = 72)
+                Text(
+                    "Triángulo de Lectores",
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                )
+                if (sincronizando) {
+                    Text(
+                        "Sincronizando…",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
+
+            // La única acción que se repite: abrir un PDF del teléfono.
             Text(
-                "Ajustes",
+                "Abrir PDF",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .clickable(onClick = alIrAAjustes)
                     // 44 dp de alto en lo que se pulsa, como en el sitio.
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .heightIn(min = 44.dp)
+                    .clickable(onClick = alAbrirPdf)
+                    .padding(horizontal = 10.dp, vertical = 12.dp),
             )
-        }
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            BotonPrimario("Abrir un PDF del teléfono", alAbrirPdf, Modifier.weight(1f))
-            if (emparejado) {
-                BotonSecundario(
-                    if (sincronizando) "Sincronizando…" else "Sincronizar",
-                    alSincronizar,
-                    activo = !sincronizando,
+            Box {
+                Text(
+                    "···",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable { menuAbierto = true }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                 )
+                DropdownMenu(expanded = menuAbierto, onDismissRequest = { menuAbierto = false }) {
+                    // Sólo con cuenta: sin emparejar no hay catálogo que ver
+                    // ni nada que sincronizar.
+                    if (emparejado) {
+                        DropdownMenuItem(
+                            text = { Text("Biblioteca") },
+                            onClick = { menuAbierto = false; alIrABiblioteca() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (sincronizando) "Sincronizando…" else "Sincronizar ahora") },
+                            onClick = { menuAbierto = false; alSincronizar() },
+                            enabled = !sincronizando,
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Ajustes") },
+                        onClick = { menuAbierto = false; alIrAAjustes() },
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(12.dp))
         ReglaGruesa()
     }
 }
@@ -161,6 +207,9 @@ private fun CabeceraEstanteria(
 @Composable
 private fun EstanteriaVacia(emparejado: Boolean, alAbrirPdf: () -> Unit, alIrAAjustes: () -> Unit) {
     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // La marca vive aquí y no en la cabecera: en la pantalla de primera vez
+        // hay sitio de sobra, y en la cabecera cada dp se lo quitaba a la lista.
+        MarcaTresReglas(ancho = 96)
         Text("La estantería está vacía", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Abre un PDF del teléfono para leerlo aquí. Lo que subrayes y las páginas que marques " +

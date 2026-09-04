@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -169,6 +170,84 @@ class Api(private val credenciales: Credenciales) {
             .post(cuerpo.toRequestBody(JSON_MEDIA))
             .build()
         return ejecutar(peticion) { json.decodeFromJsonElement(ResultadoSubidaDto.serializer(), it) }
+    }
+
+    // ------------------------------------------------------------ biblioteca --
+    /**
+     * El catálogo, ya ordenado por el servidor.
+     *
+     * El orden no se hace aquí a propósito: SQLite compara códigos de carácter
+     * y pondría «Álvarez» detrás de «Zapata», y el apellido no es una columna,
+     * hay que derivarlo. Esa decisión vive en el Worker y es la misma que usa
+     * la web, así que las dos listas salen iguales.
+     */
+    fun biblioteca(busqueda: String?, estado: String, orden: String): ListaBibliotecaDto {
+        val url = "$base/api/movil/biblioteca".toHttpUrl().newBuilder()
+            .apply { if (!busqueda.isNullOrBlank()) addQueryParameter("q", busqueda) }
+            .addQueryParameter("status", estado)
+            .addQueryParameter("sort", orden)
+            .build()
+        val peticion = autenticada(url.toString()).get().build()
+        return ejecutar(peticion) { json.decodeFromJsonElement(ListaBibliotecaDto.serializer(), it) }
+    }
+
+    fun libro(id: String): LibroDto? {
+        val peticion = autenticada("$base/api/movil/biblioteca/$id").get().build()
+        return ejecutar(peticion) { json.decodeFromJsonElement(LibroEnvolturaDto.serializer(), it) }.book
+    }
+
+    /**
+     * Pregunta por un ISBN. **La consulta la hace el Worker**, no el teléfono:
+     * así la dirección de quien usa la aplicación no llega a Open Library, y la
+     * portada la baja y la guarda el servidor con la misma validación que una
+     * imagen subida a mano.
+     */
+    fun consultarIsbn(isbn: String): RespuestaIsbnDto {
+        val cuerpo = json.encodeToString(
+            JsonObject.serializer(),
+            JsonObject(mapOf("isbn" to kotlinx.serialization.json.JsonPrimitive(isbn))),
+        )
+        val peticion = autenticada("$base/api/movil/isbn")
+            .post(cuerpo.toRequestBody(JSON_MEDIA))
+            .build()
+        return ejecutar(peticion) { json.decodeFromJsonElement(RespuestaIsbnDto.serializer(), it) }
+    }
+
+    fun crearLibro(libro: LibroEnvioDto): LibroDto? {
+        val cuerpo = json.encodeToString(LibroEnvioDto.serializer(), libro)
+        val peticion = autenticada("$base/api/movil/biblioteca")
+            .post(cuerpo.toRequestBody(JSON_MEDIA))
+            .build()
+        return ejecutar(peticion) { json.decodeFromJsonElement(LibroEnvolturaDto.serializer(), it) }.book
+    }
+
+    fun actualizarLibro(id: String, libro: LibroEnvioDto): LibroDto? {
+        val cuerpo = json.encodeToString(LibroEnvioDto.serializer(), libro)
+        val peticion = autenticada("$base/api/movil/biblioteca/$id")
+            .patch(cuerpo.toRequestBody(JSON_MEDIA))
+            .build()
+        return ejecutar(peticion) { json.decodeFromJsonElement(LibroEnvolturaDto.serializer(), it) }.book
+    }
+
+    fun borrarLibro(id: String) {
+        val peticion = autenticada("$base/api/movil/biblioteca/$id").delete().build()
+        ejecutar(peticion) { }
+    }
+
+    /**
+     * Bytes de una portada.
+     *
+     * Se piden con el token, como todo lo demás: las portadas de la biblioteca
+     * viven en rutas autenticadas y no salen por la ruta pública de medios. Se
+     * devuelven en crudo porque decodificarlas es cosa de quien las pinta.
+     */
+    fun portada(ruta: String): ByteArray? {
+        val peticion = autenticada("$base$ruta").get().build()
+        return runCatching {
+            cliente.newCall(peticion).execute().use { respuesta ->
+                if (!respuesta.isSuccessful) null else respuesta.body?.bytes()
+            }
+        }.getOrNull()
     }
 
     // -------------------------------------------------------- versión app --

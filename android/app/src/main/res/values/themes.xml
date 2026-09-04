@@ -5,6 +5,10 @@
       el control: fondo de la ventana y barras del sistema. Todo lo demás vive
       en `ui/theme/Tema.kt`. Sin este fondo, al abrir la aplicación en tema
       oscuro se ve un fogonazo blanco.
+
+      `@color/fondo` tiene variante en `values-night`, porque Compose sigue la
+      preferencia del sistema: un fondo de ventana fijo se le veía por detrás a
+      cualquier pantalla que no pintara el suyo.
     -->
     <style name="Theme.Tdl" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/fondo</item>

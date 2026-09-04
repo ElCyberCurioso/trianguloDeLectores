@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      El fondo de ventana en tema oscuro.
+
+      Es lo único que cambia por tema: el resto de colores de la marca valen
+      igual en los dos. Sin este fichero, `@color/fondo` era oscuro siempre
+      mientras Compose seguía la preferencia del sistema, así que en tema claro
+      lo que asomaba por detrás de una pantalla sin fondo propio era tinta sobre
+      tinta.
+    -->
+    <color name="fondo">#1A1918</color>
+</resources>

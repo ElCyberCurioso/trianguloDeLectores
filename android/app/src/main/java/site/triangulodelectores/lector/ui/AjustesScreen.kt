@@ -12,12 +12,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,116 +59,135 @@ fun AjustesScreen(modelo: AjustesViewModel, alVolver: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var dispositivo by remember { mutableStateOf(modelo.nombrePorOmision()) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+    /*
+     * `Surface` y no un `Modifier.background`.
+     *
+     * Pintar el fondo era sólo la mitad: el color del texto sale de
+     * `LocalContentColor`, y Material 3 **no lo deriva del tema**. Su valor por
+     * omisión es negro fijo, y sólo lo cambia un `Surface`. Así que cada `Text`
+     * sin `color` explícito salía negro sobre el fondo oscuro, dijera lo que
+     * dijera el esquema. La estantería no lo sufría porque su `Scaffold` mete
+     * un `Surface` por dentro; esta pantalla y el lector no tenían ninguno.
+     */
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        Row(
+        Column(
             Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxSize()
+                // `enableEdgeToEdge` dibuja bajo las barras del sistema: sin esto,
+                // la cabecera queda debajo de la barra de estado.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Text("Ajustes", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            Text(
-                "Volver",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 12.dp)
-                    .clickableSinRipple(alVolver),
-            )
-        }
-        ReglaGruesa()
-
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            estado.aviso?.let { Aviso(it, acento = true) }
-
-            if (estado.emparejado) {
-                Text("Biblioteca privada", style = MaterialTheme.typography.titleMedium)
-                Dato("Dispositivo", estado.dispositivo ?: "Este teléfono")
-                Dato("Credencial válida hasta", fecha(estado.caducidad))
-                Dato(
-                    "Última sincronización",
-                    if (estado.ultimaSincronizacion > 0) fecha(estado.ultimaSincronizacion) else "Todavía ninguna",
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Ajustes", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+                Text(
+                    "Volver",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                        .clickableSinRipple(alVolver),
                 )
+            }
+            ReglaGruesa()
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Sincronizar sólo con wifi", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "Afecta a la sincronización automática. Las descargas que pidas a mano se hacen igual.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                estado.aviso?.let { Aviso(it, acento = true) }
+
+                if (estado.emparejado) {
+                    Text("Biblioteca privada", style = MaterialTheme.typography.titleMedium)
+                    Dato("Dispositivo", estado.dispositivo ?: "Este teléfono")
+                    Dato("Credencial válida hasta", fecha(estado.caducidad))
+                    Dato(
+                        "Última sincronización",
+                        if (estado.ultimaSincronizacion > 0) fecha(estado.ultimaSincronizacion) else "Todavía ninguna",
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Sincronizar sólo con wifi", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Afecta a la sincronización automática. Las descargas que pidas a mano se hacen igual.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = estado.soloWifi, onCheckedChange = modelo::cambiarSoloWifi)
                     }
-                    Switch(checked = estado.soloWifi, onCheckedChange = modelo::cambiarSoloWifi)
-                }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BotonPrimario(
+                            if (estado.trabajando) "Sincronizando…" else "Sincronizar ahora",
+                            modelo::sincronizar,
+                            Modifier.weight(1f),
+                            activo = !estado.trabajando,
+                        )
+                        BotonSecundario("Desemparejar", modelo::desemparejar)
+                    }
+
+                    ReglaFina()
+                    Text(
+                        "Al desemparejar se retira la credencial de este teléfono en el servidor. Lo que hayas " +
+                            "leído y anotado en documentos del propio dispositivo se queda aquí, intacto.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text("Conectar con la biblioteca privada", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Escribe el mismo email y contraseña que usas en ${hostDe(BuildConfig.BOOKS_URL)}. " +
+                            "El teléfono guardará una credencial propia, no tu contraseña, y podrás retirarla " +
+                            "desde aquí o desde el servidor sin cambiarla.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+
+                    Campo("Email", email, { email = it }, KeyboardType.Email)
+                    Campo("Contraseña", password, { password = it }, KeyboardType.Password, oculto = true)
+                    Campo("Nombre de este dispositivo", dispositivo, { dispositivo = it }, KeyboardType.Text)
+
                     BotonPrimario(
-                        if (estado.trabajando) "Sincronizando…" else "Sincronizar ahora",
-                        modelo::sincronizar,
-                        Modifier.weight(1f),
+                        if (estado.trabajando) "Emparejando…" else "Emparejar",
+                        { modelo.emparejar(email, password, dispositivo) },
+                        Modifier.fillMaxWidth(),
                         activo = !estado.trabajando,
                     )
-                    BotonSecundario("Desemparejar", modelo::desemparejar)
+                }
+
+                ReglaGruesa()
+                Text("Sobre la aplicación", style = MaterialTheme.typography.titleMedium)
+                Dato("Versión", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                Dato("Biblioteca", hostDe(BuildConfig.BOOKS_URL))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BotonSecundario("Buscar actualización", modelo::comprobarActualizacion)
+                    if (estado.versionDisponible != null) {
+                        BotonPrimario("Descargar ${estado.versionDisponible}", {
+                            contexto.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.SITE_URL}/aplicacion")),
+                            )
+                        })
+                    }
                 }
 
                 ReglaFina()
                 Text(
-                    "Al desemparejar se retira la credencial de este teléfono en el servidor. Lo que hayas " +
-                        "leído y anotado en documentos del propio dispositivo se queda aquí, intacto.",
+                    "Los PDF que abras desde el teléfono no se suben a ninguna parte. Sólo viajan a la " +
+                        "biblioteca privada el progreso, los subrayados, las notas y las páginas marcadas de " +
+                        "los documentos que vienen de ella.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else {
-                Text("Conectar con la biblioteca privada", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Escribe el mismo email y contraseña que usas en ${hostDe(BuildConfig.BOOKS_URL)}. " +
-                        "El teléfono guardará una credencial propia, no tu contraseña, y podrás retirarla " +
-                        "desde aquí o desde el servidor sin cambiarla.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-
-                Campo("Email", email, { email = it }, KeyboardType.Email)
-                Campo("Contraseña", password, { password = it }, KeyboardType.Password, oculto = true)
-                Campo("Nombre de este dispositivo", dispositivo, { dispositivo = it }, KeyboardType.Text)
-
-                BotonPrimario(
-                    if (estado.trabajando) "Emparejando…" else "Emparejar",
-                    { modelo.emparejar(email, password, dispositivo) },
-                    Modifier.fillMaxWidth(),
-                    activo = !estado.trabajando,
-                )
+                Spacer(Modifier.height(24.dp))
             }
-
-            ReglaGruesa()
-            Text("Sobre la aplicación", style = MaterialTheme.typography.titleMedium)
-            Dato("Versión", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-            Dato("Biblioteca", hostDe(BuildConfig.BOOKS_URL))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BotonSecundario("Buscar actualización", modelo::comprobarActualizacion)
-                if (estado.versionDisponible != null) {
-                    BotonPrimario("Descargar ${estado.versionDisponible}", {
-                        contexto.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("${BuildConfig.SITE_URL}/aplicacion")),
-                        )
-                    })
-                }
-            }
-
-            ReglaFina()
-            Text(
-                "Los PDF que abras desde el teléfono no se suben a ninguna parte. Sólo viajan a la " +
-                    "biblioteca privada el progreso, los subrayados, las notas y las páginas marcadas de " +
-                    "los documentos que vienen de ella.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(24.dp))
         }
     }
 }

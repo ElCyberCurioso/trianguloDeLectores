@@ -137,3 +137,138 @@ data class VersionDto(
     val notes: String? = null,
     val url: String = "",
 )
+
+// ------------------------------------------------------------ biblioteca --
+/**
+ * Una ficha del catálogo en papel.
+ *
+ * Es el mismo vocabulario que usa el servidor, sin traducir: cada traducción
+ * entre modelos es un sitio donde perder un campo al añadirlo en un lado y
+ * olvidarlo en el otro.
+ */
+@Serializable
+data class LibroDto(
+    val id: String,
+    val isbn13: String? = null,
+    val isbn10: String? = null,
+    val title: String,
+    val subtitle: String? = null,
+    val authors: String? = null,
+    val publisher: String? = null,
+    val publishedYear: Int? = null,
+    val pageCount: Int? = null,
+    val language: String? = null,
+    val location: String? = null,
+    val status: String = "OWNED",
+    val rating: Int? = null,
+    val notes: String? = null,
+    val source: String = "MANUAL",
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+    /** Ruta relativa en la propia API, no una dirección de un tercero. */
+    val coverUrl: String? = null,
+)
+
+@Serializable
+data class ContadoresDto(
+    val total: Int = 0,
+    val owned: Int = 0,
+    val reading: Int = 0,
+    val read: Int = 0,
+    val lent: Int = 0,
+    val wishlist: Int = 0,
+)
+
+@Serializable
+data class ListaBibliotecaDto(
+    val books: List<LibroDto> = emptyList(),
+    val counters: ContadoresDto = ContadoresDto(),
+    val serverTime: Long = 0,
+)
+
+@Serializable
+data class LibroEnvolturaDto(val book: LibroDto? = null)
+
+/** Lo que Open Library sabe de un ISBN. Puede venir casi vacío. */
+@Serializable
+data class BorradorIsbnDto(
+    val isbn13: String? = null,
+    val isbn10: String? = null,
+    val title: String = "",
+    val subtitle: String? = null,
+    val authors: String? = null,
+    val publisher: String? = null,
+    val publishedYear: Int? = null,
+    val pageCount: Int? = null,
+    val language: String? = null,
+    val coverUrl: String? = null,
+)
+
+/** `existing` no es un error: dice que ese ISBN ya está en el catálogo. */
+@Serializable
+data class LibroExistenteDto(val id: String, val title: String)
+
+@Serializable
+data class RespuestaIsbnDto(
+    val draft: BorradorIsbnDto? = null,
+    val existing: LibroExistenteDto? = null,
+)
+
+/**
+ * Lo que se envía al dar de alta o editar.
+ *
+ * **Los campos de texto van vacíos, nunca nulos.** El esquema del servidor los
+ * declara opcionales, y «opcional» en Zod significa que puede faltar, no que
+ * pueda valer `null`: un nulo explícito lo rechaza con un 400 sin más
+ * explicación. La cadena vacía sí la entiende y la trata como «sin valor». Los
+ * numéricos, en cambio, sí admiten nulo, que es como se dice «sin año».
+ */
+@Serializable
+data class LibroEnvioDto(
+    val title: String,
+    val isbn13: String = "",
+    val isbn10: String = "",
+    val subtitle: String = "",
+    val authors: String = "",
+    val publisher: String = "",
+    val publishedYear: Int? = null,
+    val pageCount: Int? = null,
+    val language: String = "",
+    val location: String = "",
+    val status: String = "OWNED",
+    val rating: Int? = null,
+    val notes: String = "",
+    val coverKey: String = "",
+    val coverUrl: String = "",
+)
+
+/** La ficha guardada, lista para volver a enviarse tal cual al editarla. */
+fun LibroDto.paraEnviar(): LibroEnvioDto = LibroEnvioDto(
+    title = title,
+    isbn13 = isbn13.orEmpty(),
+    isbn10 = isbn10.orEmpty(),
+    subtitle = subtitle.orEmpty(),
+    authors = authors.orEmpty(),
+    publisher = publisher.orEmpty(),
+    publishedYear = publishedYear,
+    pageCount = pageCount,
+    language = language.orEmpty(),
+    location = location.orEmpty(),
+    status = status,
+    rating = rating,
+    notes = notes.orEmpty(),
+)
+
+/** El borrador que devuelve la consulta por ISBN, listo para dar de alta. */
+fun BorradorIsbnDto.paraEnviar(): LibroEnvioDto = LibroEnvioDto(
+    title = title,
+    isbn13 = isbn13.orEmpty(),
+    isbn10 = isbn10.orEmpty(),
+    subtitle = subtitle.orEmpty(),
+    authors = authors.orEmpty(),
+    publisher = publisher.orEmpty(),
+    publishedYear = publishedYear,
+    pageCount = pageCount,
+    language = language.orEmpty(),
+    coverUrl = coverUrl.orEmpty(),
+)

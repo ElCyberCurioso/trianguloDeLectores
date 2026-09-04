@@ -1,115 +1,131 @@
 # Cambios pendientes de commitear
 
-Estado del árbol respecto a `f169a49`. **38 ficheros modificados** (unas 1.700
-líneas añadidas) y **11 rutas nuevas**, una de ellas el proyecto Android entero:
-37 ficheros de fuente y unas 4.200 líneas.
+*Al 4 de septiembre de 2026.* Reescrito de cero: lo que había antes en este
+documento —aplicación Android inicial, medio punto en las notas, exclusividad
+entre pendientes y reseñas, estrellas en el editor— ya está commiteado. Lo que
+sigue es exactamente lo que marca `git status` ahora mismo: 16 ficheros
+modificados y 3 nuevos.
 
-Lo que había antes en este documento —la biblioteca privada del subdominio
-`books.`, la importación del catálogo de MyLibrary, el login compartido, los
-mensajes de Turnstile y la configuración de despliegue— **ya está en `f169a49`**.
-Aquí queda sólo lo que todavía no está en git.
-
-Verificación completa en verde: los cuatro `typecheck`, `eslint`, **406 tests**
-unitarios y de integración, y **65 de Playwright**.
+**El código ya está desplegado en producción y en staging** —Worker, las dos
+migraciones y el APK 1.1.0— **pero no está commiteado.** Sigue en pie lo de
+siempre: no hay ningún punto de git al que volver si algo se rompe. Verificado
+en verde: `preflight` completo, 240 tests de integración, typecheck y ESLint.
 
 ---
 
-## 1. Aplicación Android y su API — funcionalidad nueva
+## 1. Biblioteca en papel desde el móvil — funcionalidad nueva
 
-Un lector de PDF para el teléfono (`android/`, Kotlin + Compose, `minSdk` 26).
-Lee PDF del propio dispositivo sin cuenta ni red —con subrayados, notas y
-páginas marcadas que no salen de ahí— y, si se empareja, sincroniza en los dos
-sentidos lo de la biblioteca privada.
+La aplicación Android ya no es sólo lector de PDF: ahora consulta y gestiona el
+catálogo en papel, con alta por ISBN o a mano.
 
-**Por qué una credencial aparte.** La aplicación no puede usar la sesión del
-navegador: la cookie caduca a las 2 h de inactividad y el CSRF exige un `Origin`
-que un cliente nativo no manda. En vez de aflojar ninguna de las dos cosas, hay
-un **token de dispositivo** en `Authorization: Bearer` (`device_tokens`), guardado
-hasheado con SHA-256, de 90 días renovables y revocable de uno en uno. El
-emparejamiento pasa por `attemptLogin()` con `establishSession: false`, así que
-hereda el límite global, el hash señuelo, el bloqueo por intentos y la auditoría
-sin duplicarlos.
+**Servidor** (`src/server/routes/movil.ts`): seis rutas nuevas bajo
+`/api/movil/biblioteca`, detrás del mismo guardián de token de dispositivo que
+el resto de la API. No reimplementan nada: llaman a `LibraryService`, el mismo
+que usa la web, así que heredan el antiduplicado por ISBN (409, no 400), la
+descarga de portada a R2 y la auditoría. La consulta a Open Library y el orden
+del catálogo los hace el Worker, no el teléfono, por las mismas razones que en
+la web (IP de quien consulta, columna `surname` que no existe en SQL).
 
-**Cómo se resuelven los conflictos.** Gana la escritura más reciente, y la
-comparación la hace SQLite dentro del `ON CONFLICT DO UPDATE`. Las marcas de
-tiempo del cliente se recortan al reloj del servidor —un teléfono con la fecha
-adelantada ganaría todos los conflictos futuros—, las anotaciones pasan a
-borrarse en lógico —sin lápida, lo borrado en la web revivía en la siguiente
-sincronización— y la bajada trae `documentIds` entero, que es la única forma de
-enterarse de un documento dado de baja.
+**Aplicación** (`ui/BibliotecaScreen.kt`, `ui/BibliotecaViewModel.kt`, nuevos):
+pantalla con búsqueda con debounce, filtros por estado, cuatro criterios de
+orden, portadas cacheadas en memoria y un editor que sirve para alta y edición.
+El catálogo **no se guarda en local** —a diferencia de la estantería de PDF—
+porque se edita poco y se consulta con red.
 
-**Distribución del APK.** Página `/aplicacion` con la descarga, la suma SHA-256 y
-las instrucciones; `/aplicacion/descargar` sirviendo el binario desde R2 con la
-clave revalidada; `/aplicacion/version.json` para que la propia aplicación avise
-de que hay versión nueva, porque sin Play Store no hay quien lo haga por ella.
-`npm run apk:publish` sube binario y manifiesto, en ese orden.
+**Trampa documentada:** los campos de texto opcionales del servidor aceptan
+`undefined` o `""` pero no `null` (Zod `.optional()` no es lo mismo que
+nullable); el DTO de envío usa cadenas vacías por defecto, nunca nulos.
 
-Ficheros nuevos: `android/`, `migrations/0004_movil.sql`,
-`src/server/routes/movil.ts`, `src/server/lib/{device-auth,apk}.ts`,
-`src/db/repos/devices.ts`, `src/server/views/pages/app.tsx`,
-`scripts/publish-apk.mjs`, `tests/integration/{movil,aplicacion}.test.ts`.
+Tests: 12 nuevos en `tests/integration/movil.test.ts` (alta, listado, búsqueda,
+edición, borrado, ISBN duplicado → 409, estado inventado → 400, sin token → 401,
+cookie del panel → 401).
 
-**28 tests nuevos**, sobre todo de lo que no debe pasar: que la cookie no abra la
-API del móvil, que el token no abra el panel, que una fecha del futuro se
-recorte, que un borrado no reviva, que un lote desmesurado se rechace y que un
-manifiesto manipulado no pueda hacer que la ruta pública sirva otro objeto del
-bucket.
+**Pendiente, no empezado:** escanear el código de barras en vez de teclear el
+ISBN. Exige el permiso `CAMERA`, que la aplicación no pide hoy; lo dejé fuera a
+propósito sin decisión del usuario.
 
-## 2. Medio punto en las notas
+## 2. Lector de PDF: gestos, zoom y encaje
 
-El editor ya prometía «de 0 a 10, con medio punto de precisión», pero el
-desplegable ofrecía once enteros y la columna tenía `CHECK (rating BETWEEN 0 AND
-10)`: la promesa estaba en la etiqueta y en ningún sitio más.
+Cuatro fallos de la misma sesión de pruebas, todos en `ui/LectorScreen.kt`
+salvo el indicado:
 
-La nota se guarda ahora en **medios puntos** —entero 0..20 en
-`reviews.rating_half`— y se convierte sólo en `scoreToHalf()` / `halfToScore()`.
-La columna `rating` no se toca: cambiar su `CHECK` obliga a reconstruir la tabla
-y el pipeline es aditivo, así que queda como herencia, la rellena el repositorio
-con el redondeo y no la lee nadie.
+- **Página en blanco con cualquier PDF.** `horizontalScroll` medía con anchura
+  infinita y `fillMaxWidth()` se quedaba en el mínimo (cero) por dentro; el
+  ancho se mide ahora fuera del contenedor de scroll.
+- **Texto negro sobre fondo oscuro** (`ui/AjustesScreen.kt` también).
+  `LocalContentColor` vale negro fijo en Material 3 y no se deriva del tema:
+  sólo lo cambia un `Surface`. Ambas pantallas eran `Column` pelados.
+- **Parpadeo en blanco al hacer zoom y gesto no fluido.** Cada paso de zoom
+  repintaba todas las páginas visibles. Ahora el zoom que se ve
+  (`graphicsLayer`, GPU) y el zoom al que se pinta (`zoomRaster`) son cosas
+  distintas; éste sólo se mueve 180 ms después de que el gesto para, y el mapa
+  de bits anterior se queda en pantalla (estirado) hasta que el nuevo está
+  listo.
+- **No había diagonal al arrastrar.** Un `horizontalScroll` envolviendo un
+  `LazyColumn` vertical son dos ejes que Compose no combina. Sustituido por un
+  único detector (`gestosDeLectura`) que reparte las dos componentes del mismo
+  arrastre.
+- **El zoom no se anclaba al punto medio entre los dedos.** Escalaba desde la
+  esquina y el contenido se escapaba en diagonal. Corregido a mano en los dos
+  ejes con `calculateCentroid()`, usando el factor ya recortado por el techo y
+  el suelo del zoom.
+- **Techo de zoom, 400 % → 800 %.** El techo de rasterizado ya no es una
+  constante: sale de `Runtime.maxMemory()`, reservando como mucho un octavo del
+  montón para una sola página. Pasado un ~3× la página se estira en vez de
+  repintarse.
 
-## 3. Un pendiente y su reseña ya no coexisten
+## 3. Estantería: cabecera compacta
 
-El listado público filtra por el vínculo (`review_id`) y no por el estado, y el
-emparejado es automático por título normalizado y tipo de contenido en los dos
-sentidos: al crear o publicar una reseña, y al dar de alta un pendiente cuya obra
-ya está reseñada. Antes eso sólo lo hacía el botón «convertir», así que escribir
-la reseña a mano dejaba la misma obra anunciada como «por ver» y publicada a la
-vez.
+`ui/EstanteriaScreen.kt`. La cabecera ocupaba dos filas más la marca bajo el
+título —unos 130 dp antes del primer documento—. Ahora es una sola fila:
+título, «Abrir PDF» y un menú `···` con «Biblioteca», «Sincronizar ahora» y
+«Ajustes». La marca de tres reglas se movió a la pantalla de estantería vacía.
 
-## 4. La nota se pone con estrellas
+## 4. Botón de descarga del APK ilegible
 
-Diez estrellas con medio punto, en el editor del panel. Se pulsa sobre la
-estrella —o sobre su mitad— y al pasar el ratón se previsualiza la nota que se va
-a poner. Debajo sigue habiendo un `input[type=range]` de verdad, que es lo que
-deja el control usable sin JavaScript, con el teclado y con el dedo; en cuanto
-hay JavaScript el puntero pasa a hablar con las estrellas, porque el deslizador
-reparte su anchura contando el ancho del pulgar y pulsar sobre la séptima dejaba
-un 6,5. El relleno va por `data-half` y una regla de CSS por valor, nunca por
-`style=`, que la CSP rechazaría.
+`public/assets/styles.css`. `.prose a` (especificidad 0,1,1) ganaba a
+`.btn--primary` (0,1,0): la etiqueta salía en rojo de enlace sobre el relleno
+rojo del botón, casi invisible hasta el `:hover`. Añadidas reglas
+`.prose a.btn*` con la especificidad correcta.
 
-Ficheros: `migrations/0005_nota_media.sql`, `src/types/domain.ts`,
-`src/db/repos/{reviews,watchlist}.ts`,
-`src/server/services/{reviews,watchlist}.ts`, `src/server/routes/admin.tsx`,
-`src/server/lib/seo.ts`, el editor del panel, `src/client/admin.ts`,
-`public/assets/styles.css` y `scripts/seed.sql`.
+## 5. `migrations/0004_movil.sql`: comentario corregido, no re-aplicado
+
+Un `--` dentro de un comentario de bloque (`/** ... -- ... */`) hacía que el
+troceador de D1 remoto se comiera el `*/` de cierre; SQLite seguía comentando
+hasta el siguiente `*/`, y las columnas `device_name` y `platform` de
+`device_tokens` nunca llegaron a crearse **en producción ni en staging**
+—sólo se ve pasando por el troceador remoto, ni tests ni entorno local lo
+detectan—. El emparejamiento fallaba con 500 en el `INSERT`.
+
+**Ya reparado a mano en las dos bases remotas** (no por esta migración: el
+pipeline es aditivo y esto tocaba una tabla ya desplegada). El cambio que
+queda pendiente de commitear es sólo la corrección del comentario en el
+fichero fuente, para que una base nueva se cree bien desde el principio.
+
+## 6. `values-night/colors.xml` (nuevo)
+
+`@color/fondo` tenía un solo valor, oscuro, mientras Compose sigue la
+preferencia del sistema: en tema claro se veía el fondo de ventana oscuro por
+detrás de cualquier pantalla sin `Surface` propio. Añadida la variante
+`values-night` con el fondo claro en `values/colors.xml` y el oscuro en
+`values-night/colors.xml`.
 
 ---
 
 ## Estado del despliegue
 
-**Staging está al día con este árbol.** Las migraciones `0004_movil.sql` y
-`0005_nota_media.sql` están aplicadas allí, y el APK de la aplicación (compilado
-contra staging, con `applicationId` propio) está publicado en su bucket.
+**Producción y staging están al día con este árbol de trabajo** —no con
+git—. Migraciones `0004_movil.sql` y `0005_nota_media.sql` aplicadas en los
+dos. Worker desplegado dos veces en esta sesión (versión de producción
+`584e2a21…`, de staging `238277ae…`). APK **1.1.0** (versionCode 6) publicado
+en el bucket de producción; es el primero con la biblioteca en papel.
 
-**Producción no.** Sigue con el código de `f169a49`: sin las dos migraciones, sin
-la API del móvil y sin la página de descarga. Desplegarla exige aplicar las dos
-migraciones antes que el código.
-
-Sigue en pie lo de siempre: **producción está corriendo código que sólo existe en
-el árbol de trabajo**, así que no hay ningún punto de git al que volver.
+`device_tokens` reparado a mano en producción y en staging (ver §5): la tabla
+estaba vacía en los dos casos, así que no hubo pérdida de datos.
 
 ## Commit sugerido
 
-1. Aplicación Android, su API y la distribución del APK.
-2. Medio punto en las notas y exclusividad entre pendientes y reseñas.
-3. La nota en estrellas en el editor del panel.
+1. Lector de PDF: gestos, zoom y encaje (§2).
+2. Estantería compacta y botón de descarga legible (§3, §4).
+3. Corrección del comentario en `0004_movil.sql` (§5) y `values-night` (§6).
+4. Biblioteca en papel desde el móvil, servidor y aplicación (§1).

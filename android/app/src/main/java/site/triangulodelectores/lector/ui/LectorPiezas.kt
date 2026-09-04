@@ -85,18 +85,24 @@ fun BarraLector(
             ControlTexto("Nota", alAnotar)
             ControlTexto("Notas", alVerAnotaciones)
             Box(Modifier.weight(1f))
-            ControlTexto("−", { alZoom(zoom - 0.5f) })
+            // Paso multiplicativo, no aditivo: de 1 a 8 en sumas de medio punto
+            // son catorce toques, y el salto que se percibe al ampliar no es el
+            // mismo al principio que al final.
+            ControlTexto("−", { alZoom(zoom / PASO_ZOOM) })
             Text(
                 "${(zoom * 100).toInt()} %",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            ControlTexto("+", { alZoom(zoom + 0.5f) })
+            ControlTexto("+", { alZoom(zoom * PASO_ZOOM) })
         }
 
         ReglaGruesa()
     }
 }
+
+/** Lo que cambia el zoom cada toque de los botones. */
+private const val PASO_ZOOM = 1.5f
 
 /** Control de barra. En rojo cuando está activo: el acento significa algo. */
 @Composable

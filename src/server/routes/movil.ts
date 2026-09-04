@@ -12,7 +12,12 @@ import { LibraryService } from '../services/library';
 import { bookCoverUrl } from '../lib/books';
 import {
   deviceLoginSchema, syncPullSchema, syncPushSchema, pageCountSchema, idSchema,
+  librarySearchSchema, libraryBookSchema, isbnSchema,
 } from '../../validation/schemas';
+import { sortLibrary, LIBRARY_SORT_DEFAULT } from '../lib/library-sort';
+import { parseIsbn } from '../lib/isbn';
+import type { LibraryRecord, LibraryStatus } from '../../db/repos/library';
+import type { SessionUser } from '../lib/auth';
 import type { DocumentWithProgress } from '../../db/repos/documents';
 
 /**
@@ -321,6 +326,205 @@ mobileRoutes.post('/sincronizacion', rateLimit('mobileSync', { identity: deviceI
  * `checksum` interno de más: la clave del bucket es un detalle del servidor y
  * publicarla sólo invita a construir URL a mano.
  */
+// ========================================================== BIBLIOTECA =====
+/*
+ * El catálogo en papel, desde el teléfono.
+ *
+ * Nada de esto reimplementa la biblioteca: se apoya en `LibraryService`, que es
+ * donde viven las decisiones que importan —el antiduplicado por ISBN, la
+ * descarga de la portada a R2, la auditoría— y que ya usa el subdominio. Aquí
+ * sólo se traduce a JSON y se protege con el token del dispositivo.
+ */
+
+/**
+ * Quién hace el cambio.
+ *
+ * El servicio audita con el usuario, no con el dispositivo, así que hay que
+ * traérselo entero: el token sólo lleva id, rol y nombre para mostrar. Es una
+ * consulta de más, y sólo en las escrituras, que son las menos.
+ */
+async function actorDelDispositivo(c: Parameters<typeof currentDevice>[0]): Promise<SessionUser> {
+  const device = currentDevice(c);
+  const user = await c.get('container').users.findById(device.userId);
+  if (!user) throw unauthorized('La cuenta de este dispositivo ya no existe');
+  return { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
+}
+
+/**
+ * La portada sale por id de libro, nunca por clave de R2.
+ *
+ * Es la misma razón que en los documentos: el móvil no tiene por qué conocer la
+ * disposición del bucket, y una ruta que aceptara claves sería una ruta que hay
+ * que defender de las claves que no tocan.
+ */
+function toMobileBook(book: LibraryRecord) {
+  return {
+    id: book.id,
+    isbn13: book.isbn13,
+    isbn10: book.isbn10,
+    title: book.title,
+    subtitle: book.subtitle,
+    authors: book.authors,
+    publisher: book.publisher,
+    publishedYear: book.publishedYear,
+    pageCount: book.pageCount,
+    language: book.language,
+    location: book.location,
+    status: book.status,
+    rating: book.rating,
+    notes: book.notes,
+    source: book.source,
+    createdAt: book.createdAt,
+    updatedAt: book.updatedAt,
+    coverUrl: book.coverKey ? `/api/movil/biblioteca/${book.id}/portada` : null,
+  };
+}
+
+/**
+ * El catálogo, ya ordenado.
+ *
+ * El orden lo decide el Worker y no SQLite, igual que en la web: SQLite compara
+ * códigos de carácter y pone «Álvarez» detrás de «Zapata», y además el apellido
+ * no es una columna. El criterio entra por una lista cerrada de Zod, así que
+ * elige un comparador ya escrito y nunca una columna ni SQL que venga de fuera.
+ */
+mobileRoutes.get('/biblioteca', async (c) => {
+  const parsed = librarySearchSchema.safeParse({
+    q: c.req.query('q') ?? '',
+    status: c.req.query('status') ?? 'ALL',
+    sort: c.req.query('sort') ?? LIBRARY_SORT_DEFAULT,
+  });
+  const query = parsed.success
+    ? parsed.data
+    : { q: undefined, status: 'ALL' as const, sort: LIBRARY_SORT_DEFAULT };
+
+  const container = c.get('container');
+  const [books, counters] = await Promise.all([
+    container.library.list({ q: query.q, status: query.status }),
+    container.library.counters(),
+  ]);
+
+  return ok(c, {
+    books: sortLibrary(books, query.sort).map(toMobileBook),
+    counters,
+    serverTime: Date.now(),
+  });
+});
+
+mobileRoutes.get('/biblioteca/:id', async (c) => {
+  const id = idSchema.safeParse(c.req.param('id'));
+  if (!id.success) throw notFound('El libro no existe');
+
+  const book = await c.get('container').library.get(id.data);
+  if (!book) throw notFound('El libro no existe');
+  return ok(c, { book: toMobileBook(book) });
+});
+
+mobileRoutes.get('/biblioteca/:id/portada', async (c) => {
+  const id = idSchema.safeParse(c.req.param('id'));
+  if (!id.success) throw notFound('La portada no existe');
+
+  const book = await c.get('container').library.get(id.data);
+  if (!book?.coverKey) throw notFound('La portada no existe');
+
+  return new LibraryService(c.get('container')).serveCover(book.coverKey, c.req.raw);
+});
+
+/**
+ * Consulta por ISBN. **La hace el Worker**, no el teléfono.
+ *
+ * Mismo criterio que en la web: la IP de quien usa la aplicación no tiene por
+ * qué llegar a Open Library, y la portada la baja y la guarda el servidor.
+ */
+mobileRoutes.post('/isbn', rateLimit('publicApi', { identity: deviceIdentity }), async (c) => {
+  const parsed = isbnSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('invalid_isbn', 'Ese número no es un ISBN válido');
+
+  const result = await new LibraryService(c.get('container')).lookup(parsed.data.isbn);
+  return ok(c, {
+    draft: result.draft,
+    existing: result.existing ? { id: result.existing.id, title: result.existing.title } : null,
+  });
+});
+
+/**
+ * Alta, por ISBN o a mano.
+ *
+ * No hay dos caminos: el de ISBN es este mismo con el borrador que devolvió
+ * `/isbn` ya relleno. Un alta con ISBN repetido responde 409, que es lo que
+ * permite al teléfono decir «ya lo tienes» en vez de duplicar la ficha.
+ */
+mobileRoutes.post('/biblioteca', async (c) => {
+  const parsed = libraryBookSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('invalid_book', 'Revisa los campos: el título es obligatorio');
+
+  const isbn = parsed.data.isbn13 ? parseIsbn(parsed.data.isbn13) : null;
+  const id = await new LibraryService(c.get('container')).create(
+    {
+      isbn13: isbn?.isbn13 ?? null,
+      isbn10: isbn?.isbn10 ?? null,
+      title: parsed.data.title,
+      subtitle: parsed.data.subtitle ?? null,
+      authors: parsed.data.authors ?? null,
+      publisher: parsed.data.publisher ?? null,
+      publishedYear: parsed.data.publishedYear ?? null,
+      pageCount: parsed.data.pageCount ?? null,
+      language: parsed.data.language ?? null,
+      location: parsed.data.location ?? null,
+      status: parsed.data.status as LibraryStatus,
+      rating: parsed.data.rating ?? null,
+      notes: parsed.data.notes ?? null,
+      coverKey: parsed.data.coverKey || null,
+      coverUrl: parsed.data.coverUrl || null,
+      source: parsed.data.coverUrl || isbn ? 'OPENLIBRARY' : 'MANUAL',
+    },
+    await actorDelDispositivo(c),
+  );
+
+  const book = await c.get('container').library.get(id);
+  return ok(c, { book: book ? toMobileBook(book) : null }, 201);
+});
+
+mobileRoutes.patch('/biblioteca/:id', async (c) => {
+  const id = idSchema.safeParse(c.req.param('id'));
+  if (!id.success) throw notFound('El libro no existe');
+
+  const parsed = libraryBookSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('invalid_book', 'Revisa los campos: el título es obligatorio');
+
+  const isbn = parsed.data.isbn13 ? parseIsbn(parsed.data.isbn13) : null;
+  await new LibraryService(c.get('container')).update(
+    id.data,
+    {
+      isbn13: isbn?.isbn13 ?? null,
+      isbn10: isbn?.isbn10 ?? null,
+      title: parsed.data.title,
+      subtitle: parsed.data.subtitle ?? null,
+      authors: parsed.data.authors ?? null,
+      publisher: parsed.data.publisher ?? null,
+      publishedYear: parsed.data.publishedYear ?? null,
+      pageCount: parsed.data.pageCount ?? null,
+      language: parsed.data.language ?? null,
+      location: parsed.data.location ?? null,
+      status: parsed.data.status as LibraryStatus,
+      rating: parsed.data.rating ?? null,
+      notes: parsed.data.notes ?? null,
+    },
+    await actorDelDispositivo(c),
+  );
+
+  const book = await c.get('container').library.get(id.data);
+  return ok(c, { book: book ? toMobileBook(book) : null });
+});
+
+mobileRoutes.delete('/biblioteca/:id', async (c) => {
+  const id = idSchema.safeParse(c.req.param('id'));
+  if (!id.success) throw notFound('El libro no existe');
+
+  await new LibraryService(c.get('container')).delete(id.data, await actorDelDispositivo(c));
+  return ok(c, { deleted: true });
+});
+
 function toMobileDocument(document: DocumentWithProgress) {
   return {
     id: document.id,

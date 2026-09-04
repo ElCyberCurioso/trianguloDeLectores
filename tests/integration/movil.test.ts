@@ -414,6 +414,152 @@ describe('sincronización', () => {
   });
 });
 
+/**
+ * La biblioteca en papel desde el teléfono.
+ *
+ * Lo que se comprueba es que no hay una segunda implementación: el alta pasa
+ * por el mismo servicio que la web, así que hereda su antiduplicado por ISBN y
+ * su auditoría. Y que sin token no se ve nada, como el resto de la API.
+ */
+describe('biblioteca desde el móvil', () => {
+  let libroId: string;
+
+  it('da de alta un libro a mano', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify({
+        title: 'Un libro sin ISBN',
+        authors: 'Autora de Prueba',
+        status: 'OWNED',
+        location: 'Balda de arriba',
+      }),
+    });
+    expect(respuesta.status).toBe(201);
+
+    const cuerpo = (await respuesta.json()) as { data: { book: { id: string; title: string; source: string } } };
+    expect(cuerpo.data.book.title).toBe('Un libro sin ISBN');
+    // Sin ISBN y sin portada remota, la ficha es manual.
+    expect(cuerpo.data.book.source).toBe('MANUAL');
+    libroId = cuerpo.data.book.id;
+  });
+
+  it('lo devuelve en el listado, con sus contadores', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca?sort=title`, {
+      headers: movil(),
+    });
+    expect(respuesta.status).toBe(200);
+
+    const cuerpo = (await respuesta.json()) as {
+      data: { books: Array<{ id: string }>; counters: { total: number } };
+    };
+    expect(cuerpo.data.books.some((b) => b.id === libroId)).toBe(true);
+    expect(cuerpo.data.counters.total).toBeGreaterThan(0);
+  });
+
+  it('busca por texto', async () => {
+    const respuesta = await SELF.fetch(
+      `${BOOKS_ORIGIN}/api/movil/biblioteca?q=${encodeURIComponent('sin ISBN')}`,
+      { headers: movil() },
+    );
+    const cuerpo = (await respuesta.json()) as { data: { books: Array<{ id: string }> } };
+    expect(cuerpo.data.books.some((b) => b.id === libroId)).toBe(true);
+  });
+
+  it('edita la ficha', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca/${libroId}`, {
+      method: 'PATCH',
+      headers: movil(),
+      body: JSON.stringify({ title: 'Un libro sin ISBN', status: 'LENT', location: 'Prestado a alguien' }),
+    });
+    expect(respuesta.status).toBe(200);
+
+    const cuerpo = (await respuesta.json()) as { data: { book: { status: string; location: string } } };
+    expect(cuerpo.data.book.status).toBe('LENT');
+    expect(cuerpo.data.book.location).toBe('Prestado a alguien');
+  });
+
+  it('rechaza una ficha sin título', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify({ authors: 'Nadie' }),
+    });
+    expect(respuesta.status).toBe(400);
+  });
+
+  it('no acepta un estado inventado', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify({ title: 'Estado raro', status: 'REGALADO' }),
+    });
+    expect(respuesta.status).toBe(400);
+  });
+
+  it('no se traga un ISBN repetido', async () => {
+    // ISBN propio de este fichero: la base de datos de integración es la misma
+    // para todos, y reutilizar uno de otro test hacía que el primer alta ya
+    // chocara con la del vecino.
+    const alta = {
+      title: 'Con ISBN',
+      isbn13: '9788400000004',
+      status: 'OWNED',
+    };
+    const primera = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify(alta),
+    });
+    expect(primera.status).toBe(201);
+
+    const segunda = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify(alta),
+    });
+    // 409 y no 400: el teléfono puede decir «ya lo tienes» en vez de «revisa
+    // los campos», que sería mentira.
+    expect(segunda.status).toBe(409);
+  });
+
+  it('un ISBN con letras es un 400, no una consulta a Open Library', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/isbn`, {
+      method: 'POST',
+      headers: movil(),
+      body: JSON.stringify({ isbn: 'no-es-un-isbn' }),
+    });
+    expect(respuesta.status).toBe(400);
+  });
+
+  it('sin token no se ve el catálogo', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      headers: { Accept: 'application/json' },
+    });
+    expect(respuesta.status).toBe(401);
+  });
+
+  it('la cookie del panel tampoco abre el catálogo del móvil', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca`, {
+      headers: booksHeaders(books, { Accept: 'application/json' }),
+    });
+    expect(respuesta.status).toBe(401);
+  });
+
+  it('borra la ficha', async () => {
+    const respuesta = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca/${libroId}`, {
+      method: 'DELETE',
+      headers: movil(),
+    });
+    expect(respuesta.status).toBe(200);
+
+    const despues = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/biblioteca/${libroId}`, {
+      headers: movil(),
+    });
+    expect(despues.status).toBe(404);
+  });
+});
+
 describe('revocación', () => {
   it('un token revocado deja de valer al instante', async () => {
     const emparejado = (await (await emparejar(ADMIN_EMAIL, ADMIN_PASSWORD, 'Teléfono perdido')).json()) as {

@@ -883,6 +883,16 @@ p { margin: 0 0 var(--space-3); }
 .prose h3 { font-size: 22px; margin-top: var(--space-6); }
 .prose p { margin: 0 0 var(--space-4); }
 .prose a { color: var(--color-accent-text); }
+/* Un botón dentro de la prosa sigue siendo un botón. `.prose a` (0,1,1) gana a
+   `.btn--primary` (0,1,0), así que se llevaba la etiqueta al rojo de enlace
+   sobre el relleno rojo: ilegible parada y sólo visible al pasar por encima,
+   cuando el relleno se oscurece. En claro es peor todavía, porque texto y
+   relleno son el mismo `--color-accent-700`. */
+.prose a.btn { color: var(--color-text); }
+.prose a.btn--primary { color: var(--color-on-accent); }
+.prose a.btn--danger,
+.prose a.btn--link { color: var(--color-accent-text); }
+.prose a.btn--ok { color: var(--ok); }
 .prose blockquote {
   margin: var(--space-6) 0; padding-inline-start: var(--space-4);
   border-inline-start: 2px solid var(--color-accent);

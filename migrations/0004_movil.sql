@@ -31,7 +31,7 @@ CREATE TABLE device_tokens (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash   TEXT NOT NULL,
-  /** Lo que escribe la persona para reconocerlo -- «Pixel del trabajo». */
+  /** Lo que escribe la persona para reconocerlo, como «Pixel del trabajo». */
   device_name  TEXT NOT NULL,
   platform     TEXT NOT NULL DEFAULT 'ANDROID' CHECK (platform IN ('ANDROID')),
   /** Pseudonimizada con HMAC, como en el resto del proyecto. Nunca en claro. */

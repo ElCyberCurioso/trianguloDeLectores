@@ -21,6 +21,19 @@ import site.triangulodelectores.lector.data.local.Progreso
 import site.triangulodelectores.lector.data.local.Rect
 import site.triangulodelectores.lector.pdf.DocumentoPdf
 
+/** Sin reducir por debajo del ancho de la pantalla: no hay nada que ver ahí. */
+const val ZOOM_MINIMO = 1f
+
+/**
+ * Techo del zoom.
+ *
+ * Ocho aumentos, no cuatro. Cuatro se quedaba corto para una nota al pie o para
+ * el detalle de una figura, que es justo cuando se amplía. El coste está
+ * acotado aparte: el rasterizado tiene su propio techo en píxeles, así que
+ * pasado cierto punto se estira lo pintado en vez de pintar más grande.
+ */
+const val ZOOM_MAXIMO = 8f
+
 data class EstadoLector(
     val documento: Documento? = null,
     val paginas: Int = 0,
@@ -122,7 +135,17 @@ class LectorViewModel(
 
     fun elegirColor(color: ColorAnotacion) = _estado.update { it.copy(colorActivo = color) }
 
-    fun cambiarZoom(zoom: Float) = _estado.update { it.copy(zoom = zoom.coerceIn(1f, 4f)) }
+    /**
+     * Cambia el zoom. Sin redondear: el valor es continuo.
+     *
+     * Estuvo redondeado a décimas mientras cada cambio obligaba a repintar todo
+     * lo visible, y se notaba: el pellizco avanzaba a saltos. Ahora entre el
+     * zoom que se ve y el que está pintado media una transformación de la GPU,
+     * así que mover esto no cuesta nada y puede seguir al dedo.
+     */
+    fun cambiarZoom(zoom: Float) = _estado.update {
+        it.copy(zoom = zoom.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO))
+    }
 
     fun subrayar(pagina: Int, rect: Rect) {
         // Un recuadro de un par de píxeles es un toque mal interpretado, no un
