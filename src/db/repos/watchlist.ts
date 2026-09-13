@@ -13,6 +13,9 @@ export interface WatchlistRow {
   categoryName: string | null;
   categorySlug: string | null;
   year: number | null;
+  yearEnd: number | null;
+  yearOngoing: number;
+  seasons: number | null;
   creator: string | null;
   note: string | null;
   sourceUrl: string | null;
@@ -34,8 +37,23 @@ export interface WatchlistQuery {
   type?: ContentType;
   priority?: Priority;
   q?: string;
+  /** Slug de categoría, no id: es lo que viaja en la URL del filtro. */
+  category?: string;
+  /**
+   * Periodo con el que tiene que solaparse el de la obra.
+   *
+   * Solaparse y no coincidir: buscando «2021» tiene que salir una serie de
+   * 2020-2022, porque en 2021 se estaba emitiendo. Pedir coincidencia exacta
+   * dejaría fuera justo lo que el periodo vino a representar.
+   */
+  yearFrom?: number;
+  yearTo?: number;
   sort?: WatchlistSort;
   onlyPublic?: boolean;
+  /** Sin él no se aplica filtro de visibilidad; `onlyPublic` sigue mandando. */
+  visibility?: 'ALL' | 'PUBLIC' | 'PRIVATE';
+  /** Excluye lo que ya tiene reseña. Implícito en `onlyPublic`. */
+  withoutReview?: boolean;
   page?: number;
   perPage?: number;
 }
@@ -58,6 +76,9 @@ const columns = {
   categoryName: categories.name,
   categorySlug: categories.slug,
   year: watchlistItems.year,
+  yearEnd: watchlistItems.yearEnd,
+  yearOngoing: watchlistItems.yearOngoing,
+  seasons: watchlistItems.seasons,
   creator: watchlistItems.creator,
   note: watchlistItems.note,
   sourceUrl: watchlistItems.sourceUrl,
@@ -127,6 +148,25 @@ export class WatchlistRepository {
 
     if (query.type) conditions.push(eq(watchlistItems.contentType, query.type));
     if (query.priority) conditions.push(eq(watchlistItems.priority, query.priority));
+    if (query.category) conditions.push(eq(categories.slug, query.category));
+    if (query.withoutReview) conditions.push(isNull(watchlistItems.reviewId));
+
+    if (query.visibility === 'PUBLIC') conditions.push(eq(watchlistItems.isPublic, 1));
+    if (query.visibility === 'PRIVATE') conditions.push(eq(watchlistItems.isPublic, 0));
+
+    /*
+     * Solape de periodos.
+     *
+     * Dos rangos se solapan si cada uno empieza antes de que acabe el otro. El
+     * final de la obra sale de tres sitios, en este orden: el año de fin, el
+     * tope abierto cuando sigue en marcha, y el propio año de inicio cuando es
+     * un año suelto. Sin el `COALESCE`, cualquier ficha sin año de fin —que son
+     * casi todas— se quedaría fuera de cualquier búsqueda por años.
+     */
+    const finDeObra = sql`COALESCE(${watchlistItems.yearEnd},
+      CASE WHEN ${watchlistItems.yearOngoing} = 1 THEN 9999 ELSE ${watchlistItems.year} END)`;
+    if (query.yearFrom !== undefined) conditions.push(sql`${finDeObra} >= ${query.yearFrom}`);
+    if (query.yearTo !== undefined) conditions.push(sql`${watchlistItems.year} <= ${query.yearTo}`);
 
     if (query.q) {
       // Parametrizado por Drizzle; se escapan además los comodines de LIKE.
@@ -143,7 +183,14 @@ export class WatchlistRepository {
     const where = conditions.length ? and(...conditions) : undefined;
 
     const [totalRow, rows] = await Promise.all([
-      this.db.select({ value: count() }).from(watchlistItems).where(where).get(),
+      // El mismo JOIN que el listado: el filtro por categoría vive en
+      // `categories.slug`, así que sin unir la tabla el COUNT no compila.
+      this.db
+        .select({ value: count() })
+        .from(watchlistItems)
+        .leftJoin(categories, eq(categories.id, watchlistItems.categoryId))
+        .where(where)
+        .get(),
       this.db
         .select(columns)
         .from(watchlistItems)

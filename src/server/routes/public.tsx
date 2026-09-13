@@ -1,4 +1,5 @@
 import type { Context } from 'hono';
+import type { Child } from 'hono/jsx';
 import { Hono } from 'hono';
 import type { AppEnv } from '../../types/env';
 import { Layout } from '../views/layout';
@@ -7,17 +8,25 @@ import { ReviewPage } from '../views/pages/review';
 import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
 import { AppPage } from '../views/pages/app';
 import { WatchlistPage } from '../views/pages/watchlist';
+import { WatchlistEditorPublicPage } from '../views/pages/watchlist-editor';
+import { EMPTY_WATCHLIST_DRAFT } from '../views/components/watchlist-form';
 import { RecommendPage } from '../views/pages/recommend';
-import { reviewQuerySchema } from '../../validation/schemas';
-import { CONTENT_TYPES, type ContentType } from '../../types/domain';
+import {
+  reviewQuerySchema, publicWatchlistQuerySchema, watchlistInputSchema, fieldErrors,
+  type PublicWatchlistQuery,
+} from '../../validation/schemas';
 import { edgeCached, CACHE_NS, NO_STORE } from '../lib/cache';
 import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
 import { variantUrl } from '../lib/images';
 import { issueFormToken } from '../lib/formtoken';
-import { notFound } from '../lib/http';
+import { badRequest, notFound } from '../lib/http';
 import { readApkManifest, isSafeApkKey, APK_FILENAME, APK_CONTENT_TYPE } from '../lib/apk';
 import { booksHost } from '../lib/books';
 import { rateLimit } from '../middleware/ratelimit';
+import { requireAdmin, requireCsrf } from '../middleware/auth';
+import { parseYearRange } from '../lib/year';
+import * as F from '../lib/form';
+import { WatchlistService } from '../services/watchlist';
 import { htmlToText } from '../lib/sanitize';
 import { MediaService } from '../services/media';
 import { ReviewService } from '../services/reviews';
@@ -30,7 +39,7 @@ const REVIEW_CACHE = { ns: CACHE_NS.reviews, edgeTtl: 600, browserTtl: 120, swr:
 
 // ------------------------------------------------------------------- home --
 publicRoutes.get('/', async (c) => {
-  const parsed = reviewQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const parsed = reviewQuerySchema.safeParse(F.queryParams(c.req.url));
   const query = parsed.success ? parsed.data : reviewQuerySchema.parse({});
 
   return edgeCached(c, HOME_CACHE, async () => {
@@ -113,11 +122,14 @@ publicRoutes.get('/resena/:slug', async (c) => {
     if (!review) throw notFound('Esa reseña no existe o todavía no está publicada');
 
     const policy = await new ReviewService(container).commentPolicy(review);
-    const comments = await buildCommentProps(c, review.id, review.slug, policy);
+    const [comments, episodes] = await Promise.all([
+      buildCommentProps(c, review.id, review.slug, policy),
+      container.episodes.byReview(review.id),
+    ]);
 
     if (isPartial) {
       // Fragmento para el modal: sin <html>, mismas cabeceras de seguridad.
-      return c.html(<ReviewPage env={c.env} review={review} comments={comments} inModal />);
+      return c.html(<ReviewPage env={c.env} review={review} comments={comments} episodes={episodes} inModal />);
     }
 
     const description =
@@ -143,7 +155,7 @@ publicRoutes.get('/resena/:slug', async (c) => {
           jsonLd: reviewJsonLd(c.env, review),
         }}
       >
-        <ReviewPage env={c.env} review={review} comments={comments} />
+        <ReviewPage env={c.env} review={review} comments={comments} episodes={episodes} />
       </Layout>,
     );
   };
@@ -155,21 +167,61 @@ publicRoutes.get('/resena/:slug', async (c) => {
 // ------------------------------------------------------------- pendientes --
 const WATCHLIST_CACHE = { ns: CACHE_NS.watchlist, edgeTtl: 300, browserTtl: 60, swr: 3600 } as const;
 
+/**
+ * El listado de pendientes, público y a la vez el sitio donde se gestionan.
+ *
+ * Lo que se puede ver **no** lo decide la URL. Sin sesión se fuerza a lo
+ * público, activo y todavía sin reseña, pase lo que pase en los parámetros; con
+ * sesión se respeta lo que pida el filtro. Dejar que `status=ALL` o
+ * `visibility=PRIVATE` funcionaran para cualquiera convertiría un parámetro de
+ * la query en la llave de lo privado.
+ */
 publicRoutes.get('/pendientes', async (c) => {
-  const tipoParam = c.req.query('type');
-  const tipo = CONTENT_TYPES.includes(tipoParam as ContentType) ? (tipoParam as ContentType) : undefined;
+  const parsed = publicWatchlistQuerySchema.safeParse(F.queryParams(c.req.url));
+  const query = parsed.success ? parsed.data : publicWatchlistQuerySchema.parse({});
+  const puedeGestionar = Boolean(c.get('user'));
+
+  // Sin sesión, el filtro se recorta a lo que puede verse antes de llegar a la
+  // base de datos. Así el resto del handler trabaja con una consulta ya segura.
+  const efectiva: PublicWatchlistQuery = puedeGestionar
+    ? query
+    : { ...query, status: query.status === 'ALL' ? 'ACTIVE' : query.status, visibility: 'PUBLIC' };
+
+  const periodo = parseYearRange(efectiva.year);
 
   return edgeCached(c, WATCHLIST_CACHE, async () => {
     const container = c.get('container');
-    const [resultado, tipos, settings] = await Promise.all([
-      // `onlyPublic` + estado activo se aplican en el repositorio: lo privado y
-      // lo ya terminado no sale de la base de datos.
-      container.watchlist.list({ onlyPublic: true, status: 'ACTIVE', type: tipo, perPage: 60 }),
+    const [resultado, tipos, categories, settings] = await Promise.all([
+      container.watchlist.list({
+        status: efectiva.status,
+        type: efectiva.type,
+        priority: efectiva.priority,
+        category: efectiva.category,
+        q: efectiva.q,
+        sort: efectiva.sort,
+        // El año se busca por solape de periodos: «2021» encuentra también lo
+        // que empezó en 2020 y seguía emitiéndose.
+        yearFrom: periodo.year ?? undefined,
+        yearTo: periodo.yearOngoing ? undefined : (periodo.yearEnd ?? periodo.year ?? undefined),
+        onlyPublic: !puedeGestionar,
+        visibility: puedeGestionar ? efectiva.visibility : undefined,
+        /*
+         * Con sesión **no** se excluye lo ya reseñado: el filtro tiene que poder
+         * encontrar cualquier pendiente, también el que acabó en reseña. No
+         * estorba en el uso normal porque el estado por omisión es «activos», y
+         * un pendiente convertido está terminado. Sin sesión sigue mandando el
+         * vínculo con la reseña, que lo aplica `onlyPublic`: una obra no puede
+         * estar anunciada como «por ver» y publicada como reseña a la vez.
+         */
+        page: efectiva.page,
+        perPage: 60,
+      }),
       container.watchlist.publicTypes(),
+      container.taxonomy.listCategories(false),
       container.settings.all(),
     ]);
 
-    const total = tipos.reduce((suma, t) => suma + t.total, 0);
+    const totalTipos = tipos.reduce((suma, t) => suma + t.total, 0);
 
     return c.html(
       <Layout
@@ -185,19 +237,146 @@ publicRoutes.get('/pendientes', async (c) => {
             `${c.env.SITE_NAME}. ${settings['site.tagline']}`,
           canonical: `${c.env.SITE_URL.replace(/\/$/, '')}/pendientes`,
           type: 'website',
+          // Una lista filtrada no es una página distinta que indexar.
+          noindex: hayFiltroDePendientes(efectiva),
         }}
       >
         <WatchlistPage
           env={c.env}
           items={resultado.items}
           tiposDisponibles={tipos}
-          tipoActivo={tipo}
-          total={total}
+          categories={categories}
+          query={efectiva}
+          total={efectiva.type ? resultado.total : totalTipos}
+          page={resultado.page}
+          totalPages={resultado.totalPages}
+          puedeGestionar={puedeGestionar}
+          flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Pendiente guardado.' } : null}
         />
       </Layout>,
     );
   });
 });
+
+/** ¿La URL lleva filtro? Decide el `noindex` y nada más. */
+function hayFiltroDePendientes(query: PublicWatchlistQuery): boolean {
+  return Boolean(
+    query.q || query.type || query.priority || query.category || query.year ||
+      query.status !== 'ACTIVE' || query.visibility !== 'PUBLIC' || query.sort !== 'priority' ||
+      query.page > 1,
+  );
+}
+
+/*
+ * Alta y edición desde la propia página pública.
+ *
+ * Detrás del mismo guardián que el panel —`requireAdmin` mira el rol de la
+ * sesión en base de datos— y con la misma comprobación CSRF. Que la ruta viva
+ * en el sitio público no la hace pública: lo único que cambia es dónde está el
+ * formulario, que es lo que se pedía. Esconder el botón de editar a quien no
+ * tiene sesión es cortesía; el control de acceso es esto.
+ */
+const shellPendiente = (c: Context<AppEnv>, node: Child) => {
+  c.header('Cache-Control', NO_STORE);
+  return c.html(
+    <Layout
+      env={c.env}
+      nonce={c.get('nonce')}
+      path={new URL(c.req.url).pathname}
+      user={c.get('user')}
+      csrfToken={c.get('csrfToken')}
+      seo={{
+        title: `Pendientes | ${c.env.SITE_NAME}`,
+        description: 'Alta y edición de un pendiente.',
+        canonical: `${c.env.SITE_URL.replace(/\/$/, '')}/pendientes`,
+        noindex: true,
+      }}
+    >
+      {node}
+    </Layout>,
+  );
+};
+
+publicRoutes.get('/pendientes/nuevo', requireAdmin, async (c) => {
+  const categories = await c.get('container').taxonomy.listCategories(false);
+  return shellPendiente(
+    c,
+    <WatchlistEditorPublicPage
+      env={c.env}
+      id={null}
+      item={EMPTY_WATCHLIST_DRAFT}
+      categories={categories}
+      csrfToken={c.get('csrfToken')!}
+    />,
+  );
+});
+
+publicRoutes.post('/pendientes/nuevo', requireAdmin, requireCsrf, async (c) => {
+  const parsed = await leerFormularioPendiente(c);
+  if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
+  await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+  return c.redirect('/pendientes?ok=1', 303);
+});
+
+publicRoutes.get('/pendientes/:id/editar', requireAdmin, async (c) => {
+  const container = c.get('container');
+  const item = await container.watchlist.getById(c.req.param('id'));
+  if (!item) throw notFound('Ese pendiente no existe');
+  const categories = await container.taxonomy.listCategories(false);
+
+  return shellPendiente(
+    c,
+    <WatchlistEditorPublicPage
+      env={c.env}
+      id={item.id}
+      item={item}
+      categories={categories}
+      csrfToken={c.get('csrfToken')!}
+      reviewId={item.reviewId}
+      flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Cambios guardados.' } : null}
+    />,
+  );
+});
+
+publicRoutes.post('/pendientes/:id/editar', requireAdmin, requireCsrf, async (c) => {
+  const parsed = await leerFormularioPendiente(c);
+  if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
+  await new WatchlistService(c.get('container')).update(c.req.param('id'), parsed.data, c.get('user')!);
+  return c.redirect(`/pendientes/${c.req.param('id')}/editar?ok=1`, 303);
+});
+
+/**
+ * Del formulario al esquema de dominio.
+ *
+ * El año llega como **texto** —«2020-2022», «2023-actualidad»— y se traduce
+ * aquí a los tres campos que se guardan. La traducción vive en el adaptador del
+ * formulario y no en el esquema a propósito: el esquema valida lo que se guarda,
+ * y cómo se escriba una fecha en un `input` es cosa de quien lee el formulario.
+ */
+async function leerFormularioPendiente(c: Context<AppEnv>) {
+  const body = await c.req.parseBody({ all: true });
+  const periodo = parseYearRange(F.str(body, 'year', 40));
+
+  return watchlistInputSchema.safeParse({
+    titleEs: F.strOrEmpty(body, 'titleEs', 200),
+    titleOriginal: F.str(body, 'titleOriginal', 200),
+    contentType: F.str(body, 'contentType', 20),
+    categoryId: F.str(body, 'categoryId', 40) ?? null,
+    year: periodo.year,
+    yearEnd: periodo.yearEnd,
+    yearOngoing: periodo.yearOngoing,
+    seasons: F.num(body, 'seasons') ?? null,
+    creator: F.str(body, 'creator', 200),
+    note: F.str(body, 'note', 500),
+    sourceUrl: F.str(body, 'sourceUrl', 500) ?? '',
+    priority: F.str(body, 'priority', 10) ?? 'MEDIUM',
+    status: F.str(body, 'status', 20) ?? 'PENDING',
+    isPublic: F.bool(body, 'isPublic'),
+    coverKey: F.str(body, 'coverKey', 120) ?? null,
+    coverAlt: F.str(body, 'coverAlt', 200),
+    sortOrder: F.num(body, 'sortOrder') ?? 0,
+  });
+}
 
 // ---------------------------------------------------------- recomendaciones --
 /*

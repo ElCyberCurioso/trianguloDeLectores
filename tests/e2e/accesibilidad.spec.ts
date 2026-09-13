@@ -28,6 +28,38 @@ test('el modal se cierra con Escape y devuelve el foco', async ({ page }) => {
   await expect(page.locator('[data-review-modal]')).not.toBeVisible();
 });
 
+test('el modal tiene una sola barra de desplazamiento', async ({ page }) => {
+  await page.goto('/');
+  const primeraTarjeta = page.locator('[data-review-open]').first();
+  if ((await primeraTarjeta.count()) === 0) test.skip();
+
+  // Cerrado no se ve: `display: flex` en `.modal` a secas le ganaría al
+  // `display: none` que le pone el navegador y lo dejaría a la vista.
+  await expect(page.locator('[data-review-modal]')).not.toBeVisible();
+
+  await primeraTarjeta.click();
+  await expect(page.locator('[data-review-modal]')).toBeVisible();
+  // El contenido llega por fetch: sin esperarlo se mide el esqueleto, que cabe.
+  await expect(page.locator('[data-review-modal] .review')).toBeVisible();
+
+  const desbordan = await page.evaluate(() => {
+    const dialogo = document.querySelector('[data-review-modal]');
+    if (!dialogo) return [];
+    // Cuenta los contenedores que de verdad pueden desplazarse en vertical.
+    return [dialogo, ...dialogo.querySelectorAll('*')]
+      .filter((el) => {
+        const estilo = getComputedStyle(el as Element);
+        const desplazable = estilo.overflowY === 'auto' || estilo.overflowY === 'scroll';
+        // El hueco de Turnstile se desplaza por dentro pero esconde su barra.
+        const barraOculta = estilo.scrollbarWidth === 'none';
+        return desplazable && !barraOculta && el.scrollHeight > el.clientHeight + 1;
+      })
+      .map((el) => (el as Element).className || (el as Element).tagName);
+  });
+
+  expect(desbordan.length).toBeLessThanOrEqual(1);
+});
+
 test('los campos de los filtros tienen etiqueta asociada', async ({ page }) => {
   await page.goto('/');
   for (const id of ['#f-q', '#f-type', '#f-category', '#f-genre', '#f-sort']) {

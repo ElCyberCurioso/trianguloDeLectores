@@ -205,11 +205,71 @@ function initCoverActions(): void {
 }
 
 // ------------------------------------------------------------- el lector --
-interface PdfPageViewport { width: number; height: number; scale: number }
+interface PdfPageViewport {
+  width: number;
+  height: number;
+  scale: number;
+  /** Pasa un rectángulo del espacio del PDF al de la vista, giro incluido. */
+  convertToViewportRectangle(rect: number[]): number[];
+}
 interface PdfPage {
   getViewport(options: { scale: number }): PdfPageViewport;
   render(options: { canvasContext: CanvasRenderingContext2D; viewport: PdfPageViewport }): { promise: Promise<void> };
   streamTextContent(options?: Record<string, unknown>): unknown;
+  /** Las anotaciones que el PDF trae dentro. No son las nuestras. */
+  getAnnotations(options?: { intent?: string }): Promise<RawPdfAnnotation[]>;
+}
+
+/**
+ * Una anotación tal y como la devuelve pdf.js.
+ *
+ * Sólo lo que se usa. El objeto real trae treinta campos más —apariencias,
+ * banderas, referencias al padre— que aquí no pintan nada.
+ */
+interface RawPdfAnnotation {
+  subtype?: string;
+  contents?: string | { str?: string } | null;
+  titleObj?: { str?: string } | null;
+  title?: string | null;
+  rect?: number[] | null;
+}
+
+/**
+ * Una nota que venía escrita en el PDF.
+ *
+ * No son nuestras: no se editan, no se borran y no viajan a la base de datos.
+ * Se leen, que es justo lo que antes no se podía hacer -- pdf.js las tiene
+ * delante desde siempre y el lector las tiraba.
+ */
+interface EmbeddedNote {
+  page: number;
+  kind: string;
+  author: string | null;
+  contents: string;
+  rect: { x: number; y: number; w: number; h: number } | null;
+}
+
+/** Los subtipos que son algo que leer, con su nombre en castellano. */
+const EMBEDDED_KINDS: Record<string, string> = {
+  Text: 'Nota',
+  FreeText: 'Texto',
+  Highlight: 'Subrayado',
+  Underline: 'Subrayado',
+  Squiggly: 'Subrayado',
+  StrikeOut: 'Tachado',
+  Square: 'Recuadro',
+  Circle: 'Círculo',
+  Ink: 'Trazo',
+  Caret: 'Inserción',
+  Stamp: 'Sello',
+  FileAttachment: 'Adjunto',
+};
+
+/** pdf.js devuelve el texto unas veces suelto y otras envuelto. */
+function annotationText(value: RawPdfAnnotation['contents']): string {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object' && typeof value.str === 'string') return value.str.trim();
+  return '';
 }
 interface PdfDocument { numPages: number; getPage(page: number): Promise<PdfPage> }
 interface PdfJsModule {
@@ -382,6 +442,10 @@ async function initReader(): Promise<void> {
 
   let annotations: Annotation[] = await api<Annotation[]>(`/api/documentos/${documentId}/anotaciones`).catch(() => []);
 
+  /** Las que traía el PDF escritas dentro. Se van llenando en segundo plano. */
+  const embedded: EmbeddedNote[] = [];
+  let readingEmbedded = true;
+
   const sections = new Map<number, HTMLElement>();
   const rendered = new Set<number>();
 
@@ -530,14 +594,104 @@ async function initReader(): Promise<void> {
             marks.appendChild(mark);
           });
         });
+
+      /*
+       * Las notas que traía el PDF, en contorno y sin relleno.
+       *
+       * Se ven distintas a propósito: el relleno es de lo que uno ha marcado y
+       * el contorno de lo que venía puesto. Pintarlas igual sería prometer que
+       * se pueden borrar, y no se puede -- están dentro del fichero.
+       */
+      embedded
+        .filter((note) => note.page === number && note.rect)
+        .forEach((note) => {
+          const mark = document.createElement('span');
+          mark.className = 'pdfmark pdfmark--embedded';
+          mark.title = note.contents;
+          mark.style.left = `${note.rect!.x * 100}%`;
+          mark.style.top = `${note.rect!.y * 100}%`;
+          mark.style.width = `${note.rect!.w * 100}%`;
+          mark.style.height = `${note.rect!.h * 100}%`;
+          marks.appendChild(mark);
+        });
     });
     renderNotesList();
+  }
+
+  /**
+   * Lee las anotaciones que el PDF trae dentro.
+   *
+   * pdf.js las tiene delante desde siempre —son parte de la página— y el lector
+   * las tiraba: un libro con las notas de quien lo leyó antes se abría como si
+   * no tuviera ninguna. Se recorren **en segundo plano y después de pintar**,
+   * porque son tantas llamadas como páginas y eso no puede ir por delante de
+   * ver la primera.
+   */
+  async function loadEmbeddedNotes(): Promise<void> {
+    for (let number = 1; number <= document_.numPages; number += 1) {
+      try {
+        const page = await document_.getPage(number);
+        const raw = await page.getAnnotations({ intent: 'display' });
+        const viewport = page.getViewport({ scale: 1 });
+
+        raw.forEach((annotation) => {
+          const kind = EMBEDDED_KINDS[annotation.subtype ?? ''];
+          // Sin subtipo conocido no es algo que leer: los enlaces y los campos
+          // de formulario también son anotaciones.
+          if (!kind) return;
+          const contents = annotationText(annotation.contents);
+          // Un subrayado sin comentario no dice nada: listarlo taparía las
+          // notas que sí lo dicen.
+          if (!contents) return;
+
+          embedded.push({
+            page: number,
+            kind,
+            author: annotationText(annotation.titleObj ?? annotation.title ?? null) || null,
+            contents: contents.slice(0, 2000),
+            rect: rectFromPdf(annotation.rect, viewport),
+          });
+        });
+      } catch {
+        // Una página con la anotación rota no puede parar las demás.
+      }
+
+      // Se va enseñando lo que se encuentra según aparece: en un libro largo,
+      // esperar al final sería tener el panel vacío durante varios segundos.
+      if (number % 25 === 0) paintAnnotations();
+    }
+
+    readingEmbedded = false;
+    paintAnnotations();
+  }
+
+  /**
+   * Del rectángulo del PDF al 0..1 de la página.
+   *
+   * `convertToViewportRectangle` es quien sabe de esto: aplica el giro de la
+   * página y el origen del recorte, que no siempre es el cero. Hacer la cuenta
+   * a mano deja las notas de un documento apaisado en el margen equivocado.
+   */
+  function rectFromPdf(rect: number[] | null | undefined, viewport: PdfPageViewport): EmbeddedNote['rect'] {
+    if (!rect || rect.length < 4 || !viewport.width || !viewport.height) return null;
+
+    const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(rect);
+    if (![x1, y1, x2, y2].every((value) => Number.isFinite(value))) return null;
+
+    const clamp = (value: number) => Math.min(1, Math.max(0, value));
+    const x = clamp(Math.min(x1!, x2!) / viewport.width);
+    const y = clamp(Math.min(y1!, y2!) / viewport.height);
+    const w = clamp(Math.abs(x2! - x1!) / viewport.width);
+    const h = clamp(Math.abs(y2! - y1!) / viewport.height);
+    if (w <= 0 || h <= 0) return null;
+
+    return { x, y, w, h };
   }
 
   function renderNotesList(): void {
     if (!notesList) return;
     notesList.textContent = '';
-    if (notesEmpty) notesEmpty.hidden = annotations.length > 0;
+    if (notesEmpty) notesEmpty.hidden = annotations.length > 0 || embedded.length > 0 || readingEmbedded;
 
     annotations
       .slice()
@@ -585,6 +739,54 @@ async function initReader(): Promise<void> {
 
         notesList.appendChild(item);
       });
+
+    renderEmbeddedNotes();
+  }
+
+  /**
+   * Las notas del propio documento, en su sección y al final.
+   *
+   * Aparte de las nuestras porque no son lo mismo: éstas las escribió quien
+   * hizo el PDF o quien lo anotó antes, no se pueden tocar y no están en la
+   * base de datos. En una sola lista con las nuestras, el aspa de borrar
+   * prometería algo que no se puede cumplir.
+   */
+  function renderEmbeddedNotes(): void {
+    if (!notesList) return;
+    if (!embedded.length && !readingEmbedded) return;
+
+    const head = document.createElement('li');
+    head.className = 'notelist__head';
+    head.textContent = readingEmbedded && !embedded.length
+      ? 'Buscando las notas del documento…'
+      : 'Notas del propio documento';
+    notesList.appendChild(head);
+
+    embedded.forEach((note, index) => {
+      const item = document.createElement('li');
+      item.className = 'note note--embedded';
+      item.dataset.page = String(note.page);
+      item.dataset.embeddedIndex = String(index);
+
+      const jump = document.createElement('button');
+      jump.type = 'button';
+      jump.className = 'note__jump';
+      jump.dataset.jump = '';
+
+      const pageTag = document.createElement('span');
+      pageTag.className = 'note__page';
+      pageTag.textContent = note.author ? `p. ${note.page} · ${note.kind} · ${note.author}` : `p. ${note.page} · ${note.kind}`;
+      jump.appendChild(pageTag);
+
+      const body = document.createElement('span');
+      body.className = 'note__quote';
+      // `textContent`, nunca `innerHTML`: esto sale de un PDF de fuera.
+      body.textContent = note.contents;
+      jump.appendChild(body);
+
+      item.appendChild(jump);
+      notesList.appendChild(item);
+    });
   }
 
   /** Rectángulos de la selección, relativos a la página que la contiene. */
@@ -725,11 +927,13 @@ async function initReader(): Promise<void> {
 
   notesList?.addEventListener('click', async (event) => {
     const target = event.target as HTMLElement;
-    const item = target.closest<HTMLElement>('[data-annotation-id]');
+    // Por la fila, no por el identificador: las notas que trae el PDF no tienen
+    // ninguno —no están en la base de datos— y aun así se puede ir a su página.
+    const item = target.closest<HTMLElement>('li.note');
     if (!item) return;
-    const id = item.dataset.annotationId!;
+    const id = item.dataset.annotationId;
 
-    if (target.closest('[data-delete-annotation]')) {
+    if (id && target.closest('[data-delete-annotation]')) {
       try {
         await api(`/api/documentos/${documentId}/anotaciones/${id}`, { method: 'DELETE' });
         annotations = annotations.filter((annotation) => annotation.id !== id);
@@ -855,6 +1059,9 @@ async function initReader(): Promise<void> {
   scale = Math.min(1.2, await fitScale());
   if (zoomLabel) zoomLabel.textContent = `${Math.round(scale * 100)}%`;
   await layout();
+
+  // Las notas que trae el PDF, en cuanto la página está pintada y sin esperarlas.
+  void loadEmbeddedNotes();
 
   /*
    * Los documentos subidos antes de que existieran las portadas no tienen

@@ -45,6 +45,71 @@ async function crearPendiente(fields: Record<string, string> = {}): Promise<stri
   return row!.id;
 }
 
+describe('el filtro de la cola del panel', () => {
+  async function filtrar(query: string): Promise<string> {
+    const response = await SELF.fetch(`${ORIGIN}/admin/pendientes${query}`, {
+      headers: { Cookie: session.cookie, Accept: 'text/html' },
+    });
+    return response.text();
+  }
+
+  it('busca por texto aunque el formulario mande los desplegables vacíos', async () => {
+    await crearPendiente({ titleEs: 'Filtrable Uno' });
+    await crearPendiente({ titleEs: 'Filtrable Dos' });
+
+    // Así es exactamente como envía el formulario: los «Todos los…» valen "".
+    const html = await filtrar('?status=ACTIVE&type=&priority=&sort=priority&q=Filtrable+Uno');
+
+    expect(html).toContain('Filtrable Uno');
+    expect(html).not.toContain('Filtrable Dos');
+  });
+
+  it('un desplegable vacío no tumba el resto del filtro', async () => {
+    await crearPendiente({ titleEs: 'Solo Pelicula', contentType: 'MOVIE' });
+    await crearPendiente({ titleEs: 'Solo Juego', contentType: 'GAME' });
+
+    const html = await filtrar('?type=MOVIE&priority=&q=&sort=priority&status=ACTIVE');
+
+    expect(html).toContain('Solo Pelicula');
+    expect(html).not.toContain('Solo Juego');
+  });
+});
+
+describe('la cola del panel enseña las portadas', () => {
+  /** Clave con la forma que exige `isSafeMediaKey()`: año, dos hex y un UUID. */
+  const CLAVE = `reviews/covers/2026/ab/${crypto.randomUUID()}.jpg`;
+
+  it('pinta la miniatura cuando hay portada y el marcador gris cuando no', async () => {
+    const conPortada = await crearPendiente({ titleEs: 'Pendiente con portada' });
+    await env.DB.prepare('UPDATE watchlist_items SET cover_key = ? WHERE id = ?').bind(CLAVE, conPortada).run();
+    await crearPendiente({ titleEs: 'Pendiente sin portada' });
+
+    const html = await (
+      await SELF.fetch(`${ORIGIN}/admin/pendientes?q=Pendiente+&status=ALL`, {
+        headers: { Cookie: session.cookie, Accept: 'text/html' },
+      })
+    ).text();
+
+    // La que tiene portada sale como imagen, con su clave en el `src`.
+    expect(html).toContain('class="queue-item__img"');
+    expect(html).toContain(CLAVE);
+    // La que no, con marcador: así la fila no cambia de altura según haya imagen.
+    expect(html).toContain('queue-item__img--placeholder');
+  });
+
+  it('la miniatura no se anuncia dos veces al lector de pantalla', async () => {
+    const html = await (
+      await SELF.fetch(`${ORIGIN}/admin/pendientes`, {
+        headers: { Cookie: session.cookie, Accept: 'text/html' },
+      })
+    ).text();
+
+    // El título va al lado y en texto: la imagen es decorativa aquí.
+    expect(html).toContain('class="queue-item__cover" aria-hidden="true"');
+    expect(html).not.toContain('class="queue-item__img" src="" alt="Portada');
+  });
+});
+
 describe('alta de pendientes', () => {
   it('crea un pendiente desde el formulario rápido', async () => {
     const id = await crearPendiente({ titleEs: 'Disco Elysium', contentType: 'GAME', priority: 'HIGH' });

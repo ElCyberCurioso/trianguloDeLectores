@@ -105,6 +105,36 @@ Reglas que no se rompen:
   1480 px (el kit dice 1180 sobre lienzo gris), y el tema oscuro no existe en el
   kit —se deriva intercambiando hueso y tinta y subiendo el rojo un paso—.
 
+## Reglas de los filtros y los listados
+
+- **Un parámetro vacío en la query significa «sin filtro», y hay que quitarlo
+  antes de validar** (`F.queryParams()`). Un `<select>` en «Todos» no manda
+  nada: manda `type=`, la cadena vacía, y para Zod eso no es «ausente» sino un
+  valor que no está en el enum. Como los listados caen a los valores por
+  omisión cuando `safeParse` falla, **un desplegable sin elegir reseteaba el
+  filtro entero, búsqueda incluida**: parecía que el buscador no hacía nada.
+  Pasó en la cola del panel, en el catálogo público y en la lista pública de
+  pendientes a la vez.
+- Ese `parsed.success ? parsed.data : schema.parse({})` es cómodo pero muerde:
+  descarta **todo** el filtro por un solo campo malo. Quitar los vacíos arregla
+  el caso real; si algún día hay más campos delicados, conviene revisar si
+  merece la pena validar campo a campo.
+
+## Reglas del modal de reseñas
+
+- **Una sola barra de desplazamiento, y es la del contenido.** El `<dialog>`
+  recorta (`overflow: hidden`) y `.modal__content` es el único que se desplaza.
+  Llevaban los dos `max-height: 88svh` y el navegador además le pone
+  `overflow: auto` al diálogo por su cuenta: con el contenido tan alto como su
+  contenedor más los 2 px de borde, salían dos barras, una dentro de la otra.
+- **El `display` del diálogo va en `.modal[open]`, nunca en `.modal`.** Un
+  `<dialog>` cerrado lo esconde el navegador con `display: none`, pero esa regla
+  es suya y las del sitio le ganan siempre, pase lo que pase con la
+  especificidad. Un `display: flex` suelto deja el diálogo cerrado a la vista al
+  final de la portada.
+- El hijo que se desplaza necesita `min-height: 0`: sin él un hijo flexible no
+  se encoge por debajo de su contenido y no llega a desplazarse nunca.
+
 ## Reglas de móvil
 
 - **Nunca `dvh`.** La altura dinámica cambia cuando el navegador móvil pliega su
@@ -128,6 +158,9 @@ Reglas que no se rompen:
 - Migraciones **aditivas** en el pipeline. Cualquier cambio destructivo se aplica
   a mano y con copia de seguridad.
 - El acceso a D1 vive sólo en `src/db/repos/*`. Ninguna vista ni ruta escribe SQL.
+- **El resumen de una reseña admite hasta 4.000 caracteres.** La columna es TEXT
+  y no tiene límite; el techo vive en el esquema de Zod y en el `maxlength` del
+  formulario. Estuvo en 600, que daba para dos frases.
 - **La puntuación se almacena en medios puntos**: un entero 0..20 en
   `reviews.rating_half`, que son 0,0 a 10,0 de medio en medio. No la guardes
   como decimal: 7,5 no tiene representación exacta en binario y un entero se
@@ -272,6 +305,52 @@ otra.
   registros —no los ficheros— a `backups/library/<fecha>.json.gz` con
   `CompressionStream`, y conserva 30 días.
 
+## Reglas del año y de las temporadas
+
+- **El año es un periodo, no un número.** `year` es el principio —la única
+  columna indexada y ordenable, por eso conserva el nombre—, `year_end` el
+  final y `year_ongoing` dice si sigue. Nulo y nulo significa «un año suelto»,
+  que es lo que tiene casi todo.
+- **Se escribe en un campo de texto y lo traduce `parseYearRange()`**, en el
+  adaptador del formulario y no en el esquema: el esquema valida lo que se
+  guarda, y cómo se escriba una fecha en un `input` es cosa de quien lee el
+  formulario. Acepta «1999», «2020-2022», «2023-actualidad», «desde 2023» y
+  «2020-». Lo que no entiende se queda con el primer año que encuentra en vez
+  de rechazar la ficha entera.
+- **Al buscar por año se compara por solape, no por igualdad**: «2021» tiene
+  que encontrar una serie de 2020-2022, porque en 2021 se emitía. El final sale
+  de un `COALESCE` con tres casos; sin él, lo que no tiene año de fin —casi
+  todo— se caería de cualquier búsqueda por años.
+- **`yearRangeToInput()` y `parseYearRange()` son ida y vuelta.** El formulario
+  de edición se rellena con el primero; si al guardar sin tocar nada el periodo
+  cambiara, editar el título rompería la fecha.
+
+## Reglas de las reseñas por episodio
+
+- **Sólo series y anime** (`isSerial()`). Un cómic también sale por números,
+  pero ahí lo que se reseña es el tomo y para eso está `volumes`.
+- **`episode` a 0 significa «la temporada entera»**, no «el capítulo cero». Es
+  un cero y no un nulo porque SQLite considera distintos dos NULL: con nulos, el
+  índice único no impediría dar de alta dos veces la misma temporada.
+- **`rating_half` admite nulo y eso significa «sin nota todavía»**, que no es lo
+  mismo que un cero. Las cuentas sólo miran las filas con nota.
+- **La nota de la reseña no se recalcula con los episodios.** Una serie puede
+  tener una media de 7,2 y merecer un 9 por lo que es en conjunto. Mezclarlas
+  convertiría la opinión en un promedio.
+- **La fila de la temporada entera no entra en la media de sus capítulos**, o
+  contaría dos veces lo mismo y arrastraría el promedio hacia su propia nota.
+- **Las cuentas se hacen en el Worker** (`lib/episode-stats.ts`), no en SQL: son
+  decenas de filas, se leen de un vistazo y así se prueban sin base de datos.
+- **El reparto de notas se pinta con `data-share` y una regla de CSS por
+  valor**, nunca con `style=`: la CSP no lleva `unsafe-inline` y `attr()`
+  todavía no vale para longitudes. Mismo criterio que el relleno de las
+  estrellas.
+- **El id de la reseña va en el `WHERE` de toda operación sobre un episodio**,
+  además del id del episodio. Misma regla que las anotaciones del lector.
+- **Los formularios de episodio van fuera del formulario de la reseña.** Un
+  formulario anidado no existe en HTML, y meterlos dentro obligaría a guardar la
+  reseña entera para apuntar la nota de un capítulo.
+
 ## Reglas de la lista de pendientes
 
 - **Un pendiente y su reseña no coexisten.** En cuanto una obra tiene reseña,
@@ -290,6 +369,40 @@ otra.
 - **Dar de alta un pendiente ya reseñado no es un error**: se guarda enlazado y
   fuera de la cola. Quien lo escribe no tiene por qué acordarse de lo que
   reseñó hace dos años, y un «ya existe» obliga a ir a buscarlo.
+- **Se gestionan desde la página pública, no desde otra pantalla.** `/pendientes`
+  lleva el botón de alta y cada tarjeta el de editar, y las dos cosas sólo
+  aparecen con sesión. Las rutas (`/pendientes/nuevo`,
+  `/pendientes/:id/editar`) van detrás de `requireAdmin` y `requireCsrf`, los
+  mismos que el panel: **esconder el botón no es un control de acceso**, son las
+  dos cosas. El panel se queda con lo suyo, que son las acciones de cola en
+  bloque y la conversión en reseña.
+- **Lo que se puede ver no lo decide la URL.** Sin sesión, `status` y
+  `visibility` se recortan a lo público y activo antes de tocar la base de
+  datos, pase lo que pase en los parámetros. Dejar que `visibility=PRIVATE`
+  funcionara para cualquiera convertiría un parámetro de la query en la llave de
+  lo privado.
+- **Una lista filtrada lleva `noindex`**: no es una página distinta que indexar.
+- **La cola del panel también enseña la portada**, en miniatura 2:3 y en color,
+  con marcador gris donde falta para que la fila no cambie de altura. Con ciento
+  y pico títulos, es lo que permite recorrer la lista con la vista en vez de
+  leyéndola. La imagen va **decorativa** (`aria-hidden`, `alt=""`): el título
+  está al lado y en texto, y anunciarla sería decirlo dos veces.
+- **El alta y la edición comparten formulario** (`components/watchlist-form.tsx`).
+  Eran dos copias y se notó al añadir el periodo: había que meterlo dos veces.
+- **La tarjeta entera lleva a la edición, y el enlace es el título.** No se
+  envuelve la tarjeta en un `<a>`: dentro hay otros enlaces —la reseña, la
+  ficha— y un enlace dentro de otro no existe en HTML; los navegadores lo
+  deshacen y el resultado depende de cuál. El título se estira con un `::after`
+  que cubre la tarjeta, y los demás enlaces se levantan con `z-index` para
+  seguir siendo pulsables. No hay botón «Editar»: sobraba en cuanto la tarjeta
+  entera se pulsa, y el título dice mejor a dónde lleva. El precio es que la
+  capa se come el arrastre del ratón y seleccionar la nota cuesta; aquí
+  compensa, porque es una cola de trabajo y se abre mucho más de lo que se
+  copia.
+- **Que el enlace sólo aparezca con sesión no es lo que protege la edición.**
+  Lo que la protege es `requireAdmin` en la ruta, que lee el rol de la sesión en
+  base de datos. Sin enlace y sin sesión, escribir la URL a mano sigue dando
+  401.
 
 ## Reglas de la aplicación Android (`android/`)
 
@@ -342,11 +455,34 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   `horizontalScroll` mide su contenido con anchura infinita y `Box` baja el
   mínimo a cero, así que un `fillMaxWidth()` por dentro se queda en cero: la
   lista no llegaba a componerse y el lector salía en blanco con cualquier PDF.
-- **`PdfRenderer` no tiene capa de texto**, y eso es lo que decide la interfaz:
-  no hay selección de palabras, ni búsqueda, ni `quote` en las anotaciones. Los
-  subrayados se hacen arrastrando un recuadro y se guardan en las mismas
-  coordenadas normalizadas 0..1 que el lector web. No prometas selección de
-  texto sin cambiar de motor.
+- **Pintar y leer son dos motores distintos.** `PdfRenderer` pinta la página y
+  no dice qué pone en ella; la capa de texto la da **PdfBox-Android** en
+  `pdf/TextoPdf.kt`, que no pinta nada. Con eso el subrayado marca **texto**, en
+  un rectángulo por renglón y con su `cita`, igual que el lector web. Lo que
+  sigue sin haber es buscador dentro del documento y selección con manecillas
+  para copiar: no lo prometas.
+- **La capa de texto se abre tarde y nunca al abrir el libro.** Analizar un
+  escaneado de cincuenta megas cuesta segundos y memoria, y quien sólo va a leer
+  no tiene por qué pagarlos: se abre al entrar en modo subrayado o al pedir las
+  notas del documento. Y se carga con `setupTempFileOnly`, a disco y no al
+  montón, o el sistema mata el proceso a media lectura.
+- **Una página sin texto no es un fallo.** Un escaneado sin OCR es una imagen:
+  `palabras()` devuelve la lista vacía y el arrastre vuelve a marcar la zona,
+  como antes. Lo decide la página, no un interruptor.
+- **Las notas que trae el PDF dentro se leen, no se tocan.** Van en su propia
+  sección del panel, sin borrar y sin sincronizar, y en la página se pintan en
+  contorno y no en relleno: mezclarlas con las propias prometería que se pueden
+  borrar, y están dentro del fichero.
+- **El encuadre se vuelve a acotar cuando cambia el zoom o el tamaño del
+  hueco.** El tope derecho es cero pase lo que pase, pero el izquierdo sale del
+  zoom, y acotando sólo al arrastrar bajar el zoom con el botón, con el doble
+  toque o girando el teléfono dejaba un desplazamiento que ya no era legal: el
+  documento se iba fuera de la vista por la izquierda y, con el zoom otra vez a
+  uno, no había forma de traerlo —el gesto de un dedo sólo actúa si hay zoom—.
+  Se acota también al pintar: el efecto llega un fotograma tarde.
+- **Dentro del pellizco se acota con el zoom pedido, no con el de la
+  composición.** `collectAsState` no se entera hasta la recomposición siguiente,
+  y con el valor viejo el margen se queda corto mientras se amplía.
 - **El zoom se ancla al punto medio entre los dedos**, nunca a una esquina.
   Ampliar es acercarse a algo, y ese algo es lo que hay entre los dedos: ese
   punto del documento se queda quieto debajo. `transformOrigin` sigue en la
@@ -382,6 +518,15 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   algo, para que un segundo dedo apoyado no congele la lectura. Va por la pasada
   `Initial`, que baja de fuera adentro; en la principal la lista ya se habría
   quedado el gesto. Se desactiva en modo subrayado.
+- **El escáner de códigos de barras es CameraX más ZXing en Java puro**, el
+  mismo descodificador que la reserva del lector web. Nada de ML Kit: traería
+  los servicios de Google, o un módulo que se descarga a la primera, para leer
+  trece cifras. Se descodifica el **plano de luminancia** del YUV, enderezado
+  antes según el giro del sensor —ZXing recorre filas y un código girado tiene
+  las barras en columnas— y quitándole el relleno del `rowStride`, que casi
+  nunca coincide con el ancho. El permiso de cámara se pide al entrar en el
+  escáner, no al instalar, y el fotograma se mira y se tira: lo único que sale
+  de esa pantalla es el número.
 - **La biblioteca en papel también se gestiona desde el teléfono**, con las
   mismas reglas: el alta pasa por `LibraryService`, no por una segunda
   implementación, así que hereda el antiduplicado por ISBN (409, no 400: el
@@ -401,9 +546,22 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   `allowBackup="false"`. La copia de seguridad de Google no puede llevarse una
   credencial de este teléfono a otro.
 - **Ningún permiso de almacenamiento.** Los PDF se abren con
-  `ACTION_OPEN_DOCUMENT` y permiso persistente sobre esa URI. Un `ACTION_VIEW`
-  que llega de otra aplicación no admite permiso persistente: se importa como
-  efímero y se dice por qué.
+  `ACTION_OPEN_DOCUMENT` y permiso persistente sobre esa URI.
+- **Lo que llega por `ACTION_VIEW` se copia, no se enlaza.** Esa URI es un
+  préstamo de un solo uso que no admite permiso persistente, y además WhatsApp y
+  Telegram la sirven desde una caché suya que vacían cuando quieren: el
+  documento se abría bien y, al volver del segundo plano un rato después, la
+  aplicación decía que ya no estaba. `importarEfimero()` se trae el fichero a
+  `filesDir/importados`, escribiendo en un temporal y renombrando al final para
+  no dejar medio PDF con pinta de bueno. Cuesta hasta cincuenta megas por
+  documento y se paga a propósito: llegó de fuera y nadie más se hace cargo.
+- **Con copia, la URI prestada no se guarda**, y **quien tiene fichero propio se
+  abre por el fichero** —lector y capa de texto— sin mirar la URI. Un local
+  puede ser entonces una URI del sistema o una copia nuestra, y `disponible` lo
+  contempla.
+- **La copia sí se borra al quitar el documento de la estantería.** La URI de un
+  local del selector sólo se olvida —el fichero es de quien lo tiene—, pero los
+  megas de lo importado son nuestros.
 - **Kotlin admite comentarios de bloque anidados**: un `/*` dentro de un KDoc
   abre otro comentario que nunca se cierra y el fichero entero deja de
   compilar con «Unclosed comment» al final. No escribas rutas con comodín
@@ -458,6 +616,64 @@ Y una trampa de la que ya se ha salido dos veces:
   deja fuera a quien administra, la salida sin navegador es
   `npm run turnstile:off -- --env production`.
 
+## Tropiezos que ya han pasado y vuelven a pasar
+
+Esto no son reglas de código: son cosas de esta máquina y de este repositorio
+que cuestan media hora cada vez que se olvidan.
+
+### Del repositorio
+
+- **No te fíes de lo que diga `CAMBIOS-PENDIENTES.md` sobre qué está
+  commiteado.** Se quedó describiendo como pendiente algo que ya estaba en
+  `HEAD`. Compruébalo contra git antes de escribir nada:
+  `git cat-file -e HEAD:<fichero>` y `git show HEAD:<fichero> | grep …`.
+- **El historial no sirve de guía**: los últimos cuatro commits se llaman todos
+  `# Cambios pendientes de commitear`. Lo que hay en `HEAD` se averigua
+  mirándolo, no leyendo mensajes.
+- **El chequeo «Sin secretos en el repositorio» del preflight falla siempre**, y
+  por dos motivos que no son este trabajo: los volcados `backup-prod-*.sql` que
+  viven en el directorio —ignorados por git, pero el script mira el disco— y un
+  token falso en `tests/integration/movil.test.ts`. No lo persigas; comprueba que
+  los hallazgos siguen siendo esos tres y sigue.
+- **Los tests de integración fallan de vez en cuando sin motivo**, con un
+  `Unhandled Rejection: fetch failed / ECONNRESET` al cerrar workerd. Ha pasado
+  dos veces en corridas completas y en ninguna se reprodujo al repetir. Antes de
+  dar por roto algo, vuelve a correr `npx vitest run --project integration`.
+
+### Del entorno
+
+- **Gradle necesita `ANDROID_HOME`**: `ANDROID_HOME=$HOME/Android/Sdk ./gradlew
+  …`. Sin él dice «SDK location not found» y no hay `local.properties` en el
+  repositorio.
+- **El directorio de trabajo del shell persiste entre comandos.** Un `cd android`
+  para compilar deja los comandos siguientes ahí, y `git ls-files --others`
+  empieza a mentir. Vuelve al raíz o usa rutas absolutas.
+- **La compilación de release tarda entre 8 y 11 minutos** y se ha comido el
+  tiempo máximo de un comando en primer plano más de una vez. Lánzala en segundo
+  plano. Ojo: un `clean` que se corta a medias deja el APK borrado y hay que
+  rehacerlo entero.
+- **No hay teléfono ni emulador.** Todo lo de Android se verifica compilando,
+  pasando R8 y comprobando la firma. Nada más. Dilo así al informar.
+
+### De los despliegues
+
+- **Antes de migrar, copia de seguridad de las dos bases**: `npx wrangler d1
+  export DB --env production --remote --output backup-prod-<fecha>-antes-<mig>.sql`.
+  El patrón `backup-prod-*.sql` ya está en `.gitignore`.
+- **Después de migrar, verifica columna a columna**, no te fíes del ✅ de
+  wrangler: `SELECT name FROM pragma_table_info('<tabla>')`. Es lo que enseñó
+  `0004_movil.sql`, que se aplicó «bien» y se había dejado dos columnas por el
+  camino.
+- **Antes de publicar un APK, compara su certificado con el del que ya está
+  publicado**: descarga `/aplicacion/descargar` y pasa `apksigner verify
+  --print-certs` a los dos. Con una firma distinta nadie podría actualizar.
+- **Después de publicar, comprueba que lo servido es lo compilado**: `sha256sum`
+  del binario local contra el que devuelve la descarga, y que el manifiesto
+  anuncia esa misma versión.
+- El orden que ha funcionado: copia → migrar staging → verificar → desplegar
+  staging → probar → migrar producción → verificar → desplegar producción →
+  probar.
+
 ## Antes de dar algo por terminado
 
 ```bash
@@ -473,26 +689,33 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
 
 ## Estado del proyecto
 
-*Al 3 de septiembre de 2026.*
+*Al 13 de septiembre de 2026.*
 
 - Desplegado en **staging** y en **producción**:
   `https://triangulodelectores.site` y `https://staging.triangulodelectores.site`,
   con la biblioteca privada en `books.triangulodelectores.site` y
   `books-staging.triangulodelectores.site`.
-- **Los dos entornos no llevan el mismo código.** Staging va por delante:
-  tiene las cinco migraciones (`0004_movil` y `0005_nota_media` incluidas), la
-  API de la aplicación Android, la descarga del APK, el medio punto en las notas
-  y el control de estrellas. **Producción se quedó en `f169a49`**: tres
-  migraciones y nada de eso. Desplegarla exige aplicar antes las dos migraciones
-  que le faltan.
-- **El sitio público está vacío**: 0 reseñas y 0 pendientes en producción. Lo
-  que sí tiene contenido es la biblioteca privada, con el catálogo de 229 libros
-  importado desde MyLibrary.
-- **La aplicación Android existe y compila**, en `android/`. El APK firmado está
-  publicado en el bucket de staging y se descarga de
-  `staging.triangulodelectores.site/aplicacion`. **Nunca se ha ejecutado en un
-  teléfono**: no hay dispositivo ni emulador en la máquina de desarrollo, así
-  que está verificada de compilación y firma, no de uso.
+- **Los dos entornos llevan el mismo código entre sí**, con las **seis**
+  migraciones aplicadas (`0006_periodos_y_episodios` incluida). Último
+  despliegue: 12 de septiembre de 2026, versión de producción `25ab7c89…`, de
+  staging `c2130308…`.
+- **El árbol de trabajo va por delante de lo desplegado**: el arreglo del modal,
+  el de los filtros y el de los documentos importados de Android (§3 de
+  `CAMBIOS-PENDIENTES.md`) están hechos y **sin desplegar**. No llevan
+  migración.
+- **El sitio público ya no está vacío**: 2 reseñas y 137 pendientes en
+  producción, 135 de ellos activos y públicos. La biblioteca privada sigue con
+  el catálogo de 229 libros importado desde MyLibrary.
+- **La aplicación Android existe y compila**, en `android/`. El APK firmado
+  **1.2.0** (versionCode 7) está publicado en el bucket de producción y se
+  descarga de `triangulodelectores.site/aplicacion`, con la misma firma que el
+  1.1.0 al que sustituye —comprobado antes de publicar, porque una firma
+  distinta impediría actualizar—. **Nunca se ha ejecutado en un teléfono**: no
+  hay dispositivo ni emulador en la máquina de desarrollo, así que está
+  verificada de compilación y firma, no de uso. Eso incluye lo último que se le
+  metió: el subrayado sobre texto, el escáner de códigos de barras, el arreglo
+  del encuadre del zoom y la copia de los documentos que llegan de otra
+  aplicación. El árbol va por la **1.2.1** (versionCode 8), sin publicar.
 - **El almacén de claves de firma vive fuera del repositorio**, en
   `~/.tdl/tdl-release.jks`, con su contraseña en `~/.tdl/firma.properties`.
   Perderlo significa no poder publicar más actualizaciones de la aplicación:
@@ -502,11 +725,11 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
   apuntando a un origen muerto, el mismo caso que tuvo el apex. Sin resolver.
 - `wrangler.jsonc` no tiene marcadores pendientes: dominios, D1, KV, R2 y claves
   públicas de Turnstile son reales en los dos entornos.
-- Hay trabajo **sin commitear** —la aplicación Android y su API, el medio punto
-  en las notas, la exclusividad entre pendientes y reseñas, y el control de
-  estrellas—, y **producción está corriendo código que sólo existe en el árbol
-  de trabajo**: no hay ningún punto de git al que volver.
-  `CAMBIOS-PENDIENTES.md` lo detalla.
+- Hay trabajo **sin commitear**: 42 ficheros modificados y 15 nuevos, que son
+  las tres tandas que detalla `CAMBIOS-PENDIENTES.md`. **Producción está
+  corriendo código que sólo existe en el árbol de trabajo**: no hay ningún punto
+  de git al que volver, ni forma de revertir el despliegue a un estado conocido.
+  Es el riesgo más gordo que tiene el proyecto ahora mismo.
 - Pendiente en el **panel de Cloudflare**, que ningún script puede hacer: borrar
   el registro DNS de `www` y sustituirlo por una redirección al apex; SSL/TLS en
   Full (Strict) y Always Use HTTPS; las reglas de WAF y Rate Limiting del

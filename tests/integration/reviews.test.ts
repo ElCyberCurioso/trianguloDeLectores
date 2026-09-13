@@ -39,6 +39,25 @@ async function expectStatus(url: string, status: number): Promise<void> {
   expect(response.status).toBe(status);
 }
 
+describe('el filtro del catálogo público', () => {
+  it('busca aunque los desplegables vengan vacíos', async () => {
+    // La sesión es la del fichero: un `loginAsAdmin()` de más consume el límite
+    // de intentos y tumba los tests que vengan detrás.
+    await createReview(session, { title: 'Catalogable Uno' });
+    await createReview(session, { title: 'Catalogable Dos' });
+
+    // Como lo manda el formulario: «Todos» y «Todas» valen "".
+    const html = await (
+      await SELF.fetch(`${ORIGIN}/?q=Catalogable+Uno&type=&category=&genre=&sort=recent`, {
+        headers: { Accept: 'text/html' },
+      })
+    ).text();
+
+    expect(html).toContain('Catalogable Uno');
+    expect(html).not.toContain('Catalogable Dos');
+  });
+});
+
 describe('CRUD de reseñas', () => {
   it('crea una reseña publicada con géneros y plataformas', async () => {
     const { id, slug } = await createReview(session, { title: 'Dune completo' });

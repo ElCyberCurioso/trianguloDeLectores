@@ -1,5 +1,6 @@
 import type { Bindings } from '../../types/env';
 import { ReviewRepository } from '../../db/repos/reviews';
+import { EpisodeRepository } from '../../db/repos/episodes';
 import { CommentRepository, ReportRepository } from '../../db/repos/comments';
 import { TaxonomyRepository } from '../../db/repos/taxonomy';
 import { UserRepository } from '../../db/repos/users';
@@ -19,6 +20,8 @@ import { Logger } from '../lib/logger';
  */
 export class Container {
   readonly reviews: ReviewRepository;
+  /** Notas por temporada y capítulo de una serie o un anime. */
+  readonly episodes: EpisodeRepository;
   readonly comments: CommentRepository;
   readonly reports: ReportRepository;
   readonly taxonomy: TaxonomyRepository;
@@ -37,6 +40,7 @@ export class Container {
 
   constructor(readonly env: Bindings, requestId: string) {
     this.reviews = new ReviewRepository(env);
+    this.episodes = new EpisodeRepository(env);
     this.comments = new CommentRepository(env);
     this.reports = new ReportRepository(env);
     this.taxonomy = new TaxonomyRepository(env);

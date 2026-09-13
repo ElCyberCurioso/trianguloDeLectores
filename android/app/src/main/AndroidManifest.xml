@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      Un solo permiso: la red, para hablar con la biblioteca privada. No hay
+      La red, para hablar con la biblioteca privada. No hay
       permiso de almacenamiento porque no hace falta ninguno: los PDF del
       teléfono se abren con el selector del sistema, que concede acceso a ese
       fichero y a ninguno más. Pedir acceso a todo el almacenamiento para leer
@@ -10,6 +10,18 @@
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+      La cámara, sólo para leer el código de barras de un libro al darlo de
+      alta. Se pide **al entrar en el escáner**, no al instalar: quien nunca
+      añade un libro por ISBN no llega a verlo. El fotograma se mira y se tira;
+      no se guarda ninguna imagen ni sale nada del teléfono salvo el número.
+
+      Y `required="false"`: un teléfono sin cámara trasera puede instalar la
+      aplicación igual, porque el ISBN también se escribe a mano.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:name=".TdlApp"

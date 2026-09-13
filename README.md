@@ -575,8 +575,62 @@ explícito.
 Para llenar la lista de golpe, `/admin/pendientes` acepta un título por línea
 (máximo 50) con tipo y prioridad por defecto.
 
+### Gestión desde la propia página pública
+
+La cola se **ve y se toca en el mismo sitio**. Antes había dos listas —ésta y la
+del panel— y para cambiar algo que se estaba mirando aquí había que ir a
+buscarlo allí. Ahora, **con sesión iniciada**, `/pendientes` lleva un botón de
+«Añadir pendiente» y cada tarjeta uno de «Editar»; sin sesión la página es
+exactamente la que era.
+
+Los botones se esconden a quien no tiene sesión, pero eso es cortesía y no
+seguridad: las rutas `/pendientes/nuevo` y `/pendientes/:id/editar` van detrás de
+`requireAdmin` —que lee el rol de la **sesión en base de datos**— y de
+`requireCsrf`, los mismos guardianes que el panel. El formulario es literalmente
+el mismo componente en los dos sitios (`components/watchlist-form.tsx`): eran dos
+copias y se notó al añadir el periodo de años, que habría que haber metido dos
+veces.
+
+Con sesión, **la tarjeta entera es pulsable** y lleva a la edición; no hay botón
+aparte. No se envuelve la tarjeta en un `<a>`: dentro hay otros enlaces —la
+reseña, la ficha— y un enlace dentro de otro no existe en HTML. El enlace es el
+**título**, estirado con un `::after` que cubre la tarjeta y con los demás por
+encima vía `z-index`; así sigue habiendo un único enlace de verdad, con su texto,
+su foco y su nombre accesible.
+
+El precio conocido es que esa capa se come el arrastre del ratón y seleccionar el
+texto de la nota cuesta — el trato de cualquier tarjeta pulsable, y aquí compensa
+porque esto es una cola de trabajo que se abre mucho más de lo que se copia.
+
+Que el enlace sólo se pinte con sesión **no es lo que protege la edición**: eso
+lo hace `requireAdmin` en la ruta. Sin enlace y sin sesión, escribir
+`/pendientes/<id>/editar` a mano sigue devolviendo 401.
+
+El panel se queda con lo que es suyo: las acciones de cola en bloque —empezar,
+terminar, descartar, reabrir— y la conversión en reseña. Su listado también
+enseña la **portada** de cada entrada, en miniatura 2:3 y en color, con marcador
+gris donde falta: con ciento y pico títulos, la portada es lo que permite
+recorrer la lista con la vista en vez de leyéndola. La imagen va como decorativa
+(`aria-hidden`), porque el título está al lado y en texto.
+
+### El filtro
+
+Busca por texto (título, título original, autor y nota), tipo de contenido,
+categoría, prioridad, año o periodo, y orden. Con sesión aparecen además el
+estado y la visibilidad.
+
+**Lo que se puede ver no lo decide la URL.** Sin sesión, `status` y `visibility`
+se recortan a lo público y activo *antes* de tocar la base de datos, pase lo que
+pase en los parámetros: dejar que `visibility=PRIVATE` funcionara para cualquiera
+convertiría un parámetro de la query en la llave de lo privado. Una lista
+filtrada lleva `noindex`, porque no es una página distinta que indexar.
+
+El año se compara **por solape de periodos y no por igualdad**: buscar «2021»
+encuentra una serie de 2020-2022, porque en 2021 se estaba emitiendo.
+
 La página pública se cachea en el borde con su propio sello de versión
-(`cachever:watchlist`), independiente del de las reseñas.
+(`cachever:watchlist`), independiente del de las reseñas. Con sesión no se
+cachea nada: `isCacheable` descarta cualquier petición con cookie de sesión.
 
 ## 15c. Marca y sistema visual
 
@@ -667,7 +721,8 @@ pdf.js autoalojado, y de cada uno se guarda por dónde va la lectura, sus notas 
 sus subrayados.
 
 **Biblioteca física.** Catálogo de los libros en papel, con alta por ISBN o
-leyendo el código de barras con la cámara, portada y ficha editable.
+leyendo el código de barras con la cámara —en el navegador y en la aplicación
+Android—, portada y ficha editable.
 
 ### Acceso
 
@@ -867,6 +922,47 @@ endpoints de metadatos de nube e IPv6 literal, **no sigue redirecciones** —el
 truco clásico para convertir una URL permitida en otra cosa— y corta la lectura
 al llegar al límite de tamaño aunque el servidor mienta en `Content-Length`.
 
+### Años, periodos y temporadas
+
+El año de una obra **no es un número, es un periodo**. Se escribe en un solo
+campo de texto —«1999», «2020-2022», «2023-actualidad»— y `parseYearRange()` lo
+traduce a tres columnas: `year` (el principio, que es la única indexada y
+ordenable y por eso conserva el nombre), `year_end` y `year_ongoing`. Nulo y
+nulo significa «un año suelto», que es lo que tiene casi todo el catálogo.
+
+Partirlo en «desde», «hasta» y una casilla de «sigue en emisión» serían tres
+gestos para escribir lo que se dice de una vez. Lo que el parser no entiende se
+queda con el primer año que encuentra en vez de rechazar la ficha entera.
+
+Junto a él, `seasons`: cuántas temporadas tiene, nulo donde no aplica.
+
+### Reseñas por temporada y capítulo
+
+Una serie de sesenta capítulos no se opina de una vez, y la media del conjunto
+tapa que la tercera temporada es la buena. Para series y anime, la reseña admite
+**una fila por capítulo o por temporada entera** (`review_episodes`), con su
+título, su nota, su comentario y su aviso de spoilers.
+
+Dos decisiones del esquema que conviene conocer:
+
+- **`episode` a 0 significa «la temporada entera»**, no «el capítulo cero». Es
+  un cero y no un nulo porque SQLite considera distintos dos NULL: con nulos, el
+  índice único `(review_id, season, episode)` no impediría dar de alta dos veces
+  la misma temporada.
+- **`rating_half` admite nulo y eso es «sin nota todavía»**, que no es lo mismo
+  que un cero. Las cuentas sólo miran las filas con nota.
+
+La ficha pública enseña, debajo del cuerpo de la reseña, la **media de los
+capítulos**, cuántos están valorados, el mejor y el peor, una tabla con la media
+de cada temporada y el reparto de las notas en once cajones. Las barras llevan
+su altura en un `data-share` y una regla de CSS por valor, nunca en un `style=`:
+la CSP no lleva `unsafe-inline` y `attr()` todavía no sirve para longitudes — el
+mismo criterio que el relleno de las estrellas.
+
+**La nota de la reseña no se recalcula con esto.** Una serie puede tener una
+media de 7,2 y merecer un 9 por lo que es en conjunto, y al revés. Mezclarlas
+convertiría la opinión en un promedio.
+
 ### Notas y subrayados
 
 Los rectángulos se guardan **normalizados de 0 a 1** respecto al tamaño de la
@@ -878,6 +974,14 @@ dentro.
 La posición de lectura se guarda con retardo mientras se desplaza, y otra vez al
 ocultarse la pestaña con `keepalive`, que es lo único que sobrevive a cerrar la
 aplicación.
+
+Aparte de las nuestras están las **notas que el PDF trae dentro**. pdf.js las
+tiene delante desde siempre —son parte de la página— y el lector las tiraba: un
+libro con las anotaciones de quien lo leyó antes se abría como si no tuviera
+ninguna. Se recorren en segundo plano después de pintar, porque son tantas
+llamadas como páginas, y se listan en su propia sección del panel. No se editan
+ni se borran ni se guardan en la base de datos: están en el fichero. En la
+página se pintan en contorno y no en relleno.
 
 ### ISBN y cámara
 
@@ -998,17 +1102,43 @@ navegación, OkHttp, kotlinx.serialization y WorkManager.
 
 Dos decisiones que explican media interfaz:
 
-- **`PdfRenderer`, el de Android, y no una librería de PDF.** No añade nada al
-  APK y es suficiente para pintar. Lo que no da es **capa de texto**: aquí no se
-  puede seleccionar una palabra, ni buscar dentro del documento, ni copiar una
-  cita. Por eso los subrayados se hacen **arrastrando un recuadro** sobre la
-  zona, y las coordenadas que produce son las mismas 0..1 que guarda el lector
-  web, así que un subrayado hecho en el teléfono se ve en el navegador y al
-  revés. Las anotaciones del móvil van sin `quote`.
-- **El zoom es por botones y doble toque, no por pellizco.** El pellizco compite
-  con el gesto de arrastrar, que es el que dibuja un subrayado. Además así cada
-  página se **repinta** al ampliar en vez de estirar el mapa de bits, y el texto
-  se sigue leyendo al 300 %.
+- **Dos motores de PDF, y cada uno hace una cosa.** `PdfRenderer`, el del
+  sistema, **pinta** la página: no añade nada al APK y no hay nada mejor para
+  eso. Lo que no sabe es qué pone en ella, así que la lectura del texto la hace
+  **PdfBox-Android** (`pdf/TextoPdf.kt`), que no pinta nada pero sí dice dónde
+  cae cada palabra y qué anotaciones trae el fichero dentro. Es lo que permite
+  subrayar **texto** y no una zona, con su cita guardada como en el lector web.
+  Cuesta unos cinco megas de APK —el de release ronda los 9 con todo dentro— y
+  se abre **tarde**: sólo al entrar en modo
+  subrayado o al abrir el panel de notas, porque analizar un escaneado grande
+  cuesta segundos y quien sólo lee no tiene por qué pagarlos.
+- **En una página sin texto se sigue marcando la zona.** Un escaneado sin OCR no
+  lleva ni una letra: ahí el arrastre vuelve a dibujar el recuadro de siempre.
+  La decisión no es de un interruptor, la toma la página.
+- **Las coordenadas son las mismas 0..1 que el lector web**, con un rectángulo
+  por renglón, así que un subrayado hecho en el teléfono se ve en el navegador y
+  al revés.
+- **El zoom es por botones, doble toque y pellizco.** El encuadre está acotado a
+  lo que sobresale de la pantalla, y se **vuelve a acotar** al cambiar el zoom o
+  al girar el teléfono: el tope derecho es cero pase lo que pase, pero el
+  izquierdo depende del zoom, y acotarlo sólo al arrastrar dejaba el documento
+  fuera de la vista al reducir. Además cada página se **repinta** al ampliar en
+  vez de estirar el mapa de bits, y el texto se sigue leyendo al 300 %.
+
+El **escáner de códigos de barras** de la biblioteca en papel es CameraX más
+ZXing en Java puro (`ui/EscanerIsbn.kt`), el mismo descodificador que la reserva
+del lector web y por el mismo criterio: ML Kit traería los servicios de Google
+—o un módulo que se descarga a la primera— para leer trece cifras. El fotograma
+se mira y se tira; lo único que sale de la pantalla es el número, y quien lo
+consulta contra Open Library es el Worker, no el teléfono. Se descodifica sobre
+el plano de luminancia del YUV, enderezado antes según el giro del sensor: ZXing
+recorre filas y un código girado tiene las barras en columnas.
+
+Las **notas incrustadas del propio PDF** —las que escribió quien hizo el
+documento o quien lo anotó antes— se leen y se listan aparte de las nuestras, en
+los dos lectores. No se editan, no se borran y no se sincronizan: están dentro
+del fichero. En la página se pintan en contorno y no en relleno, que es lo que
+las distingue de un subrayado propio.
 
 SQLite a pelo (`data/local/BaseDatos.kt`), sin ORM ni procesador de anotaciones,
 por el mismo criterio que en el servidor: el SQL se lee de un vistazo y ninguna
@@ -1016,9 +1146,12 @@ pantalla lo escribe. El token se cifra con una clave del **Keystore de Android**
 (AES/GCM), que no sale del teléfono, y `allowBackup="false"` impide que la copia
 de seguridad de Google se lo lleve a otro aparato.
 
-Un solo permiso peligroso: ninguno. La red y poco más. Los PDF del teléfono se
-abren con el selector del sistema (`ACTION_OPEN_DOCUMENT`, con permiso
-persistente), que da acceso a ese fichero y a ninguno otro.
+Un solo permiso peligroso: la **cámara**, y se pide al entrar en el escáner, no
+al instalar — quien nunca da de alta un libro por ISBN no llega a verlo. Está
+declarada `required="false"`, así que un teléfono sin cámara instala igual. No
+hay permiso de almacenamiento: los PDF del teléfono se abren con el selector del
+sistema (`ACTION_OPEN_DOCUMENT`, con permiso persistente), que da acceso a ese
+fichero y a ninguno otro.
 
 ### Compilar y publicar
 
@@ -1108,7 +1241,7 @@ npm run test:e2e           # Playwright
 
 **Unitarios** (`tests/unit/`): sanitizado con vectores XSS reales, validación de esquemas, conversión de puntuaciones, umbral de moderación, hashing y pseudonimización, validación de imágenes y claves de R2, slugs, y la validación de la lista de pendientes.
 
-**Integración** (`tests/integration/`): corren en **workerd**, el mismo runtime que Cloudflare, con Miniflare proporcionando D1, R2, KV y Durable Objects auténticos. Sin mocks. Cubren autenticación completa, CSRF, cabeceras de seguridad, CRUD de reseñas, filtros y paginación, comentarios anidados con límite de profundidad, moderación, reportes con deduplicación y umbral, subidas a R2 con MIME spoofing y path traversal, caché, rate limiting, y la lista de pendientes completa (alta, cola, visibilidad pública y conversión en reseña).
+**Integración** (`tests/integration/`): corren en **workerd**, el mismo runtime que Cloudflare, con Miniflare proporcionando D1, R2, KV y Durable Objects auténticos. Sin mocks. Cubren autenticación completa, CSRF, cabeceras de seguridad, CRUD de reseñas, filtros y paginación, comentarios anidados con límite de profundidad, moderación, reportes con deduplicación y umbral, subidas a R2 con MIME spoofing y path traversal, caché, rate limiting, la lista de pendientes completa (alta, cola, visibilidad pública, gestión desde la página pública y conversión en reseña), y las reseñas por temporada y capítulo con sus estadísticas.
 
 **E2E** (`tests/e2e/`): el recorrido completo — login, crear reseña, subir portada, publicar, visualizar en modal, comentar, responder, reportar, alcanzar el umbral, moderar, eliminar y restaurar — más un bloque de accesibilidad que incluye **navegación con el sitio sin JavaScript**.
 
@@ -1302,5 +1435,5 @@ Dicho con claridad, porque conviene saberlo antes y no después:
 - **Cloudflare Images (transformaciones)** se factura aparte y requiere activarlo en la zona. Con `IMAGE_RESIZING=false` el sitio funciona sirviendo originales, a costa de peso.
 - **Sin registro de usuarios**: el rol `USER` existe en el modelo de datos y en las comprobaciones de permisos, pero no hay pantalla de alta. Comentar es anónimo por diseño (minimización de datos).
 - **Paginación por `OFFSET`**: perfectamente válida a esta escala; con catálogos muy grandes convendría paginación por cursor.
-- **La aplicación Android no tiene capa de texto**: `PdfRenderer` pinta la página y no dice qué pone en ella, así que no hay selección de palabras, ni búsqueda dentro del documento, ni `quote` en sus anotaciones. Los subrayados marcan una zona, en las mismas coordenadas 0..1 que el lector web. Cambiar eso significa cambiar de motor de PDF y sumar unos diez megas al APK.
+- **La capa de texto de la aplicación Android sólo sirve para subrayar.** PdfBox-Android dice dónde cae cada palabra, y con eso el subrayado marca texto y guarda su cita, pero **no hay buscador dentro del documento** ni selección con manecillas para copiar al portapapeles: el gesto empieza y acaba en el subrayado. Y en un escaneado sin OCR no hay texto que valga, así que ahí se sigue marcando la zona. El precio de la capa son unos megas de APK —el de release ronda los 9 con todo dentro— y unos segundos la primera vez que se subraya en un libro grande.
 - **La aplicación se distribuye fuera de Google Play**, así que quien instale tendrá que dar permiso para instalar desde el navegador y no hay actualizaciones automáticas: la propia aplicación consulta `/aplicacion/version.json` y avisa. La firma se hace con un almacén de claves que vive fuera del repositorio; perderlo obliga a publicar con otro `applicationId`.

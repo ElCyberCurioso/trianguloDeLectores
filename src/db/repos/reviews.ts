@@ -28,7 +28,12 @@ export interface ReviewListItem {
   titleEs: string;
   titleOriginal: string | null;
   contentType: ContentType;
+  /** Principio del periodo. Con `yearEnd`/`yearOngoing` forma el rango. */
   year: number | null;
+  yearEnd: number | null;
+  yearOngoing: number;
+  /** Temporadas. Nulo donde no aplica. */
+  seasons: number | null;
   creator: string | null;
   /** La nota en medios puntos: 0..20. Se pinta con `formatScore()`. */
   ratingHalf: number;
@@ -84,6 +89,9 @@ const listColumns = {
   titleOriginal: reviews.titleOriginal,
   contentType: reviews.contentType,
   year: reviews.year,
+  yearEnd: reviews.yearEnd,
+  yearOngoing: reviews.yearOngoing,
+  seasons: reviews.seasons,
   creator: reviews.creator,
   ratingHalf: reviews.ratingHalf,
   commentCount: reviews.commentCount,
@@ -269,6 +277,9 @@ export class ReviewRepository {
       categoryName: row.categoryName,
       categorySlug: row.categorySlug,
       year: row.year,
+      yearEnd: row.yearEnd,
+      yearOngoing: row.yearOngoing,
+      seasons: row.seasons,
       creator: row.creator,
       country: row.country,
       durationMin: row.durationMin,

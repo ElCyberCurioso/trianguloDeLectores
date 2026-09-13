@@ -7,13 +7,20 @@ import {
 import { variantUrl } from '../../lib/images';
 import { safeUrl } from '../../lib/sanitize';
 import { formatDate } from './ui';
+import { formatYearRange } from '../../lib/year';
 import { Icon } from './icons';
 
-export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: boolean }> = ({
-  item,
-  env,
-  priority = false,
-}) => {
+export const WatchlistCard: FC<{
+  item: WatchlistRow;
+  env: Bindings;
+  priority?: boolean;
+  /**
+   * Enlace a la edición. Sólo llega con sesión: quien pasa por aquí sin ella no
+   * ve el botón, y la ruta a la que apunta tampoco le dejaría entrar. Son las
+   * dos cosas, no una: esconder el botón no es un control de acceso.
+   */
+  editHref?: string | null;
+}> = ({ item, env, priority = false, editHref = null }) => {
   const cover = variantUrl(env, item.coverKey, 'card');
   // Defensa en profundidad: la validación ya restringe el esquema, pero lo que
   // se pinta como href vuelve a pasar por el filtro por si viniera de antes.
@@ -22,7 +29,23 @@ export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: b
     : null;
 
   return (
-    <article class={`pending pending--${item.priority.toLowerCase()}`}>
+    /*
+     * Con sesión, la tarjeta entera lleva a la edición.
+     *
+     * No se envuelve en un `<a>`: dentro hay otros enlaces —la reseña, la
+     * ficha— y un enlace dentro de otro no existe en HTML; los navegadores lo
+     * deshacen y el resultado depende de cuál. El enlace es **el título**, y se
+     * estira con un pseudoelemento que cubre la tarjeta. Así sigue habiendo un
+     * solo enlace de verdad, con su texto, su foco y su nombre accesible, y los
+     * otros se quedan por encima para poder pulsarlos.
+     *
+     * El título y no un botón «Editar» porque un botón invisible no se anuncia
+     * bien y uno visible sobraba: la tarjeta entera ya se pulsa, y el título es
+     * lo que se lee para saber a dónde lleva.
+     */
+    <article
+      class={`pending pending--${item.priority.toLowerCase()}${editHref ? ' pending--editable' : ''}`}
+    >
       <div class="pending__cover">
         {cover ? (
           <img
@@ -44,10 +67,25 @@ export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: b
 
       <div class="pending__body">
         <p class="pending__type">{CONTENT_TYPE_LABELS[item.contentType]}</p>
-        <h3 class="pending__title">{item.titleEs}</h3>
+        <h3 class="pending__title">
+          {editHref ? (
+            <a class="pending__titlelink" href={editHref}>
+              {item.titleEs}
+              {/* Lo que no se ve pero sí se oye: a dónde lleva el enlace. */}
+              <span class="visually-hidden"> · Editar este pendiente</span>
+            </a>
+          ) : (
+            item.titleEs
+          )}
+        </h3>
 
         <div class="pending__meta">
-          {item.year ? <span>{item.year}</span> : null}
+          {formatYearRange(item) ? <span>{formatYearRange(item)}</span> : null}
+          {item.seasons ? (
+            <span>
+              {item.seasons} {item.seasons === 1 ? 'temporada' : 'temporadas'}
+            </span>
+          ) : null}
           {item.creator ? <span>{item.creator}</span> : null}
         </div>
 
@@ -79,12 +117,33 @@ export const WatchlistCard: FC<{ item: WatchlistRow; env: Bindings; priority?: b
 /** Fila compacta para la cola del panel, con sus acciones. */
 export const WatchlistRowView: FC<{
   item: WatchlistRow;
+  env: Bindings;
   csrfToken: string;
-}> = ({ item, csrfToken }) => {
+}> = ({ item, env, csrfToken }) => {
   const activo = item.status === 'PENDING' || item.status === 'IN_PROGRESS';
+  const cover = variantUrl(env, item.coverKey, 'card');
 
   return (
     <li class={`queue-item queue-item--${item.priority.toLowerCase()} queue-item--${item.status.toLowerCase()}`}>
+      {/*
+        La portada también en la cola del panel: es lo que hace que una lista de
+        ciento treinta títulos se recorra con la vista y no leyendo. Miniatura,
+        2:3 y en color, como en el sitio — la portada es identidad de la obra—, y
+        marcador gris donde no la hay para que la fila no baile de altura.
+
+        `aria-hidden` y `alt` vacío: el título está justo al lado y en texto, así
+        que anunciar la imagen sería decirlo dos veces.
+      */}
+      <div class="queue-item__cover" aria-hidden="true">
+        {cover ? (
+          <img class="queue-item__img" src={cover} alt="" width="44" height="66" loading="lazy" decoding="async" />
+        ) : (
+          <div class="queue-item__img queue-item__img--placeholder">
+            <span>{item.titleEs.slice(0, 1)}</span>
+          </div>
+        )}
+      </div>
+
       <div class="queue-item__main">
         <div class="queue-item__head">
           <a class="queue-item__title" href={`/admin/pendientes/${item.id}`}>
@@ -99,7 +158,8 @@ export const WatchlistRowView: FC<{
         </div>
 
         <p class="queue-item__meta">
-          {[item.year, item.creator, item.categoryName].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+          {[formatYearRange(item), item.creator, item.categoryName].filter(Boolean).join(' · ') ||
+            'Sin datos adicionales'}
           {' · añadido el '}
           {formatDate(item.createdAt)}
         </p>

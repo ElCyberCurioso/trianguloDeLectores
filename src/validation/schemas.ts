@@ -83,7 +83,18 @@ export const reviewInputSchema = z.object({
   otherTitles: z.array(trimmed(200)).max(10).default([]),
   contentType: z.enum(CONTENT_TYPES),
   categoryId: idSchema.optional().nullable(),
+  /**
+   * El periodo, ya interpretado.
+   *
+   * Al formulario llega como un campo de texto («2020-2022», «2023-actualidad»)
+   * y quien lo traduce es `parseYearRange()` en el adaptador del formulario. El
+   * esquema valida los tres números que salen de ahí, que es lo que se guarda:
+   * así la regla de qué es un año válido vive en un sitio y no en dos.
+   */
   year: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  yearEnd: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  yearOngoing: z.coerce.boolean().default(false),
+  seasons: z.coerce.number().int().min(1).max(200).optional().nullable(),
   creator: optionalText(200),
   country: optionalText(100),
   durationMin: z.coerce.number().int().min(1).max(100000).optional().nullable(),
@@ -98,7 +109,15 @@ export const reviewInputSchema = z.object({
    * coma —lo que escribe un teclado español— frente a «7.5».
    */
   ratingHalf: z.coerce.number().int().min(0).max(MAX_SCORE_HALF).default(0),
-  summary: optionalText(600),
+  /**
+   * El resumen: lo que se lee bajo el título y lo que va en la tarjeta social.
+   *
+   * Empezó en 600 caracteres, que daba para dos frases y se quedaba corto en
+   * cuanto la reseña tenía algo que resumir. La columna es TEXT y no tiene
+   * límite; el techo está aquí para que el formulario sepa qué decir y para que
+   * nadie pegue un libro entero en un campo de una línea.
+   */
+  summary: optionalText(4000),
   bodyHtml: z.string().max(400_000).default(''),
   hasSpoilers: z.coerce.boolean().default(false),
   status: z.enum(['DRAFT', 'PUBLISHED']).default('DRAFT'),
@@ -193,6 +212,9 @@ export const watchlistInputSchema = z.object({
   contentType: z.enum(CONTENT_TYPES),
   categoryId: idSchema.optional().nullable(),
   year: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  yearEnd: z.coerce.number().int().min(1400).max(2200).optional().nullable(),
+  yearOngoing: z.coerce.boolean().default(false),
+  seasons: z.coerce.number().int().min(1).max(200).optional().nullable(),
   creator: optionalText(200),
   note: optionalText(500),
   sourceUrl: httpUrl(500).optional().or(z.literal('')),
@@ -215,6 +237,46 @@ export const watchlistQuerySchema = z.object({
   perPage: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type WatchlistQueryInput = z.infer<typeof watchlistQuerySchema>;
+
+/**
+ * El filtro de la página pública de pendientes.
+ *
+ * Más ancho que el del panel a propósito: la página pública pasa a ser donde se
+ * consulta y se gestiona la cola, así que tiene que poder buscar por lo mismo.
+ * Lo que **no** hace este esquema es decidir qué se puede ver: `status` y
+ * `visibility` los acota la ruta según haya sesión o no, porque un parámetro de
+ * la URL no puede ser lo que abra lo privado.
+ */
+export const publicWatchlistQuerySchema = z.object({
+  q: z.string().trim().max(120).optional(),
+  type: z.enum(CONTENT_TYPES).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+  category: slugSchema.optional(),
+  /** Periodo en texto libre: «2020», «2020-2022», «2023-actualidad». */
+  year: z.string().trim().max(40).optional(),
+  status: z.enum([...WATCHLIST_STATUSES, 'ALL', 'ACTIVE']).default('ACTIVE'),
+  visibility: z.enum(['ALL', 'PUBLIC', 'PRIVATE']).default('PUBLIC'),
+  sort: z.enum(WATCHLIST_SORTS).default('priority'),
+  page: z.coerce.number().int().min(1).max(2000).default(1),
+});
+export type PublicWatchlistQuery = z.infer<typeof publicWatchlistQuerySchema>;
+
+/**
+ * Una nota de capítulo o de temporada.
+ *
+ * `episode` a 0 significa «la temporada entera» (ver la migración `0006`).
+ * `ratingHalf` admite nulo porque apuntar un capítulo sin nota todavía es un
+ * caso corriente, y un cero ahí significaría un cero, que es otra cosa.
+ */
+export const episodeInputSchema = z.object({
+  season: z.coerce.number().int().min(0).max(200).default(1),
+  episode: z.coerce.number().int().min(0).max(10000).default(0),
+  title: optionalText(200),
+  ratingHalf: z.coerce.number().int().min(0).max(MAX_SCORE_HALF).nullish(),
+  note: optionalText(2000),
+  hasSpoilers: z.coerce.boolean().default(false),
+});
+export type EpisodeInput = z.infer<typeof episodeInputSchema>;
 
 export const watchlistActionSchema = z.object({
   action: z.enum(['start', 'complete', 'drop', 'reopen', 'delete', 'convert', 'toggle-public']),

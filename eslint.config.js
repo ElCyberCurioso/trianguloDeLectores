@@ -9,6 +9,8 @@ export default [
       // pdf.js se copia tal cual del paquete: no es código nuestro y no se linta.
       'public/assets/pdf/**',
       'coverage/**', 'test-results/**', 'playwright-report/**', 'dist/**',
+      // Salida de Gradle: los informes de test traen su propio JavaScript.
+      'android/build/**', 'android/app/build/**',
     ],
   },
   js.configs.recommended,

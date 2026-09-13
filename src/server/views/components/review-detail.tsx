@@ -6,6 +6,7 @@ import { AVAILABILITY_LABELS, CONTENT_TYPE_LABELS } from '../../../types/domain'
 import { variantUrl } from '../../lib/images';
 import { safeUrl } from '../../lib/sanitize';
 import { StarRating, formatDate } from './ui';
+import { formatYearRange } from '../../lib/year';
 import { Icon, MEDIA_ICON } from './icons';
 
 interface FactProps { label: string; value: string | number | null | undefined }
@@ -75,10 +76,11 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
           </div>
 
           <dl class="facts">
-            <Fact label="Año" value={review.year} />
+            <Fact label="Año" value={formatYearRange(review)} />
             <Fact label="Autor / dirección" value={review.creator} />
             <Fact label="País" value={review.country} />
             <Fact label="Duración" value={durationLabel} />
+            <Fact label="Temporadas" value={review.seasons} />
             <Fact label="Episodios" value={review.episodes} />
             <Fact label="Volúmenes" value={review.volumes} />
             <Fact label="Categoría" value={review.categoryName} />

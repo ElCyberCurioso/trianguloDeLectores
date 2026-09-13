@@ -112,7 +112,13 @@ export const reviews = sqliteTable(
       enum: ['BOOK', 'NOVEL', 'MOVIE', 'SERIES', 'ANIME', 'COMIC', 'MANGA', 'GAME', 'OTHER'],
     }).notNull(),
     categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    /** Principio del periodo. Con `yearEnd`/`yearOngoing` forma el rango. */
     year: integer('year'),
+    /** Final del periodo. Nulo = un solo año, o «actualidad» si `yearOngoing`. */
+    yearEnd: integer('year_end'),
+    yearOngoing: integer('year_ongoing').notNull().default(0),
+    /** Temporadas. Nulo donde no aplica, que es casi todo. */
+    seasons: integer('seasons'),
     creator: text('creator'),
     country: text('country'),
     durationMin: integer('duration_min'),
@@ -306,6 +312,9 @@ export const watchlistItems = sqliteTable(
     }).notNull(),
     categoryId: text('category_id').references(() => categories.id, { onDelete: 'set null' }),
     year: integer('year'),
+    yearEnd: integer('year_end'),
+    yearOngoing: integer('year_ongoing').notNull().default(0),
+    seasons: integer('seasons'),
     creator: text('creator'),
     note: text('note'),
     sourceUrl: text('source_url'),
@@ -328,6 +337,41 @@ export const watchlistItems = sqliteTable(
     publicIdx: index('idx_watchlist_public').on(t.isPublic, t.status, t.priority, t.createdAt),
     typeIdx: index('idx_watchlist_type').on(t.contentType, t.status),
     reviewIdx: index('idx_watchlist_review').on(t.reviewId),
+  }),
+);
+
+/**
+ * Reseñas por temporada y episodio. Espejo tipado de
+ * `0006_periodos_y_episodios.sql`.
+ *
+ * `episode` a 0 significa «la temporada entera», no «el capítulo cero». Es un
+ * cero y no un nulo porque SQLite considera distintos dos NULL: con nulos, el
+ * índice único no impediría dar de alta dos veces la misma temporada.
+ *
+ * `ratingHalf` sí es nullable. Un capítulo apuntado y todavía sin nota no es lo
+ * mismo que un capítulo con un cero, y las estadísticas sólo cuentan los que
+ * tienen nota.
+ */
+export const reviewEpisodes = sqliteTable(
+  'review_episodes',
+  {
+    id: text('id').primaryKey(),
+    reviewId: text('review_id')
+      .notNull()
+      .references(() => reviews.id, { onDelete: 'cascade' }),
+    season: integer('season').notNull().default(1),
+    episode: integer('episode').notNull().default(0),
+    title: text('title'),
+    ratingHalf: integer('rating_half'),
+    /** Texto plano: se escapa al pintarlo, igual que un comentario. */
+    note: text('note'),
+    hasSpoilers: integer('has_spoilers').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => ({
+    uniq: uniqueIndex('idx_review_episodes_uniq').on(t.reviewId, t.season, t.episode),
+    orden: index('idx_review_episodes_orden').on(t.reviewId, t.season, t.episode),
   }),
 );
 

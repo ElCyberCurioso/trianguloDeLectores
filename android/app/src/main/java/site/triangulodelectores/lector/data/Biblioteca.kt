@@ -47,6 +47,9 @@ class Biblioteca(
      * a cambio de nada. Hace falta pedir permiso **persistente** sobre esa URI:
      * sin eso, al reiniciar el teléfono la aplicación deja de poder abrir su
      * propia estantería, que es el fallo clásico del selector de ficheros.
+     *
+     * Esto vale para el selector del sistema. Lo que llega de otra aplicación no
+     * admite ese permiso y va por `importarEfimero()`, que sí copia.
      */
     fun importarLocal(uri: Uri): Documento {
         contexto.contentResolver.takePersistableUriPermission(
@@ -78,28 +81,55 @@ class Biblioteca(
     }
 
     /**
-     * Documento que llega de otra aplicación.
+     * Documento que llega de otra aplicación: se **copia**, no se enlaza.
      *
-     * Igual que `importarLocal`, pero **sin pedir permiso persistente**: la URI
-     * de un `ACTION_VIEW` es un préstamo de una sola vez y pedirlo lanza una
-     * excepción. Se guarda igual para poder leerlo ahora y para que conserve lo
-     * que se anote encima, sabiendo que puede dejar de abrirse al reiniciar.
+     * Aquí no vale guardar la URI y ya está. La de un `ACTION_VIEW` es un
+     * préstamo de un solo uso —no admite permiso persistente, pedirlo lanza— y
+     * además WhatsApp y Telegram sirven el fichero desde una caché suya que
+     * limpian cuando quieren. El resultado era que se abría bien y, al volver
+     * del segundo plano un rato después, la aplicación decía que el documento
+     * ya no estaba: la URI seguía guardada pero al otro lado no había nada.
+     *
+     * Copiarlo cuesta espacio —hasta cincuenta megas por documento—, y se paga
+     * a propósito: es un fichero que llegó de fuera y del que nadie más se hace
+     * cargo. El camino normal, `importarLocal()` con el selector del sistema, no
+     * copia nada; ahí la URI sí es nuestra para siempre.
+     *
+     * Si la copia falla —sin espacio, o el origen se corta a medias— se guarda
+     * la URI como antes: peor es no poder leerlo ahora.
      */
     fun importarEfimero(uri: Uri): Documento {
-        val yaEsta = almacen.documentos().firstOrNull { it.uri == uri.toString() }
+        val (nombre, tamano) = datosDeUri(contexto.contentResolver, uri)
+        val titulo = nombre.removeSuffix(".pdf").ifBlank { "Documento sin título" }
+
+        /*
+         * El mismo fichero compartido dos veces llega con dos URI distintas, así
+         * que no sirven para reconocerlo. Se compara por lo que sí se repite:
+         * nombre y tamaño, y que la copia siga estando.
+         */
+        val yaEsta = almacen.documentos().firstOrNull { doc ->
+            doc.origen == Origen.LOCAL &&
+                doc.titulo == titulo &&
+                doc.tamanoBytes == tamano &&
+                doc.rutaFichero?.let { File(it).exists() } == true
+        }
         if (yaEsta != null) return yaEsta
 
-        val (nombre, tamano) = datosDeUri(contexto.contentResolver, uri)
+        val id = UUID.randomUUID().toString()
+        val copia = runCatching { copiarAImportados(uri, id) }.getOrNull()
+
         val ahora = System.currentTimeMillis()
         val documento = Documento(
-            id = UUID.randomUUID().toString(),
+            id = id,
             origen = Origen.LOCAL,
-            titulo = nombre.removeSuffix(".pdf").ifBlank { "Documento sin título" },
+            titulo = titulo,
             autor = null,
             paginas = null,
-            uri = uri.toString(),
-            rutaFichero = null,
-            tamanoBytes = tamano,
+            // Con copia, la URI prestada deja de hacer falta y no se guarda: si
+            // se guardara, sería una ruta muerta esperando a confundir a alguien.
+            uri = if (copia == null) uri.toString() else null,
+            rutaFichero = copia?.absolutePath,
+            tamanoBytes = if (copia != null) copia.length() else tamano,
             checksum = null,
             creadoEn = ahora,
             actualizadoEn = ahora,
@@ -108,6 +138,34 @@ class Biblioteca(
         almacen.guardarDocumento(documento)
         return documento
     }
+
+    /**
+     * Trae el fichero al almacenamiento de la aplicación.
+     *
+     * Se escribe en un temporal y se renombra al final: si la copia se corta a
+     * media —se acaba el espacio, el origen se cierra— no queda un PDF a medias
+     * con pinta de bueno en la estantería.
+     */
+    private fun copiarAImportados(uri: Uri, id: String): File {
+        val destino = File(carpetaImportados(), "$id.pdf")
+        val temporal = File(carpetaImportados(), "$id.pdf.parcial")
+
+        try {
+            contexto.contentResolver.openInputStream(uri).use { entrada ->
+                requireNotNull(entrada) { "No se ha podido leer el documento" }
+                temporal.outputStream().use { salida -> entrada.copyTo(salida) }
+            }
+            if (temporal.length() <= 0L) throw IllegalStateException("El documento venía vacío")
+            if (!temporal.renameTo(destino)) throw IllegalStateException("No se ha podido guardar la copia")
+            return destino
+        } catch (e: Throwable) {
+            temporal.delete()
+            throw e
+        }
+    }
+
+    private fun carpetaImportados(): File =
+        File(contexto.filesDir, "importados").apply { mkdirs() }
 
     /**
      * Quita un documento de la estantería.
@@ -127,6 +185,9 @@ class Biblioteca(
                     )
                 }
             }
+            // La copia de lo que llegó de otra aplicación sí es nuestra y sí se
+            // borra: si no, quitarlo de la estantería dejaría los megas dentro.
+            documento.rutaFichero?.let { File(it).delete() }
             almacen.borrarDocumento(documento.id)
         } else {
             documento.rutaFichero?.let { File(it).delete() }
@@ -179,7 +240,21 @@ class Biblioteca(
     // ---------------------------------------------------- anotaciones --
     fun anotaciones(documentoId: String): List<Anotacion> = almacen.anotaciones(documentoId)
 
-    fun crearSubrayado(documentoId: String, pagina: Int, rects: List<Rect>, color: ColorAnotacion): Anotacion {
+    /**
+     * Guarda un subrayado.
+     *
+     * La cita llega vacía cuando se ha marcado una zona a mano, que es lo único
+     * que se puede hacer en una página escaneada sin texto. Cuando hay capa de
+     * texto llega escrita, y entonces el subrayado del teléfono guarda lo mismo
+     * que el del navegador: dónde está y qué dice.
+     */
+    fun crearSubrayado(
+        documentoId: String,
+        pagina: Int,
+        rects: List<Rect>,
+        color: ColorAnotacion,
+        cita: String? = null,
+    ): Anotacion {
         val ahora = System.currentTimeMillis()
         val anotacion = Anotacion(
             id = UUID.randomUUID().toString(),
@@ -187,9 +262,7 @@ class Biblioteca(
             tipo = TipoAnotacion.HIGHLIGHT,
             pagina = pagina,
             rects = rects,
-            // Sin capa de texto no hay cita que copiar: `PdfRenderer` pinta la
-            // página, no la lee. Se marca la zona, y eso es lo que viaja.
-            cita = null,
+            cita = cita?.trim()?.takeIf { it.isNotEmpty() },
             texto = null,
             color = color,
             creadoEn = ahora,

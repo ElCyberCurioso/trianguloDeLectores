@@ -1,8 +1,15 @@
+/**
+ * Piezas del panel.
+ *
+ * `CsrfField`, `Field` y `Flash` viven ahora en `components/ui.tsx`: los usa
+ * también el formulario de pendientes de la página pública, y un widget de
+ * formulario compartido no puede vivir sólo en el panel. Se re-exportan para no
+ * tocar los veinte sitios que ya los importan de aquí.
+ */
 import type { FC, PropsWithChildren } from 'hono/jsx';
 
-export const CsrfField: FC<{ token: string }> = ({ token }) => (
-  <input type="hidden" name="_csrf" value={token} />
-);
+export { CsrfField, Field, Flash } from '../components/ui';
+
 
 export const AdminPage: FC<PropsWithChildren<{ title: string; actions?: unknown }>> = ({
   title,
@@ -16,28 +23,4 @@ export const AdminPage: FC<PropsWithChildren<{ title: string; actions?: unknown 
     </div>
     {children}
   </div>
-);
-
-export const Field: FC<
-  PropsWithChildren<{ label: string; name: string; hint?: string; error?: string; required?: boolean }>
-> = ({ label, name, hint, error, required, children }) => (
-  <div class={`field${error ? ' field--error' : ''}`}>
-    <label class="field__label" for={`f-${name}`}>
-      {label}
-      {required ? <span class="field__req" aria-hidden="true"> *</span> : null}
-    </label>
-    {children}
-    {hint ? <p class="field__hint">{hint}</p> : null}
-    {error ? (
-      <p class="field__error" role="alert">
-        {error}
-      </p>
-    ) : null}
-  </div>
-);
-
-export const Flash: FC<{ kind: 'ok' | 'error'; message: string }> = ({ kind, message }) => (
-  <p class={`flash flash--${kind}`} role={kind === 'error' ? 'alert' : 'status'}>
-    {message}
-  </p>
 );

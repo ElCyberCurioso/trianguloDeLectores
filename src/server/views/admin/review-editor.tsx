@@ -1,12 +1,15 @@
 import type { FC } from 'hono/jsx';
 import { raw } from 'hono/html';
 import type { ReviewDetail } from '../../../db/repos/reviews';
+import type { EpisodeRow } from '../../../db/repos/episodes';
 import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_SCORE_HALF, formatScore,
+  MAX_SCORE_HALF, formatScore, formatAverageScore, isSerial,
 } from '../../../types/domain';
+import { computeEpisodeStats } from '../../lib/episode-stats';
+import { yearRangeToInput } from '../../lib/year';
 import { variantUrl } from '../../lib/images';
 import { Icon } from '../components/icons';
 import { AdminPage, CsrfField, Field, Flash } from './shared';
@@ -17,13 +20,15 @@ export interface ReviewEditorProps {
   categories: Category[];
   genres: Genre[];
   platforms: Platform[];
+  /** Notas por temporada y capítulo. Vacío en el alta: la reseña aún no existe. */
+  episodes?: EpisodeRow[];
   csrfToken: string;
   errors?: Record<string, string>;
   flash?: { kind: 'ok' | 'error'; message: string } | null;
 }
 
 export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
-  const { review, categories, genres, platforms, csrfToken, errors = {}, env } = props;
+  const { review, categories, genres, platforms, episodes = [], csrfToken, errors = {}, env } = props;
   const isNew = review === null;
   const action = isNew ? '/admin/resenas/nueva' : `/admin/resenas/${review.id}`;
   const cover = variantUrl(env, review?.coverKey, 'card');
@@ -106,8 +111,13 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
               </Field>
             </div>
 
-            <Field label="Resumen" name="summary" hint="Extracto que aparece en las tarjetas del catálogo." error={errors.summary}>
-              <textarea id="f-summary" class="textarea" name="summary" rows={3} maxlength={600}>
+            <Field
+              label="Resumen"
+              name="summary"
+              hint="Extracto que aparece en las tarjetas del catálogo y en la tarjeta social. Hasta 4.000 caracteres."
+              error={errors.summary}
+            >
+              <textarea id="f-summary" class="textarea" name="summary" rows={6} maxlength={4000}>
                 {review?.summary ?? ''}
               </textarea>
             </Field>
@@ -275,8 +285,21 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
               </Field>
 
               <div class="editor__row">
-                <Field label="Año" name="year" error={errors.year}>
-                  <input id="f-year" class="input" type="number" name="year" value={review?.year ?? ''} min={1400} max={2200} />
+                <Field
+                  label="Año o periodo"
+                  name="year"
+                  hint="«1999», «2020-2022» o «2023-actualidad»."
+                  error={errors.year}
+                >
+                  <input
+                    id="f-year"
+                    class="input"
+                    type="text"
+                    name="year"
+                    value={yearRangeToInput(review)}
+                    maxlength={40}
+                    placeholder="2020-2022"
+                  />
                 </Field>
                 <Field label="País" name="country">
                   <input id="f-country" class="input" type="text" name="country" value={review?.country ?? ''} maxlength={100} />
@@ -298,6 +321,18 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                   <input id="f-volumes" class="input" type="number" name="volumes" value={review?.volumes ?? ''} min={1} />
                 </Field>
               </div>
+
+              <Field label="Temporadas" name="seasons" hint="Sólo si las tiene." error={errors.seasons}>
+                <input
+                  id="f-seasons"
+                  class="input input--sm"
+                  type="number"
+                  name="seasons"
+                  value={review?.seasons ?? ''}
+                  min={1}
+                  max={200}
+                />
+              </Field>
             </section>
 
             <section class="panel">
@@ -350,9 +385,152 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
           </template>
         </section>
       </form>
+
+      {/*
+        Los episodios van **fuera** del formulario de la reseña, en formularios
+        propios.
+        Un formulario anidado no existe en HTML, y meterlos dentro obligaría a
+        guardar la reseña entera para apuntar una nota de un capítulo. Así cada
+        capítulo se guarda solo y no se pierde nada de lo que hubiera a medias.
+      */}
+      {!isNew && (isSerial(review.contentType) || episodes.length > 0) ? (
+        <EpisodesPanel reviewId={review.id} episodes={episodes} csrfToken={csrfToken} />
+      ) : null}
     </AdminPage>
   );
 };
+
+/**
+ * Las notas por temporada y capítulo.
+ *
+ * Sólo sale en series y anime, o donde ya haya episodios apuntados —si alguien
+ * cambia el tipo de contenido después, lo que hay no se esconde—. La nota de la
+ * reseña sigue siendo la de la obra entera y no se recalcula con esto: una
+ * serie puede tener una media de 7,2 y merecer un 9 por lo que es en conjunto.
+ */
+const EpisodesPanel: FC<{ reviewId: string; episodes: EpisodeRow[]; csrfToken: string }> = ({
+  reviewId,
+  episodes,
+  csrfToken,
+}) => {
+  const stats = computeEpisodeStats(episodes);
+
+  return (
+    <section class="panel" id="episodios">
+      <h2 class="panel__title">Temporadas y capítulos</h2>
+      <p class="field__hint">
+        Capítulo <strong>0</strong> significa «la temporada entera». La nota puede quedarse en blanco:
+        eso es «sin nota todavía», que no es lo mismo que un cero.
+        {stats.rated > 0 ? (
+          <>
+            {' '}Ahora mismo: {stats.rated} {stats.rated === 1 ? 'capítulo valorado' : 'capítulos valorados'} con
+            una media de {formatAverageScore(stats.averageHalf ?? 0)}.
+          </>
+        ) : null}
+      </p>
+
+      {episodes.length ? (
+        <ol class="episodes-admin">
+          {episodes.map((episode) => (
+            <li class="episodes-admin__item">
+              <form method="post" action={`/admin/resenas/${reviewId}/episodios`} class="episodes-admin__form">
+                <CsrfField token={csrfToken} />
+                <input type="hidden" name="episodeId" value={episode.id} />
+                <EpisodeFields episode={episode} />
+                <button type="submit" class="btn btn--sm btn--primary">
+                  Guardar
+                </button>
+              </form>
+              <form
+                method="post"
+                action={`/admin/resenas/${reviewId}/episodios/${episode.id}/borrar`}
+                class="inline-form"
+                data-confirm={`¿Borrar ${etiquetaEpisodio(episode)}?`}
+              >
+                <CsrfField token={csrfToken} />
+                <button type="submit" class="btn btn--sm btn--danger">
+                  Borrar
+                </button>
+              </form>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+
+      <form method="post" action={`/admin/resenas/${reviewId}/episodios`} class="episodes-admin__form episodes-admin__form--new">
+        <CsrfField token={csrfToken} />
+        <EpisodeFields episode={null} />
+        <button type="submit" class="btn btn--primary">
+          Añadir
+        </button>
+      </form>
+    </section>
+  );
+};
+
+/** Cómo se nombra una fila: «T2×5» o «Temporada 2». */
+function etiquetaEpisodio(episode: Pick<EpisodeRow, 'season' | 'episode'>): string {
+  return episode.episode === 0 ? `la temporada ${episode.season}` : `T${episode.season}×${episode.episode}`;
+}
+
+const EpisodeFields: FC<{ episode: EpisodeRow | null }> = ({ episode }) => (
+  <>
+    <label class="episodes-admin__cell">
+      <span class="episodes-admin__label">Temp.</span>
+      <input
+        class="input input--sm"
+        type="number"
+        name="season"
+        value={episode?.season ?? 1}
+        min={0}
+        max={200}
+        required
+      />
+    </label>
+    <label class="episodes-admin__cell">
+      <span class="episodes-admin__label">Cap.</span>
+      <input
+        class="input input--sm"
+        type="number"
+        name="episode"
+        value={episode?.episode ?? ''}
+        min={0}
+        max={10000}
+        placeholder="0"
+      />
+    </label>
+    <label class="episodes-admin__cell episodes-admin__cell--grow">
+      <span class="episodes-admin__label">Título</span>
+      <input class="input" type="text" name="title" value={episode?.title ?? ''} maxlength={200} />
+    </label>
+    <label class="episodes-admin__cell">
+      <span class="episodes-admin__label">Nota</span>
+      {/*
+        Un desplegable y no el control de estrellas: aquí hay una fila por
+        capítulo y veinte estrellas repetidas cuarenta veces no caben. El valor
+        sigue siendo el mismo entero en medios puntos.
+      */}
+      <select class="select select--sm" name="ratingHalf">
+        <option value="" selected={episode?.ratingHalf === null || episode?.ratingHalf === undefined}>
+          Sin nota
+        </option>
+        {Array.from({ length: MAX_SCORE_HALF + 1 }, (_, half) => (
+          <option value={half} selected={episode?.ratingHalf === half}>
+            {formatScore(half)}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label class="episodes-admin__cell episodes-admin__cell--grow">
+      <span class="episodes-admin__label">Comentario</span>
+      <input class="input" type="text" name="note" value={episode?.note ?? ''} maxlength={2000} />
+    </label>
+    <label class="check">
+      <input type="checkbox" name="hasSpoilers" value="1" checked={episode?.hasSpoilers === 1} />
+      <span>Spoilers</span>
+    </label>
+  </>
+);
 
 const PlatformRow: FC<{
   platforms: Platform[];

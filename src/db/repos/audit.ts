@@ -7,6 +7,7 @@ export type AuditAction =
   | 'auth.login.success' | 'auth.login.failure' | 'auth.logout' | 'auth.locked'
   | 'review.create' | 'review.update' | 'review.publish' | 'review.unpublish'
   | 'review.delete' | 'review.restore' | 'review.duplicate'
+  | 'review.episode' | 'review.episode.delete'
   | 'comment.create' | 'comment.moderate' | 'comment.delete' | 'comment.restore' | 'comment.purge'
   | 'report.create' | 'report.threshold'
   | 'watchlist.create' | 'watchlist.update' | 'watchlist.status' | 'watchlist.delete' | 'watchlist.convert'

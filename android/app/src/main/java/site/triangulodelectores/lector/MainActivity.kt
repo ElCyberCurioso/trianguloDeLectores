@@ -45,9 +45,10 @@ class MainActivity : ComponentActivity() {
          * lista donde buscarlo.
          *
          * La URI que llega en un `VIEW` es de un solo uso y no admite permiso
-         * persistente, así que el documento queda importado pero puede dejar de
-         * abrirse al reiniciar. Es el comportamiento correcto: para tenerlo
-         * siempre, se añade desde «Abrir un PDF del teléfono».
+         * persistente, así que `importarEfimero()` **se trae una copia** del
+         * fichero. Sin ella, el documento se abría bien y dejaba de encontrarse
+         * al volver del segundo plano un rato después: la caché desde la que lo
+         * servía la otra aplicación se había vaciado.
          */
         val documentoDeIntent = if (intent?.action == Intent.ACTION_VIEW) {
             intent.data?.let { uri ->

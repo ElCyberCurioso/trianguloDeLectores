@@ -17,6 +17,21 @@ export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
   OTHER: 'Otro',
 };
 
+/**
+ * Lo que se consume por entregas y admite nota por capítulo.
+ *
+ * Series y anime y nada más. Un cómic o un manga también salen por números,
+ * pero ahí lo que se reseña es el tomo y para eso ya está `volumes`; abrir la
+ * ficha de episodios a todo llenaría de formulario vacío las ocho de cada diez
+ * reseñas que son de una película o un libro.
+ */
+export const SERIAL_CONTENT_TYPES = ['SERIES', 'ANIME'] as const;
+export type SerialContentType = (typeof SERIAL_CONTENT_TYPES)[number];
+
+export function isSerial(type: ContentType): type is SerialContentType {
+  return (SERIAL_CONTENT_TYPES as readonly string[]).includes(type);
+}
+
 export const AVAILABILITY = [
   'SUBSCRIPTION', 'RENT', 'BUY', 'FREE', 'LIBRARY', 'PHYSICAL', 'OTHER',
 ] as const;
@@ -113,6 +128,19 @@ export function halfToScore(half: number): number {
  */
 export function formatScore(half: number): string {
   return halfToScore(half).toFixed(1).replace('.', ',');
+}
+
+/**
+ * Una **media** sobre 10, con un decimal.
+ *
+ * No es lo mismo que `formatScore`: aquélla recibe una nota real, que siempre
+ * cae en un medio punto, y la redondea a la escala. Una media no cae en la
+ * escala —la de tres capítulos con 8, 7,5 y 9 es 8,1(6)— y redondearla al medio
+ * punto más cercano la falsearía justo donde se mira, que es al comparar dos
+ * temporadas parecidas.
+ */
+export function formatAverageScore(half: number): string {
+  return (Math.max(0, Math.min(MAX_SCORE_HALF, half)) / 2).toFixed(1).replace('.', ',');
 }
 
 /** Los 21 valores de la escala, para pintar un desplegable sin inventarlos. */

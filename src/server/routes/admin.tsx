@@ -19,6 +19,7 @@ import {
   reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
   moderationActionSchema, categoryInputSchema, genreInputSchema, platformInputSchema,
   watchlistInputSchema, watchlistQuerySchema, watchlistActionSchema,
+  episodeInputSchema,
   recommendationQuerySchema, recommendationActionSchema,
   fieldErrors,
 } from '../../validation/schemas';
@@ -29,9 +30,11 @@ import { CommentService } from '../services/comments';
 import { MediaService } from '../services/media';
 import { StatsService } from '../services/stats';
 import { WatchlistService, type WatchlistAction } from '../services/watchlist';
+import { EpisodeService } from '../services/episodes';
 import { RecommendationService } from '../services/recommendations';
 import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
+import { parseYearRange } from '../lib/year';
 import { variantUrl } from '../lib/images';
 import * as F from '../lib/form';
 import type { CommentStatus, ContentType, Priority } from '../../types/domain';
@@ -166,7 +169,7 @@ adminRoutes.get('/', async (c) => {
 // ------------------------------------------------------------- reseñas ----
 adminRoutes.get('/resenas', async (c) => {
   const container = c.get('container');
-  const parsed = adminReviewQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const parsed = adminReviewQuerySchema.safeParse(F.queryParams(c.req.url));
   const query = parsed.success ? parsed.data : adminReviewQuerySchema.parse({});
 
   const [results, categories] = await Promise.all([
@@ -211,10 +214,11 @@ adminRoutes.get('/resenas/:id', async (c) => {
   const container = c.get('container');
   const review = await container.reviews.getById(c.req.param('id'), { includeDrafts: true });
   if (!review) throw notFound('La reseña no existe');
-  const [categories, genres, platforms] = await Promise.all([
+  const [categories, genres, platforms, episodes] = await Promise.all([
     container.taxonomy.listCategories(false),
     container.taxonomy.listGenres(),
     container.taxonomy.listPlatforms(false),
+    container.episodes.byReview(review.id),
   ]);
   return adminShell(
     c,
@@ -225,6 +229,7 @@ adminRoutes.get('/resenas/:id', async (c) => {
       categories={categories}
       genres={genres}
       platforms={platforms}
+      episodes={episodes}
       csrfToken={c.get('csrfToken')!}
       flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Cambios guardados.' } : null}
     />,
@@ -234,6 +239,11 @@ adminRoutes.get('/resenas/:id', async (c) => {
 /** Normaliza el formulario del editor al esquema de dominio. */
 async function readReviewForm(c: Context<AppEnv>) {
   const body = await c.req.parseBody({ all: true });
+
+  // El año llega como texto y puede ser un periodo: «2020-2022»,
+  // «2023-actualidad». La traducción a los tres campos que se guardan vive aquí,
+  // no en el esquema, que valida lo guardado y no cómo se escribe una fecha.
+  const periodo = parseYearRange(F.str(body, 'year', 40));
 
   // Los campos repetidos del bloque "plataformas" llegan alineados por posición.
   // Se usan listas en bruto (con huecos) para no desalinear las columnas, y se
@@ -258,7 +268,10 @@ async function readReviewForm(c: Context<AppEnv>) {
     otherTitles: F.splitList(F.str(body, 'otherTitles', 600)),
     contentType: F.str(body, 'contentType', 20),
     categoryId: F.str(body, 'categoryId', 40) ?? null,
-    year: F.num(body, 'year') ?? null,
+    year: periodo.year,
+    yearEnd: periodo.yearEnd,
+    yearOngoing: periodo.yearOngoing,
+    seasons: F.num(body, 'seasons') ?? null,
     creator: F.str(body, 'creator', 200),
     country: F.str(body, 'country', 100),
     durationMin: F.num(body, 'durationMin') ?? null,
@@ -266,7 +279,7 @@ async function readReviewForm(c: Context<AppEnv>) {
     volumes: F.num(body, 'volumes') ?? null,
     // La nota viaja en medios puntos: 0..20 son 0,0 a 10,0.
     ratingHalf: F.num(body, 'ratingHalf') ?? 0,
-    summary: F.str(body, 'summary', 600),
+    summary: F.str(body, 'summary', 4000),
     bodyHtml: F.strOrEmpty(body, 'bodyHtml', 400_000),
     hasSpoilers: F.bool(body, 'hasSpoilers'),
     status: F.str(body, 'status', 20) ?? 'DRAFT',
@@ -373,7 +386,7 @@ adminRoutes.post('/resenas/:id/restaurar', async (c) => {
 // --------------------------------------------------------- comentarios ----
 adminRoutes.get('/comentarios', async (c) => {
   const container = c.get('container');
-  const parsed = adminCommentQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const parsed = adminCommentQuerySchema.safeParse(F.queryParams(c.req.url));
   const query = parsed.success ? parsed.data : adminCommentQuerySchema.parse({});
 
   const [list, pendingCount, settings] = await Promise.all([
@@ -420,10 +433,50 @@ adminRoutes.post('/comentarios/:id/accion', async (c) => {
 });
 
 
+// ------------------------------------------------------ episodios ---------
+/**
+ * Notas por temporada y capítulo.
+ *
+ * Cuelgan de la reseña y no tienen página propia: se dan de alta y se editan
+ * desde su editor, que es donde se está cuando se piensa en ellas. El id de la
+ * reseña va **siempre** en la ruta y en el `WHERE` del repositorio, así que
+ * conocer el id de un episodio no sirve para tocar el de otra reseña.
+ */
+adminRoutes.post('/resenas/:id/episodios', async (c) => {
+  const reviewId = c.req.param('id');
+  const body = await c.req.parseBody({ all: true });
+
+  // Vacío es «sin nota todavía», no un cero. `F.num` devuelve `undefined` para
+  // el campo vacío, y eso es justo lo que el esquema entiende por nulo.
+  const parsed = episodeInputSchema.safeParse({
+    season: F.num(body, 'season') ?? 1,
+    episode: F.num(body, 'episode') ?? 0,
+    title: F.str(body, 'title', 200),
+    ratingHalf: F.num(body, 'ratingHalf') ?? null,
+    note: F.str(body, 'note', 2000),
+    hasSpoilers: F.bool(body, 'hasSpoilers'),
+  });
+  if (!parsed.success) throw badRequest('validation', 'Revisa los datos del episodio', fieldErrors(parsed.error));
+
+  await new EpisodeService(c.get('container')).save(
+    reviewId,
+    F.str(body, 'episodeId', 40) ?? null,
+    parsed.data,
+    c.get('user')!,
+  );
+  return c.redirect(`/admin/resenas/${reviewId}?ok=1#episodios`, 303);
+});
+
+adminRoutes.post('/resenas/:id/episodios/:episodeId/borrar', async (c) => {
+  const reviewId = c.req.param('id');
+  await new EpisodeService(c.get('container')).remove(reviewId, c.req.param('episodeId'), c.get('user')!);
+  return c.redirect(`/admin/resenas/${reviewId}?ok=1#episodios`, 303);
+});
+
 // --------------------------------------------------------- pendientes -----
 adminRoutes.get('/pendientes', async (c) => {
   const container = c.get('container');
-  const parsed = watchlistQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const parsed = watchlistQuerySchema.safeParse(F.queryParams(c.req.url));
   const query = parsed.success ? parsed.data : watchlistQuerySchema.parse({});
 
   const [resultado, counters, categories] = await Promise.all([
@@ -436,6 +489,7 @@ adminRoutes.get('/pendientes', async (c) => {
     c,
     'Pendientes',
     <AdminWatchlistPage
+      env={c.env}
       items={resultado.items}
       counters={counters}
       categories={categories}
@@ -483,12 +537,17 @@ adminRoutes.get('/pendientes/:id', async (c) => {
 /** Normaliza el formulario de pendientes al esquema de dominio. */
 async function readWatchlistForm(c: Context<AppEnv>) {
   const body = await c.req.parseBody({ all: true });
+  const periodo = parseYearRange(F.str(body, 'year', 40));
+
   return watchlistInputSchema.safeParse({
     titleEs: F.strOrEmpty(body, 'titleEs', 200),
     titleOriginal: F.str(body, 'titleOriginal', 200),
     contentType: F.str(body, 'contentType', 20),
     categoryId: F.str(body, 'categoryId', 40) ?? null,
-    year: F.num(body, 'year') ?? null,
+    year: periodo.year,
+    yearEnd: periodo.yearEnd,
+    yearOngoing: periodo.yearOngoing,
+    seasons: F.num(body, 'seasons') ?? null,
     creator: F.str(body, 'creator', 200),
     note: F.str(body, 'note', 500),
     sourceUrl: F.str(body, 'sourceUrl', 500) ?? '',
@@ -783,7 +842,7 @@ adminRoutes.get('/api/slug', async (c) => {
 // ================================================== RECOMENDACIONES =====
 adminRoutes.get('/recomendaciones', async (c) => {
   const container = c.get('container');
-  const parsed = recommendationQuerySchema.safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+  const parsed = recommendationQuerySchema.safeParse(F.queryParams(c.req.url));
   const query = parsed.success ? parsed.data : recommendationQuerySchema.parse({});
 
   const [resultado, counters] = await Promise.all([

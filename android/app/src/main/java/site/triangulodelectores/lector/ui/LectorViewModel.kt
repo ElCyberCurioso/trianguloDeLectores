@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import site.triangulodelectores.lector.Contenedor
@@ -20,6 +22,9 @@ import site.triangulodelectores.lector.data.local.Origen
 import site.triangulodelectores.lector.data.local.Progreso
 import site.triangulodelectores.lector.data.local.Rect
 import site.triangulodelectores.lector.pdf.DocumentoPdf
+import site.triangulodelectores.lector.pdf.NotaIncrustada
+import site.triangulodelectores.lector.pdf.Palabra
+import site.triangulodelectores.lector.pdf.TextoPdf
 
 /** Sin reducir por debajo del ancho de la pantalla: no hay nada que ver ahí. */
 const val ZOOM_MINIMO = 1f
@@ -46,6 +51,10 @@ data class EstadoLector(
     val zoom: Float = 1f,
     val cargando: Boolean = true,
     val error: String? = null,
+    /** Las notas que trae el PDF dentro, que no son nuestras y no se editan. */
+    val notasIncrustadas: List<NotaIncrustada> = emptyList(),
+    val notasIncrustadasLeidas: Boolean = false,
+    val leyendoNotasIncrustadas: Boolean = false,
 )
 
 /**
@@ -69,6 +78,38 @@ class LectorViewModel(
         private set
 
     private var guardadoDiferido: Job? = null
+
+    /**
+     * La capa de texto, que es otro trato con el mismo fichero.
+     *
+     * `PdfRenderer` pinta y no lee; PDFBox lee y no pinta. Se abre **tarde**:
+     * analizar un libro escaneado cuesta segundos y memoria, y quien sólo va a
+     * leer no tiene por qué pagarlos. La primera palabra que se pide o la
+     * primera vez que se abre el panel de notas es lo que lo abre.
+     */
+    private var texto: TextoPdf? = null
+    private var textoIntentado = false
+    private val cerrojoTexto = Mutex()
+
+    private suspend fun capaDeTexto(): TextoPdf? = cerrojoTexto.withLock {
+        if (!textoIntentado) {
+            textoIntentado = true
+            val documento = _estado.value.documento
+            if (documento != null) {
+                texto = withContext(Dispatchers.IO) { TextoPdf.abrir(contenedor.contexto, documento) }
+            }
+        }
+        texto
+    }
+
+    /**
+     * Las palabras de una página, con su sitio.
+     *
+     * Lista vacía significa «aquí no hay texto», que es lo normal en un
+     * escaneado sin OCR y no un fallo: quien llama vuelve al recuadro a mano.
+     */
+    suspend fun palabrasDe(indice: Int): List<Palabra> =
+        capaDeTexto()?.palabras(indice).orEmpty()
 
     /** Última fracción de página vista. Se conserva para no perderla al salir. */
     private var ultimoScroll = 0
@@ -152,12 +193,56 @@ class LectorViewModel(
         // subrayado: se descarta antes de guardarlo para no dejar la página
         // llena de marcas invisibles.
         if (rect.w < 0.01f || rect.h < 0.005f) return
+        guardarSubrayado(pagina, listOf(rect), null)
+    }
 
+    /**
+     * Subrayado sobre texto: un rectángulo por renglón y la cita escrita.
+     *
+     * Es lo mismo que guarda el lector web al arrastrar sobre la capa de texto
+     * de pdf.js, y a propósito: un subrayado hecho en el teléfono tiene que
+     * verse allí con las mismas palabras debajo.
+     */
+    fun subrayarTexto(pagina: Int, rects: List<Rect>, cita: String) {
+        if (rects.isEmpty()) return
+        guardarSubrayado(pagina, rects, cita)
+    }
+
+    private fun guardarSubrayado(pagina: Int, rects: List<Rect>, cita: String?) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                contenedor.biblioteca.crearSubrayado(documentoId, pagina, listOf(rect), _estado.value.colorActivo)
+                contenedor.biblioteca.crearSubrayado(
+                    documentoId,
+                    pagina,
+                    rects,
+                    _estado.value.colorActivo,
+                    cita,
+                )
             }
             recargarAnotaciones()
+        }
+    }
+
+    /**
+     * Lee las notas que el PDF trae dentro.
+     *
+     * Se pide al abrir el panel, no al abrir el libro: hay que recorrer las
+     * anotaciones de todas las páginas y eso no puede colgarse de la apertura,
+     * que es cuando alguien está esperando para leer.
+     */
+    fun leerNotasIncrustadas() {
+        if (_estado.value.notasIncrustadasLeidas || _estado.value.leyendoNotasIncrustadas) return
+        _estado.update { it.copy(leyendoNotasIncrustadas = true) }
+
+        viewModelScope.launch {
+            val notas = capaDeTexto()?.notas().orEmpty()
+            _estado.update {
+                it.copy(
+                    notasIncrustadas = notas,
+                    notasIncrustadasLeidas = true,
+                    leyendoNotasIncrustadas = false,
+                )
+            }
         }
     }
 
@@ -222,6 +307,8 @@ class LectorViewModel(
     override fun onCleared() {
         pdf?.close()
         pdf = null
+        texto?.close()
+        texto = null
         contenedor.cachePaginas.vaciar()
         super.onCleared()
     }

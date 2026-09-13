@@ -69,6 +69,10 @@ import site.triangulodelectores.lector.data.local.Rect
 import site.triangulodelectores.lector.data.local.TipoAnotacion
 import site.triangulodelectores.lector.pdf.CachePaginas
 import site.triangulodelectores.lector.pdf.DocumentoPdf
+import site.triangulodelectores.lector.pdf.NotaIncrustada
+import site.triangulodelectores.lector.pdf.Palabra
+import site.triangulodelectores.lector.pdf.SeleccionTexto
+import site.triangulodelectores.lector.pdf.seleccionarTexto
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.foundation.Image
 
@@ -111,6 +115,39 @@ fun LectorScreen(
 
     /** Encuadre horizontal, en píxeles de pantalla. Negativo o cero. */
     var desplazamientoX by remember { mutableStateOf(0f) }
+
+    /*
+     * El zoom que ya se ha **pedido**, que no siempre es el que se ve.
+     *
+     * `estado.zoom` llega por `collectAsState` y no cambia hasta la siguiente
+     * recomposición, pero dentro de un mismo evento del pellizco hay que acotar
+     * el encuadre con el valor nuevo: con el viejo el margen se queda corto y el
+     * punto que hay bajo los dedos se escapa mientras se amplía.
+     */
+    var zoomPedido by remember { mutableStateOf(estado.zoom) }
+    LaunchedEffect(estado.zoom) { zoomPedido = estado.zoom }
+
+    /**
+     * Cuánto puede correrse el documento hacia la izquierda, en píxeles: lo que
+     * sobresale por la derecha y nada más. Con el zoom al mínimo vale cero, y
+     * entonces el único encuadre legal es el de la izquierda pegada al borde.
+     */
+    fun margenX(): Float = (anchoViewport * (zoomPedido - 1f)).coerceAtLeast(0f)
+
+    /*
+     * Reacotar el encuadre cuando cambia el zoom o el tamaño del hueco.
+     *
+     * El límite izquierdo depende del zoom y el derecho no, y ahí estaba la
+     * asimetría: acotando sólo al arrastrar, reducir el zoom con el botón, con
+     * el doble toque o girando el teléfono dejaba un desplazamiento que ya no
+     * era legal. El documento se quedaba fuera de la vista por la izquierda y,
+     * con el zoom otra vez a uno, ni siquiera se podía arrastrar para traerlo:
+     * el gesto de un dedo sólo actúa si hay zoom. Hacia la derecha nunca pasó
+     * porque ese tope es cero pase lo que pase.
+     */
+    LaunchedEffect(estado.zoom, anchoViewport) {
+        desplazamientoX = desplazamientoX.coerceIn(-margenX(), 0f)
+    }
 
     /*
      * Repintar cuando el zoom se queda quieto.
@@ -204,7 +241,8 @@ fun LectorScreen(
                 else -> {
                     if (estado.modoSubrayado) {
                         Aviso(
-                            "Modo subrayado: arrastra sobre la zona que quieras marcar.",
+                            "Modo subrayado: arrastra sobre el texto, o tócalo para una palabra. " +
+                                "En una página escaneada, que no lleva texto, se marca la zona.",
                             Modifier.padding(horizontal = 16.dp),
                             acento = true,
                         )
@@ -266,20 +304,19 @@ fun LectorScreen(
                                          * pedido, seguir pellizcando en el tope
                                          * movería el documento sin ampliarlo.
                                          */
-                                        val anterior = estado.zoom
+                                        val anterior = zoomPedido
                                         val nuevo = (anterior * factor)
                                             .coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
                                         val real = if (anterior > 0f) nuevo / anterior else 1f
                                         if (real != 1f) {
+                                            zoomPedido = nuevo
                                             modelo.cambiarZoom(nuevo)
 
                                             // Horizontal: el punto bajo el
                                             // centroide no se mueve.
-                                            val margen = (anchoViewport * (nuevo - 1f))
-                                                .coerceAtLeast(0f)
                                             desplazamientoX = (
                                                 centroide.x - (centroide.x - desplazamientoX) * real
-                                                ).coerceIn(-margen, 0f)
+                                                ).coerceIn(-margenX(), 0f)
 
                                             // Vertical: lo mismo, pero el eje lo
                                             // lleva la lista, que mide en píxeles
@@ -292,10 +329,8 @@ fun LectorScreen(
                                         }
                                     },
                                     alArrastrar = { dx, dy ->
-                                        val margen = (anchoViewport * (estado.zoom - 1f))
-                                            .coerceAtLeast(0f)
                                         desplazamientoX =
-                                            (desplazamientoX + dx).coerceIn(-margen, 0f)
+                                            (desplazamientoX + dx).coerceIn(-margenX(), 0f)
                                         // La lista se desplaza en sus propios
                                         // píxeles, que son los de rasterizado:
                                         // hay que deshacer la escala visual o
@@ -310,15 +345,22 @@ fun LectorScreen(
                                 anchoRaster = anchoRaster,
                                 altoRaster = if (escala > 0f) (altoViewport / escala).toInt() else altoViewport,
                                 escala = escala,
-                                desplazamientoX = desplazamientoX,
+                                // Acotado también aquí: el efecto que recoloca
+                                // el encuadre corre después de componer, y ese
+                                // fotograma se vería descolocado.
+                                desplazamientoX = desplazamientoX
+                                    .coerceIn(-(anchoViewport * (estado.zoom - 1f)).coerceAtLeast(0f), 0f),
                                 pdf = pdf,
                                 documentoId = estado.documento?.id ?: "",
                                 cache = cache,
                                 estadoLista = lista,
                                 anotaciones = estado.anotaciones,
+                                notasIncrustadas = estado.notasIncrustadas,
                                 modoSubrayado = estado.modoSubrayado,
                                 colorActivo = estado.colorActivo,
+                                palabrasDe = modelo::palabrasDe,
                                 alSubrayar = modelo::subrayar,
+                                alSubrayarTexto = modelo::subrayarTexto,
                                 alDobleToque = {
                                     modelo.cambiarZoom(if (estado.zoom > 1.5f) 1f else 2f)
                                 },
@@ -331,9 +373,16 @@ fun LectorScreen(
     }
 
     if (panelAnotaciones) {
+        // Las notas que trae el PDF se leen aquí y no al abrir el libro: hay que
+        // recorrer las anotaciones de todas las páginas y eso no puede colgarse
+        // de la apertura, que es cuando alguien está esperando para leer.
+        LaunchedEffect(Unit) { modelo.leerNotasIncrustadas() }
+
         PanelAnotaciones(
             anotaciones = estado.anotaciones,
             marcadores = estado.marcadores.map { it.pagina },
+            notasIncrustadas = estado.notasIncrustadas,
+            leyendoNotasIncrustadas = estado.leyendoNotasIncrustadas,
             alCerrar = { panelAnotaciones = false },
             alIrA = { pagina ->
                 panelAnotaciones = false
@@ -455,9 +504,12 @@ private fun PaginasDelDocumento(
     cache: CachePaginas,
     estadoLista: androidx.compose.foundation.lazy.LazyListState,
     anotaciones: List<Anotacion>,
+    notasIncrustadas: List<NotaIncrustada>,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
+    palabrasDe: suspend (Int) -> List<Palabra>,
     alSubrayar: (Int, Rect) -> Unit,
+    alSubrayarTexto: (Int, List<Rect>, String) -> Unit,
     alDobleToque: () -> Unit,
 ) {
     val densidad = LocalDensity.current
@@ -494,9 +546,12 @@ private fun PaginasDelDocumento(
                 indice = indice,
                 anchoPx = anchoRaster,
                 anotaciones = anotaciones.filter { it.pagina == indice + 1 },
+                notasIncrustadas = notasIncrustadas.filter { it.pagina == indice + 1 },
                 modoSubrayado = modoSubrayado,
                 colorActivo = colorActivo,
+                palabrasDe = palabrasDe,
                 alSubrayar = { rect -> alSubrayar(indice + 1, rect) },
+                alSubrayarTexto = { rects, cita -> alSubrayarTexto(indice + 1, rects, cita) },
                 alDobleToque = alDobleToque,
             )
         }
@@ -511,9 +566,12 @@ private fun PaginaPdf(
     indice: Int,
     anchoPx: Int,
     anotaciones: List<Anotacion>,
+    notasIncrustadas: List<NotaIncrustada>,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
+    palabrasDe: suspend (Int) -> List<Palabra>,
     alSubrayar: (Rect) -> Unit,
+    alSubrayarTexto: (List<Rect>, String) -> Unit,
     alDobleToque: () -> Unit,
 ) {
     var proporcion by remember(indice) { mutableStateOf(1.414f) }
@@ -527,7 +585,27 @@ private fun PaginaPdf(
      * versión nueva ya está lista.
      */
     var bitmap by remember(indice) { mutableStateOf<ImageBitmap?>(null) }
+
+    /** El recuadro a mano. Sólo se usa donde no hay texto que seleccionar. */
     var arrastre by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
+
+    /*
+     * Las palabras de esta página, con su sitio.
+     *
+     * Se piden **al entrar en modo subrayado**, no al pintar la página: leer el
+     * texto cuesta, y quien está leyendo y no marcando no tiene por qué pagarlo.
+     * Lista vacía después de buscar significa que aquí no hay texto —un
+     * escaneado sin OCR— y entonces se vuelve al recuadro a mano.
+     */
+    var palabras by remember(indice) { mutableStateOf<List<Palabra>>(emptyList()) }
+    var textoBuscado by remember(indice) { mutableStateOf(false) }
+    var seleccion by remember(indice) { mutableStateOf<SeleccionTexto?>(null) }
+
+    LaunchedEffect(indice, modoSubrayado) {
+        if (!modoSubrayado || textoBuscado) return@LaunchedEffect
+        palabras = runCatching { palabrasDe(indice) }.getOrDefault(emptyList())
+        textoBuscado = true
+    }
 
     LaunchedEffect(indice) {
         proporcion = runCatching { pdf.proporcion(indice) }.getOrDefault(1.414f)
@@ -551,16 +629,51 @@ private fun PaginaPdf(
             .fillMaxWidth()
             .aspectRatio(1f / proporcion)
             .background(Color.White)
-            .pointerInput(modoSubrayado, indice) {
-                if (modoSubrayado) {
-                    detectDragGestures(
-                        onDragStart = { inicio -> arrastre = inicio to inicio },
-                        onDrag = { cambio, _ ->
-                            cambio.consume()
-                            arrastre = arrastre?.copy(second = cambio.position)
-                        },
-                        onDragEnd = {
-                            val (inicio, fin) = arrastre ?: return@detectDragGestures
+            /*
+             * Subrayar.
+             *
+             * Dos gestos con la misma forma y dos significados distintos según
+             * lo que haya debajo. Con texto, el arrastre va **de una palabra a
+             * otra** y se queda con todo lo que hay entre las dos en orden de
+             * lectura, como al arrastrar sobre cualquier texto; sin texto, que
+             * es lo que pasa en un escaneado, sigue dibujando el recuadro de
+             * siempre. La decisión no es del usuario ni de un interruptor: la
+             * toma la página, que es la que sabe si lleva letras.
+             */
+            .pointerInput(modoSubrayado, indice, palabras) {
+                if (!modoSubrayado) return@pointerInput
+
+                fun seleccionEntre(inicio: Offset, fin: Offset): SeleccionTexto? {
+                    val ancho = size.width.toFloat()
+                    val alto = size.height.toFloat()
+                    if (ancho <= 0f || alto <= 0f) return null
+                    return seleccionarTexto(
+                        palabras,
+                        inicio.x / ancho,
+                        inicio.y / alto,
+                        fin.x / ancho,
+                        fin.y / alto,
+                    )
+                }
+
+                detectDragGestures(
+                    onDragStart = { inicio ->
+                        arrastre = inicio to inicio
+                        seleccion = seleccionEntre(inicio, inicio)
+                    },
+                    onDrag = { cambio, _ ->
+                        cambio.consume()
+                        val actualizado = arrastre?.copy(second = cambio.position) ?: return@detectDragGestures
+                        arrastre = actualizado
+                        seleccion = seleccionEntre(actualizado.first, actualizado.second)
+                    },
+                    onDragEnd = {
+                        val marcado = seleccion
+                        val recuadro = arrastre
+                        if (marcado != null) {
+                            alSubrayarTexto(marcado.rects, marcado.cita)
+                        } else if (recuadro != null) {
+                            val (inicio, fin) = recuadro
                             val ancho = size.width.toFloat()
                             val alto = size.height.toFloat()
                             if (ancho > 0 && alto > 0) {
@@ -581,14 +694,40 @@ private fun PaginaPdf(
                                     ),
                                 )
                             }
-                            arrastre = null
-                        },
-                        onDragCancel = { arrastre = null },
-                    )
-                }
+                        }
+                        arrastre = null
+                        seleccion = null
+                    },
+                    onDragCancel = {
+                        arrastre = null
+                        seleccion = null
+                    },
+                )
             }
-            .pointerInput(indice) {
-                detectTapGestures(onDoubleTap = { alDobleToque() })
+            .pointerInput(indice, modoSubrayado, palabras) {
+                detectTapGestures(
+                    onDoubleTap = { alDobleToque() },
+                    // Un toque marca **una palabra**. Es el gesto que falta
+                    // cuando lo que se quiere subrayar es un nombre o una cifra:
+                    // arrastrar sobre cinco letras con el dedo es puntería.
+                    onTap = if (modoSubrayado && palabras.isNotEmpty()) {
+                        { punto ->
+                            val ancho = size.width.toFloat()
+                            val alto = size.height.toFloat()
+                            if (ancho > 0f && alto > 0f) {
+                                seleccionarTexto(
+                                    palabras,
+                                    punto.x / ancho,
+                                    punto.y / alto,
+                                    punto.x / ancho,
+                                    punto.y / alto,
+                                )?.let { alSubrayarTexto(it.rects, it.cita) }
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                )
             },
     ) {
         bitmap?.let {
@@ -622,18 +761,49 @@ private fun PaginaPdf(
                 )
             }
 
-            arrastre?.let { (inicio, fin) ->
+            /*
+             * Las notas que trae el propio PDF, en trazo y sin relleno.
+             *
+             * No son nuestras y no se comportan como las nuestras: no se editan
+             * ni se borran ni se sincronizan. Que se vean distintas es la forma
+             * de no confundirlas con un subrayado propio -- el relleno es para
+             * lo que uno ha marcado, el contorno para lo que venía puesto.
+             */
+            notasIncrustadas.forEach { nota ->
+                val r = nota.rect ?: return@forEach
                 drawRect(
-                    color = colorDe(colorActivo).copy(alpha = 0.35f),
-                    topLeft = Offset(minOf(inicio.x, fin.x), minOf(inicio.y, fin.y)),
-                    size = Size(kotlin.math.abs(fin.x - inicio.x), kotlin.math.abs(fin.y - inicio.y)),
-                )
-                drawRect(
-                    color = colorDe(colorActivo),
-                    topLeft = Offset(minOf(inicio.x, fin.x), minOf(inicio.y, fin.y)),
-                    size = Size(kotlin.math.abs(fin.x - inicio.x), kotlin.math.abs(fin.y - inicio.y)),
+                    color = Color(0xFF8A8A8A),
+                    topLeft = Offset(r.x * size.width, r.y * size.height),
+                    size = Size(r.w * size.width, r.h * size.height),
                     style = Stroke(width = 2f),
                 )
+            }
+
+            // Lo que se está marcando ahora mismo: los renglones si hay texto,
+            // el recuadro si no lo hay.
+            val enCurso = seleccion
+            if (enCurso != null) {
+                enCurso.rects.forEach { r ->
+                    drawRect(
+                        color = colorDe(colorActivo).copy(alpha = 0.35f),
+                        topLeft = Offset(r.x * size.width, r.y * size.height),
+                        size = Size(r.w * size.width, r.h * size.height),
+                    )
+                }
+            } else {
+                arrastre?.let { (inicio, fin) ->
+                    drawRect(
+                        color = colorDe(colorActivo).copy(alpha = 0.35f),
+                        topLeft = Offset(minOf(inicio.x, fin.x), minOf(inicio.y, fin.y)),
+                        size = Size(kotlin.math.abs(fin.x - inicio.x), kotlin.math.abs(fin.y - inicio.y)),
+                    )
+                    drawRect(
+                        color = colorDe(colorActivo),
+                        topLeft = Offset(minOf(inicio.x, fin.x), minOf(inicio.y, fin.y)),
+                        size = Size(kotlin.math.abs(fin.x - inicio.x), kotlin.math.abs(fin.y - inicio.y)),
+                        style = Stroke(width = 2f),
+                    )
+                }
             }
         }
     }

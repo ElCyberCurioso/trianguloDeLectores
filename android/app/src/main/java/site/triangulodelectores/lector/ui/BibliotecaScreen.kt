@@ -304,6 +304,59 @@ private fun EditorLibro(modelo: BibliotecaViewModel, libro: LibroDto?, alCerrar:
     var buscando by remember { mutableStateOf(false) }
     var avisoIsbn by remember { mutableStateOf<String?>(null) }
     var guardando by remember { mutableStateOf(false) }
+    var escaneando by remember { mutableStateOf(false) }
+
+    /**
+     * Trae la ficha de un ISBN.
+     *
+     * Está sacada del botón porque ahora entra por dos sitios —tecleado y
+     * escaneado— y tienen que hacer exactamente lo mismo: escanear no es otro
+     * camino, es el mismo con el número ya puesto.
+     */
+    fun traerFicha(codigo: String) {
+        val limpio = codigo.trim()
+        if (limpio.isEmpty()) return
+
+        buscando = true
+        avisoIsbn = null
+        alcance.launch {
+            modelo.consultarIsbn(limpio)
+                .onSuccess { (borrador, duplicado) ->
+                    if (borrador != null) {
+                        if (borrador.title.isNotBlank()) titulo = borrador.title
+                        borrador.subtitle?.let { subtitulo = it }
+                        borrador.authors?.let { autores = it }
+                        borrador.publisher?.let { editorial = it }
+                        borrador.publishedYear?.let { anio = it.toString() }
+                        borrador.pageCount?.let { paginas = it.toString() }
+                        borrador.language?.let { idioma = it }
+                        borrador.isbn13?.let { isbn = it }
+                        portadaUrl = borrador.coverUrl.orEmpty()
+                    }
+                    avisoIsbn = when {
+                        duplicado != null ->
+                            "Ojo: ese ISBN ya está en la biblioteca como «$duplicado»."
+                        borrador?.title.isNullOrBlank() ->
+                            "Open Library no sabe nada de ese ISBN. Rellena la ficha a mano."
+                        else -> "Ficha traída. Revísala antes de guardar."
+                    }
+                }
+                .onFailure { avisoIsbn = it.message ?: "No se ha podido consultar el ISBN." }
+            buscando = false
+        }
+    }
+
+    if (escaneando) {
+        EscanerIsbn(
+            alLeer = { codigo ->
+                isbn = codigo
+                escaneando = false
+                traerFicha(codigo)
+            },
+            alCerrar = { escaneando = false },
+        )
+        return
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -348,37 +401,12 @@ private fun EditorLibro(modelo: BibliotecaViewModel, libro: LibroDto?, alCerrar:
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 CampoBiblioteca("ISBN", isbn, { isbn = it }, KeyboardType.Number)
+                // Escanear primero: con el libro en la mano es lo que se hace,
+                // y teclear trece cifras es la alternativa, no al revés.
+                BotonSecundario("Escanear el código de barras", { escaneando = true })
                 BotonSecundario(
                     if (buscando) "Buscando…" else "Traer datos del ISBN",
-                    {
-                        buscando = true
-                        avisoIsbn = null
-                        alcance.launch {
-                            modelo.consultarIsbn(isbn)
-                                .onSuccess { (borrador, duplicado) ->
-                                    if (borrador != null) {
-                                        if (borrador.title.isNotBlank()) titulo = borrador.title
-                                        borrador.subtitle?.let { subtitulo = it }
-                                        borrador.authors?.let { autores = it }
-                                        borrador.publisher?.let { editorial = it }
-                                        borrador.publishedYear?.let { anio = it.toString() }
-                                        borrador.pageCount?.let { paginas = it.toString() }
-                                        borrador.language?.let { idioma = it }
-                                        borrador.isbn13?.let { isbn = it }
-                                        portadaUrl = borrador.coverUrl.orEmpty()
-                                    }
-                                    avisoIsbn = when {
-                                        duplicado != null ->
-                                            "Ojo: ese ISBN ya está en la biblioteca como «$duplicado»."
-                                        borrador?.title.isNullOrBlank() ->
-                                            "Open Library no sabe nada de ese ISBN. Rellena la ficha a mano."
-                                        else -> "Ficha traída. Revísala antes de guardar."
-                                    }
-                                }
-                                .onFailure { avisoIsbn = it.message ?: "No se ha podido consultar el ISBN." }
-                            buscando = false
-                        }
-                    },
+                    { traerFicha(isbn) },
                     activo = !buscando && isbn.isNotBlank(),
                 )
                 avisoIsbn?.let { Aviso(it, acento = true) }

@@ -95,12 +95,24 @@ class DocumentoPdf private constructor(
          * permite abrir esos ficheros, y sólo se paga cuando hace falta.
          */
         fun abrir(contexto: Context, documento: Documento): DocumentoPdf {
-            if (documento.origen == Origen.REMOTO) {
-                val fichero = documento.rutaFichero?.let(::File)
-                    ?: throw IllegalStateException("Este libro todavía no se ha descargado")
-                if (!fichero.exists()) throw IllegalStateException("La copia descargada ya no está")
-                val descriptor = ParcelFileDescriptor.open(fichero, ParcelFileDescriptor.MODE_READ_ONLY)
+            /*
+             * Si hay un fichero nuestro, se abre ése y no se mira la URI.
+             *
+             * Vale para los dos casos: la descarga de la biblioteca y la copia
+             * de lo que llegó de otra aplicación. Un fichero propio siempre es
+             * mejor apuesta que una URI prestada, que puede haber caducado.
+             */
+            val propio = documento.rutaFichero?.let(::File)
+            if (propio != null && propio.exists()) {
+                val descriptor = ParcelFileDescriptor.open(propio, ParcelFileDescriptor.MODE_READ_ONLY)
                 return DocumentoPdf(descriptor, PdfRenderer(descriptor), null)
+            }
+
+            if (documento.origen == Origen.REMOTO) {
+                if (documento.rutaFichero == null) {
+                    throw IllegalStateException("Este libro todavía no se ha descargado")
+                }
+                throw IllegalStateException("La copia descargada ya no está")
             }
 
             val uri = Uri.parse(documento.uri ?: throw IllegalStateException("El documento no tiene fichero"))

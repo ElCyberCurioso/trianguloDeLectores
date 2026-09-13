@@ -775,13 +775,34 @@ p { margin: 0 0 var(--space-3); }
 @keyframes slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ------------------------------------------------------------------ modal */
+/*
+   Una sola barra de desplazamiento, y es la del contenido.
+
+   El `<dialog>` y `.modal__content` llevaban los dos `max-height: 88svh`, y el
+   navegador además le pone `overflow: auto` al diálogo por su cuenta. Con el
+   contenido tan alto como su contenedor más los 2 px de borde, desbordaba: dos
+   barras verticales, una dentro de la otra. Ahora el diálogo recorta y no
+   scrollea, y el contenido es el único que se desplaza — de ahí el `min-height:
+   0`, sin el cual un hijo flexible no se encoge por debajo de su contenido y no
+   llega a desplazarse nunca.
+*/
 .modal {
   border: 2px solid var(--color-text); padding: 0;
   background: var(--color-bg); color: var(--color-text);
   width: 100%; max-width: 880px; max-height: 88svh;
+  overflow: hidden;
 }
+/*
+   El `display` va en `[open]` y no en `.modal`.
+
+   Un `<dialog>` cerrado lo esconde el navegador con `display: none`, pero eso
+   es una regla suya y las del sitio le ganan siempre, pase lo que pase con la
+   especificidad. Un `display: flex` suelto aquí dejaría el diálogo cerrado a la
+   vista, pegado al final de la portada.
+*/
+.modal[open] { display: flex; }
 .modal::backdrop { background: color-mix(in srgb, #2d2b2b 50%, transparent); }
-.modal__chrome { position: relative; }
+.modal__chrome { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .modal__close {
   position: absolute; inset-block-start: var(--space-3); inset-inline-end: var(--space-3); z-index: 2;
   width: 32px; height: 32px; padding: 0;
@@ -790,7 +811,7 @@ p { margin: 0 0 var(--space-3); }
   font-size: 16px; line-height: 1;
 }
 .modal__close:hover { border-color: var(--color-accent); color: var(--color-accent-text); }
-.modal__content { max-height: 88svh; overflow-y: auto; padding: var(--space-6); }
+.modal__content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-6); }
 .modal__loading { display: grid; gap: var(--space-2); padding: var(--space-6) 0; }
 
 /* ----------------------------------------------------------------- reseña */
@@ -1015,6 +1036,57 @@ p { margin: 0 0 var(--space-3); }
 }
 .pending__link:hover { text-decoration: underline; }
 
+/*
+   Tarjeta entera pulsable, sólo con sesión.
+
+   El enlace es el **título**, y se estira con un pseudoelemento que cubre la
+   tarjeta: así hay un único enlace de verdad —con su texto, su foco y su nombre
+   accesible— y no un enlace dentro de otro, que no existe en HTML. Los demás
+   enlaces de la tarjeta se levantan por encima de la capa para seguir siendo
+   pulsables.
+
+   El precio conocido es que la capa se come el arrastre del ratón, así que
+   seleccionar el texto de la nota cuesta. Es el trato de cualquier tarjeta
+   pulsable y aquí compensa: esto es una cola de trabajo, se abre mucho más de
+   lo que se copia.
+*/
+.pending--editable { position: relative; cursor: pointer; }
+.pending--editable .pending__titlelink::after {
+  content: ''; position: absolute; inset: 0;
+}
+/* Por encima de la capa: si no, el enlace a la reseña dejaría de funcionar. */
+.pending--editable .pending__link,
+.pending--editable .pending__titlelink { position: relative; z-index: 1; }
+
+/* El título no se pinta como un enlace: hereda el color y no lleva subrayado.
+   Lo que dice que se puede pulsar es la tarjeta entera, no un color distinto. */
+.pending__titlelink { color: inherit; text-decoration: none; }
+
+.pending--editable:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+.pending--editable:hover .pending__titlelink { text-decoration: underline; text-underline-offset: 3px; }
+/* El foco del teclado se ve en la tarjeta entera, que es lo que se activa. */
+.pending--editable:focus-within { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.pending--editable .pending__titlelink:focus-visible { outline: none; }
+
+.watchlist__headline {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+}
+.watchlist__filters { margin-block: var(--space-4); }
+.watchlist__filters > summary { display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
+.watchlist__filters > summary::-webkit-details-marker { display: none; }
+/* El filtro no es pegajoso aquí: la cabecera de la página ya ocupa lo suyo y
+   una barra fija encima de una rejilla de tarjetas se come media pantalla. */
+.filters--watchlist {
+  position: static; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center;
+  margin-block-start: var(--space-3); padding-block: var(--space-3);
+  border-block: 1px solid var(--color-rule); border-bottom-width: 2px;
+}
+.filters--watchlist .input, .filters--watchlist .select { min-width: 150px; }
+.filters--watchlist .input--sm { min-width: 110px; }
+
+.watchlist-editor { padding-block: var(--space-6) var(--space-8); }
+
 /* ========================================================== recomendaciones */
 .recommend { padding-block: var(--space-6) var(--space-8); }
 .recommend__head { max-width: 56ch; padding-block-end: var(--space-4); border-bottom: 2px solid var(--color-divider); }
@@ -1201,6 +1273,23 @@ p { margin: 0 0 var(--space-3); }
 }
 .queue-item--high { border-inline-start-color: var(--color-accent); }
 .queue-item--done, .queue-item--dropped { opacity: 0.6; }
+/*
+   La miniatura de la portada.
+
+   44 px de ancho y 2:3, como en la ficha de la biblioteca: entra en la fila sin
+   empujar las acciones a la línea siguiente y sigue siendo reconocible. En
+   color, que es la regla —la portada es identidad de la obra—, y con marcador
+   gris donde falta, para que la altura de la fila no dependa de si hay imagen.
+*/
+.queue-item__cover { flex-shrink: 0; width: 44px; }
+.queue-item__img { width: 44px; height: 66px; object-fit: cover; background: var(--color-neutral-300); display: block; }
+.queue-item__img--placeholder {
+  display: grid; place-items: center;
+  background: var(--color-neutral-300); color: var(--color-neutral-600);
+  font-family: var(--font-heading); font-weight: 800; font-size: 18px;
+}
+/* Con la portada delante, el texto necesita su propio mínimo o la fila se parte
+   en cuanto el título es largo. */
 .queue-item__main { min-width: 240px; flex: 1; }
 .queue-item__head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 .queue-item__title { font-family: var(--font-heading); font-weight: 800; font-size: 17px; letter-spacing: -0.03em; color: inherit; text-decoration: none; }
@@ -1604,6 +1693,13 @@ p { margin: 0 0 var(--space-3); }
 .pdfmark--green  { background: #9be59b; }
 .pdfmark--blue   { background: #9ecbff; }
 .pdfmark--red    { background: #ffb3a7; }
+/* Lo que venía escrito en el PDF: contorno y no relleno. El relleno es de lo
+   que ha marcado quien lee; el contorno, de lo que ya estaba ahí. */
+.pdfmark--embedded {
+  background: none; mix-blend-mode: normal;
+  outline: 1px solid color-mix(in srgb, var(--color-text) 45%, transparent);
+  outline-offset: 0;
+}
 
 /* Barra flotante de selección. Existe desde el primer pintado: se muestra. */
 .reader__selection {
@@ -1643,6 +1739,16 @@ p { margin: 0 0 var(--space-3); }
   background: none; border: 0; color: inherit; cursor: pointer; padding: 2px 4px; line-height: 1;
 }
 .note__delete:hover { color: var(--color-accent-text); }
+
+/* Encabezado de la sección de notas del propio documento. La regla de 1 px es
+   la que separa dentro de una sección, como en todo el sitio. */
+.notelist__head {
+  margin-block-start: var(--space-4); padding-block: var(--space-2);
+  border-block-start: 2px solid var(--color-text);
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+}
+/* Sin filete de color y sin aspa: éstas no son nuestras y no se borran. */
+.note--embedded { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-text) 35%, transparent); }
 
 /* ----------------------------------------------------------- biblioteca */
 .library__actions { display: flex; gap: var(--space-2); margin-block: var(--space-4); }
@@ -2037,4 +2143,119 @@ p { margin: 0 0 var(--space-3); }
 
 @media (max-width: 420px) {
   .rating { --rating-tamano: 26px; }
+}
+
+/* ====================================================== temporadas y capítulos */
+/*
+   Las notas por episodio de una serie. La rejilla es la misma de siempre —regla
+   de 1 px dentro de la sección, 2 px entre secciones— y nada va centrado: el
+   número del capítulo abre la fila por la izquierda y la nota cierra por la
+   derecha, que es donde se lee una columna de notas.
+*/
+.episodes { margin-block: var(--space-8); border-top: 2px solid var(--color-divider); padding-block-start: var(--space-5); }
+.episodes__title {
+  margin: 0 0 var(--space-4); font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -0.03em;
+}
+.episodes__empty { margin: 0; font-size: 13px; color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+.episodes__season { margin-block-start: var(--space-6); }
+.episodes__season-head {
+  display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap;
+  padding-block-end: var(--space-2); border-bottom: 2px solid var(--color-divider);
+}
+.episodes__season-title { margin: 0; font-size: 18px; letter-spacing: -0.02em; }
+.episodes__season-avg { margin: 0; font-size: 12px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.episodes__season-note { margin: var(--space-2) 0 0; font-size: 14px; }
+.episodes__muted { color: color-mix(in srgb, var(--color-text) 50%, transparent); }
+
+.episodes__list { list-style: none; margin: 0; padding: 0; }
+.episodes__item {
+  display: flex; gap: var(--space-3); align-items: baseline;
+  padding-block: var(--space-3); border-bottom: 1px solid var(--color-rule);
+}
+.episodes__number {
+  flex: 0 0 2.5ch; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.episodes__body { flex: 1; min-width: 0; }
+.episodes__name { margin: 0; font-size: 15px; font-weight: 600; }
+.episodes__note { margin: var(--space-1) 0 0; font-size: 13px; color: color-mix(in srgb, var(--color-text) 75%, transparent); }
+.episodes__spoiler-flag { display: inline-flex; vertical-align: -1px; margin-inline-end: 4px; color: var(--color-accent-text); }
+.episodes__score { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.episodes__value { font-size: 16px; font-weight: 800; }
+
+/* --------------------------------------------------------------- las cuentas */
+.epstats { margin-block-end: var(--space-6); }
+.epstats__figures {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin: 0 0 var(--space-5);
+}
+.epstats__figure { border-left: 2px solid var(--color-accent); padding-inline-start: var(--space-3); }
+.epstats__label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.epstats__value { margin: 2px 0 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.epstats__value--sm { font-size: 18px; }
+.epstats__of { font-size: 14px; font-weight: 600; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.epstats__sub { display: block; font-size: 12px; font-weight: 400; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
+
+.epstats__table { width: 100%; border-collapse: collapse; margin-block-end: var(--space-5); font-size: 13px; }
+.epstats__table th, .epstats__table td { text-align: start; padding: var(--space-2) var(--space-3) var(--space-2) 0; border-bottom: 1px solid var(--color-rule); }
+.epstats__table thead th {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.epstats__table td { font-variant-numeric: tabular-nums; }
+
+.epstats__chart { margin: 0; }
+.epstats__chart-title {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent); margin-block-end: var(--space-2);
+}
+.epstats__bars { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; align-items: end; }
+.epstats__bar { display: grid; grid-template-rows: 90px auto auto; gap: 2px; align-items: end; }
+.epstats__bar-fill { display: block; align-self: end; width: 100%; background: var(--color-accent-700); height: var(--epstats-alto, 0); }
+.epstats__bar-label { font-size: 10px; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.epstats__bar-count { font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.epstats__chart-foot { margin: var(--space-2) 0 0; font-size: 11px; color: color-mix(in srgb, var(--color-text) 50%, transparent); }
+
+/*
+   La altura de cada barra sale de `data-share`, un entero de 0 a 10 que es la
+   proporción respecto al cajón más alto. Once reglas y no un `style=`: la CSP
+   no lleva `unsafe-inline` y `attr()` todavía no sirve para longitudes. Es el
+   mismo criterio que el relleno de las estrellas.
+*/
+.epstats__bar-fill[data-share="0"]  { --epstats-alto: 2px; }
+.epstats__bar-fill[data-share="1"]  { --epstats-alto: 10%; }
+.epstats__bar-fill[data-share="2"]  { --epstats-alto: 20%; }
+.epstats__bar-fill[data-share="3"]  { --epstats-alto: 30%; }
+.epstats__bar-fill[data-share="4"]  { --epstats-alto: 40%; }
+.epstats__bar-fill[data-share="5"]  { --epstats-alto: 50%; }
+.epstats__bar-fill[data-share="6"]  { --epstats-alto: 60%; }
+.epstats__bar-fill[data-share="7"]  { --epstats-alto: 70%; }
+.epstats__bar-fill[data-share="8"]  { --epstats-alto: 80%; }
+.epstats__bar-fill[data-share="9"]  { --epstats-alto: 90%; }
+.epstats__bar-fill[data-share="10"] { --epstats-alto: 100%; }
+
+/* -------------------------------------------- episodios en el panel ------- */
+.episodes-admin { list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+.episodes-admin__item {
+  display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap;
+  padding-block: var(--space-3); border-bottom: 1px solid var(--color-rule);
+}
+.episodes-admin__form { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; flex: 1; }
+.episodes-admin__form--new { padding-block-start: var(--space-4); border-top: 2px solid var(--color-divider); }
+.episodes-admin__cell { display: flex; flex-direction: column; gap: 2px; }
+.episodes-admin__cell--grow { flex: 1; min-width: 160px; }
+.episodes-admin__label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.episodes-admin__cell .input, .episodes-admin__cell .select { width: 100%; }
+.select--sm { min-width: 96px; }
+
+@media (max-width: 700px) {
+  .episodes-admin__form { flex-direction: column; align-items: stretch; }
+  .epstats__bar { grid-template-rows: 64px auto auto; }
 }

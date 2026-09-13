@@ -36,7 +36,9 @@ data class Documento(
     /** ¿Se puede abrir ahora mismo, sin red? */
     val disponible: Boolean
         get() = when (origen) {
-            Origen.LOCAL -> uri != null
+            // Un local puede ser una URI del sistema —el selector— o una copia
+            // nuestra, que es como se guarda lo que llega de otra aplicación.
+            Origen.LOCAL -> uri != null || rutaFichero != null
             Origen.REMOTO -> rutaFichero != null
         }
 }

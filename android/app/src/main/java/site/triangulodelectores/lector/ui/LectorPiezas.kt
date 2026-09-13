@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import site.triangulodelectores.lector.data.local.Anotacion
 import site.triangulodelectores.lector.data.local.ColorAnotacion
 import site.triangulodelectores.lector.data.local.TipoAnotacion
+import site.triangulodelectores.lector.pdf.NotaIncrustada
 
 /**
  * Barra del lector.
@@ -129,18 +130,24 @@ private fun ControlTexto(texto: String, onClick: () -> Unit, activo: Boolean = f
 fun PanelAnotaciones(
     anotaciones: List<Anotacion>,
     marcadores: List<Int>,
+    /** Las que trae el propio PDF. Se leen; no se editan ni se borran. */
+    notasIncrustadas: List<NotaIncrustada>,
+    leyendoNotasIncrustadas: Boolean,
     alCerrar: () -> Unit,
     alIrA: (Int) -> Unit,
     alBorrar: (String) -> Unit,
 ) {
+    val vacio = anotaciones.isEmpty() && marcadores.isEmpty() &&
+        notasIncrustadas.isEmpty() && !leyendoNotasIncrustadas
+
     AlertDialog(
         onDismissRequest = alCerrar,
         title = { Text("Notas y subrayados", style = MaterialTheme.typography.titleMedium) },
         text = {
-            if (anotaciones.isEmpty() && marcadores.isEmpty()) {
+            if (vacio) {
                 Text(
-                    "Todavía no hay nada. Pulsa «Subrayar» y arrastra sobre la página, o «Nota» " +
-                        "para escribir algo en la página que estás leyendo.",
+                    "Todavía no hay nada. Pulsa «Subrayar» y arrastra sobre el texto de la página, " +
+                        "o «Nota» para escribir algo en la página que estás leyendo.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
@@ -172,6 +179,39 @@ fun PanelAnotaciones(
 
                     items(anotaciones, key = { it.id }) { anotacion ->
                         FilaAnotacion(anotacion, { alIrA(anotacion.pagina) }, { alBorrar(anotacion.id) })
+                        ReglaFina()
+                    }
+
+                    /*
+                     * Lo que venía escrito en el PDF, aparte y al final.
+                     *
+                     * Van en su propia sección porque no son lo mismo: éstas
+                     * las escribió quien hizo el documento o quien lo anotó
+                     * antes, no se pueden tocar y no viajan al servidor.
+                     * Mezclarlas con las propias en una sola lista sería
+                     * prometer que se pueden borrar.
+                     */
+                    if (leyendoNotasIncrustadas || notasIncrustadas.isNotEmpty()) {
+                        item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
+                        item {
+                            Text(
+                                "Notas del propio documento",
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+                    if (leyendoNotasIncrustadas) {
+                        item {
+                            Text(
+                                "Leyendo el documento…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    items(notasIncrustadas) { nota ->
+                        FilaNotaIncrustada(nota) { alIrA(nota.pagina) }
                         ReglaFina()
                     }
                 }
@@ -219,6 +259,42 @@ private fun FilaAnotacion(anotacion: Anotacion, alIr: () -> Unit, alBorrar: () -
                 .clickable(onClick = alBorrar)
                 .padding(horizontal = 10.dp, vertical = 12.dp),
         )
+    }
+}
+
+/**
+ * Una nota que traía el PDF.
+ *
+ * Sin botón de borrar y sin color: la barra lateral va en gris para que se vea
+ * de un golpe que ésta no es de las nuestras. Se puede ir a su página, que es
+ * lo único que tiene sentido hacer con ella.
+ */
+@Composable
+private fun FilaNotaIncrustada(nota: NotaIncrustada, alIr: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = alIr)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            Modifier
+                .size(width = 4.dp, height = 40.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant),
+        )
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        ) {
+            Text(
+                listOfNotNull("${nota.tipo} · página ${nota.pagina}", nota.autor).joinToString(" · "),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(nota.texto, style = MaterialTheme.typography.bodyMedium, maxLines = 6)
+        }
     }
 }
 

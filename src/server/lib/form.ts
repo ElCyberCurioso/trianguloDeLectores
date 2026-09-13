@@ -66,3 +66,24 @@ export function rawList(body: ParsedBody, key: string, maxItems = 50): string[] 
   const list = Array.isArray(raw) ? raw : [raw];
   return list.map((v) => (typeof v === 'string' ? v.trim() : '')).slice(0, maxItems);
 }
+
+/**
+ * Los parámetros de la URL, **sin los vacíos**.
+ *
+ * Un `<select>` sin elegir no manda «nada»: manda `type=`, la cadena vacía. Para
+ * un esquema de Zod eso no es «ausente», es un valor que no está en el enum, así
+ * que `safeParse` falla — y como los listados caen a los valores por omisión
+ * cuando falla, un filtro con un desplegable en «Todos» reseteaba el filtro
+ * entero, búsqueda incluida. Parecía que el buscador no hacía nada.
+ *
+ * La cadena vacía en una query significa «este filtro no está puesto», así que
+ * se quita antes de validar y los campos opcionales vuelven a comportarse como
+ * opcionales.
+ */
+export function queryParams(url: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of new URL(url).searchParams) {
+    if (value !== '') out[key] = value;
+  }
+  return out;
+}
