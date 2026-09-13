@@ -191,6 +191,12 @@ export interface WatchlistEditorProps {
   item: WatchlistRow;
   categories: Category[];
   csrfToken: string;
+  /**
+   * El pendiente que ya cubría esta obra, cuando lo guardado choca con uno que
+   * ya estaba. Se enseña con enlace: un «ya existe» a secas obliga a ir a
+   * buscarlo en una cola de ciento y pico títulos.
+   */
+  duplicate?: { id: string; titleEs: string } | null;
   errors?: Record<string, string>;
   flash?: { kind: 'ok' | 'error'; message: string } | null;
 }
@@ -200,6 +206,7 @@ export const WatchlistEditorPage: FC<WatchlistEditorProps> = ({
   item,
   categories,
   csrfToken,
+  duplicate = null,
   errors = {},
   flash,
 }) => (
@@ -212,6 +219,14 @@ export const WatchlistEditorPage: FC<WatchlistEditorProps> = ({
     }
   >
     {flash ? <Flash kind={flash.kind} message={flash.message} /> : null}
+
+    {duplicate ? (
+      <p class="notice">
+        «{duplicate.titleEs}» ya está en la lista.{' '}
+        <a href={`/admin/pendientes/${duplicate.id}`}>Ver el que ya había</a>. Si de verdad es otra obra, cambia el
+        título o el tipo antes de volver a guardar.
+      </p>
+    ) : null}
 
     {item.reviewId ? (
       <p class="notice">

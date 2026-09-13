@@ -32,6 +32,21 @@ export function isSerial(type: ContentType): type is SerialContentType {
   return (SERIAL_CONTENT_TYPES as readonly string[]).includes(type);
 }
 
+/**
+ * Lo que sale por tomos.
+ *
+ * Cómic y manga y nada más. Un libro o una novela se reseñan enteros —su año y
+ * su autor los describen—, y una saga que de verdad vaya por tomos es la
+ * excepción que no justifica pedir el número de volúmenes en las ocho de cada
+ * diez fichas que no lo tienen.
+ */
+export const VOLUME_CONTENT_TYPES = ['COMIC', 'MANGA'] as const;
+export type VolumeContentType = (typeof VOLUME_CONTENT_TYPES)[number];
+
+export function hasVolumes(type: ContentType): type is VolumeContentType {
+  return (VOLUME_CONTENT_TYPES as readonly string[]).includes(type);
+}
+
 export const AVAILABILITY = [
   'SUBSCRIPTION', 'RENT', 'BUY', 'FREE', 'LIBRARY', 'PHYSICAL', 'OTHER',
 ] as const;

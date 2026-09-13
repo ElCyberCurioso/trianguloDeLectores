@@ -11,6 +11,7 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'ClaveDePruebasE2E123';
 
 const TITULO = `Pendiente E2E ${Date.now()}`;
 const TITULO_OCULTO = `Reservado E2E ${Date.now()}`;
+const TITULO_PUBLICO = `Alta pública E2E ${Date.now()}`;
 
 async function login(page: Page) {
   await page.goto('/admin/login');
@@ -107,4 +108,67 @@ test('7. se elimina de la lista', async ({ page }) => {
     .click();
 
   await expect(page.locator('.queue-item', { hasText: TITULO_OCULTO })).toHaveCount(0);
+});
+
+/** Un PNG mínimo: cabecera y dimensiones, que es lo que mira el validador. */
+function pngBuffer(width = 400, height = 600): Buffer {
+  const bytes = Buffer.alloc(512);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes;
+}
+
+/*
+ * El alta desde la página pública, que es donde se dan de alta los pendientes.
+ *
+ * Dos cosas que sólo se ven aquí y no en el panel: los campos de serie se
+ * tapan y se destapan con el tipo, y la portada se sube por fetch. Lo segundo
+ * estuvo roto —la isla de la subida sólo viajaba en el bundle del panel, y
+ * esta página carga el público—, así que se comprueba de verdad y no de vista.
+ */
+test('8. el alta pública tapa los campos de serie y sube la portada', async ({ page }) => {
+  await login(page);
+  await page.goto('/pendientes/nuevo');
+
+  const tipo = page.locator('#f-contentType');
+  const temporadas = page.locator('#f-seasons');
+  const periodo = page.locator('label[for="f-year"] [data-types-only]');
+
+  // Arranca en «Película»: ni temporadas ni periodo.
+  await expect(tipo).toHaveValue('MOVIE');
+  await expect(temporadas).toBeHidden();
+  await expect(periodo).toBeHidden();
+
+  await tipo.selectOption('SERIES');
+  await expect(temporadas).toBeVisible();
+  await expect(periodo).toBeVisible();
+  await expect(page.locator('#f-year')).toHaveAttribute('placeholder', '2020-2022');
+
+  // Al volver a algo sin temporadas, lo escrito no se queda invisible dentro
+  // del formulario esperando a enviarse.
+  await temporadas.fill('3');
+  await tipo.selectOption('MOVIE');
+  await expect(temporadas).toBeHidden();
+  await expect(temporadas).toHaveValue('');
+
+  await tipo.selectOption('ANIME');
+  await page.locator('#f-titleEs').fill(TITULO_PUBLICO);
+  await page.locator('#f-year').fill('2020-2022');
+  await page.locator('#f-seasons').fill('2');
+
+  await page.locator('[data-cover-input]').setInputFiles({
+    name: 'portada.png',
+    mimeType: 'image/png',
+    buffer: pngBuffer(),
+  });
+  await expect(page.locator('[data-cover-key]')).toHaveValue(/reviews\/covers\//, { timeout: 15_000 });
+
+  await page.getByRole('button', { name: 'Añadir a la lista' }).click();
+  await expect(page).toHaveURL(/\/pendientes/);
+
+  // La portada acabó guardada en la ficha, no sólo en la vista previa.
+  const tarjeta = page.locator('.pending', { hasText: TITULO_PUBLICO });
+  await expect(tarjeta).toBeVisible();
+  await expect(tarjeta.locator('img.pending__img')).toHaveCount(1);
 });

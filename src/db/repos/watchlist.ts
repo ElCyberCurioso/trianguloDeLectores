@@ -240,6 +240,29 @@ export class WatchlistRepository {
       .all();
   }
 
+  /**
+   * Todos los títulos dados de alta de un tipo, para no repetirlos.
+   *
+   * Aquí no se filtra por estado ni por reseña, al revés que en
+   * `activosSinResena()`: lo que se busca es si la obra **ya está en la lista**,
+   * y uno terminado o descartado también está. Los títulos se comparan en el
+   * Worker por lo mismo de siempre —`LOWER()` de SQLite no toca los acentos—.
+   */
+  async titulosDelTipo(
+    contentType: ContentType,
+  ): Promise<Array<{ id: string; titleEs: string; status: WatchlistStatus; reviewId: string | null }>> {
+    return this.db
+      .select({
+        id: watchlistItems.id,
+        titleEs: watchlistItems.titleEs,
+        status: watchlistItems.status,
+        reviewId: watchlistItems.reviewId,
+      })
+      .from(watchlistItems)
+      .where(eq(watchlistItems.contentType, contentType))
+      .all();
+  }
+
   async insert(values: typeof watchlistItems.$inferInsert): Promise<void> {
     await this.db.insert(watchlistItems).values(values);
   }

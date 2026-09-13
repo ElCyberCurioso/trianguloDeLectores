@@ -9,17 +9,17 @@ import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
 import { AppPage } from '../views/pages/app';
 import { WatchlistPage } from '../views/pages/watchlist';
 import { WatchlistEditorPublicPage } from '../views/pages/watchlist-editor';
-import { EMPTY_WATCHLIST_DRAFT } from '../views/components/watchlist-form';
+import { EMPTY_WATCHLIST_DRAFT, borradorDe } from '../views/components/watchlist-form';
 import { RecommendPage } from '../views/pages/recommend';
 import {
   reviewQuerySchema, publicWatchlistQuerySchema, watchlistInputSchema, fieldErrors,
-  type PublicWatchlistQuery,
+  type PublicWatchlistQuery, type WatchlistInput,
 } from '../../validation/schemas';
 import { edgeCached, CACHE_NS, NO_STORE } from '../lib/cache';
 import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
 import { variantUrl } from '../lib/images';
 import { issueFormToken } from '../lib/formtoken';
-import { badRequest, notFound } from '../lib/http';
+import { AppError, badRequest, notFound } from '../lib/http';
 import { readApkManifest, isSafeApkKey, APK_FILENAME, APK_CONTENT_TYPE } from '../lib/apk';
 import { booksHost } from '../lib/books';
 import { rateLimit } from '../middleware/ratelimit';
@@ -314,9 +314,57 @@ publicRoutes.get('/pendientes/nuevo', requireAdmin, async (c) => {
 publicRoutes.post('/pendientes/nuevo', requireAdmin, requireCsrf, async (c) => {
   const parsed = await leerFormularioPendiente(c);
   if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
-  await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+
+  try {
+    await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+  } catch (err) {
+    const pantalla = await pantallaDeDuplicado(c, err, null, parsed.data);
+    if (!pantalla) throw err;
+    return pantalla;
+  }
   return c.redirect('/pendientes?ok=1', 303);
 });
+
+/**
+ * La obra ya estaba en la lista: se vuelve al formulario con lo escrito.
+ *
+ * Aquí no vale la página de error. Este formulario tiene una nota, un enlace y
+ * hasta una portada ya subida, y mandarlo todo a un 409 pelado obligaría a
+ * escribirlo otra vez. Se dice cuál es el original, se enlaza y se deja
+ * corregir el título o el tipo, que es lo único que hay que cambiar.
+ *
+ * Devuelve nulo si el error es otro: quien llama lo relanza.
+ */
+async function pantallaDeDuplicado(
+  c: Context<AppEnv>,
+  err: unknown,
+  id: string | null,
+  input: WatchlistInput,
+): Promise<Response | null> {
+  if (!(err instanceof AppError) || err.code !== 'watchlist_duplicate') return null;
+
+  const container = c.get('container');
+  const categories = await container.taxonomy.listCategories(false);
+  // Al editar hace falta saber si la ficha ya se convirtió en reseña: ese aviso
+  // es suyo y desaparecería al repintarla.
+  const original = id ? await container.watchlist.getById(id) : null;
+
+  c.status(409);
+  return shellPendiente(
+    c,
+    <WatchlistEditorPublicPage
+      env={c.env}
+      id={id}
+      item={borradorDe(input)}
+      categories={categories}
+      csrfToken={c.get('csrfToken')!}
+      reviewId={original?.reviewId ?? null}
+      duplicate={{ id: String(err.details?.id), titleEs: String(err.details?.titleEs) }}
+      errors={{ titleEs: err.message }}
+      flash={{ kind: 'error', message: 'Eso ya está en la lista.' }}
+    />,
+  );
+}
 
 publicRoutes.get('/pendientes/:id/editar', requireAdmin, async (c) => {
   const container = c.get('container');
@@ -333,7 +381,6 @@ publicRoutes.get('/pendientes/:id/editar', requireAdmin, async (c) => {
       categories={categories}
       csrfToken={c.get('csrfToken')!}
       reviewId={item.reviewId}
-      flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Cambios guardados.' } : null}
     />,
   );
 });
@@ -341,8 +388,23 @@ publicRoutes.get('/pendientes/:id/editar', requireAdmin, async (c) => {
 publicRoutes.post('/pendientes/:id/editar', requireAdmin, requireCsrf, async (c) => {
   const parsed = await leerFormularioPendiente(c);
   if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
-  await new WatchlistService(c.get('container')).update(c.req.param('id'), parsed.data, c.get('user')!);
-  return c.redirect(`/pendientes/${c.req.param('id')}/editar?ok=1`, 303);
+
+  const id = c.req.param('id');
+  try {
+    await new WatchlistService(c.get('container')).update(id, parsed.data, c.get('user')!);
+  } catch (err) {
+    const pantalla = await pantallaDeDuplicado(c, err, id, parsed.data);
+    if (!pantalla) throw err;
+    return pantalla;
+  }
+  /*
+   * Guardar devuelve a la lista, no deja en el formulario.
+   *
+   * Se edita desde la cola y para volver a ella: quedarse en la ficha con un
+   * «guardado» obliga a pulsar «Volver» cada vez, y lo que se quiere ver
+   * después de tocar un pendiente es dónde ha quedado respecto a los demás.
+   */
+  return c.redirect('/pendientes?ok=1', 303);
 });
 
 /**

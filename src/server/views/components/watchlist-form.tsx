@@ -2,9 +2,10 @@ import type { FC } from 'hono/jsx';
 import type { WatchlistRow } from '../../../db/repos/watchlist';
 import type { Category } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
+import type { WatchlistInput } from '../../../validation/schemas';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, PRIORITIES, PRIORITY_LABELS,
-  WATCHLIST_STATUSES, WATCHLIST_STATUS_LABELS,
+  SERIAL_CONTENT_TYPES, WATCHLIST_STATUSES, WATCHLIST_STATUS_LABELS, isSerial,
 } from '../../../types/domain';
 import { yearRangeToInput } from '../../lib/year';
 import { variantUrl } from '../../lib/images';
@@ -45,6 +46,36 @@ export const EMPTY_WATCHLIST_DRAFT: WatchlistDraft = {
   sortOrder: 0,
 };
 
+/**
+ * De lo validado de vuelta al formulario.
+ *
+ * El formulario se pinta desde una fila de la base, y lo que hay tras un alta
+ * o una edición fallidas es la entrada ya validada, que no es lo mismo: los
+ * booleanos se guardan como 0 y 1, y lo que allí puede faltar aquí es nulo.
+ * Traducirlo es lo que permite devolver la página con todo lo que se escribió.
+ */
+export function borradorDe(input: WatchlistInput): WatchlistDraft {
+  return {
+    titleEs: input.titleEs,
+    titleOriginal: input.titleOriginal ?? null,
+    contentType: input.contentType,
+    categoryId: input.categoryId ?? null,
+    year: input.year ?? null,
+    yearEnd: input.yearEnd ?? null,
+    yearOngoing: input.yearOngoing ? 1 : 0,
+    seasons: input.seasons ?? null,
+    creator: input.creator ?? null,
+    note: input.note ?? null,
+    sourceUrl: input.sourceUrl && input.sourceUrl.length ? input.sourceUrl : null,
+    priority: input.priority,
+    status: input.status,
+    isPublic: input.isPublic ? 1 : 0,
+    coverKey: input.coverKey ?? null,
+    coverAlt: input.coverAlt ?? null,
+    sortOrder: input.sortOrder,
+  };
+}
+
 export interface WatchlistFormProps {
   env: Bindings;
   item: WatchlistDraft;
@@ -68,6 +99,18 @@ export const WatchlistForm: FC<WatchlistFormProps> = ({
   errors = {},
 }) => {
   const cover = variantUrl(env, item.coverKey, 'card');
+
+  /*
+   * Lo que sólo tiene sentido en lo que se emite por temporadas.
+   *
+   * Ni una película ni un libro tienen temporadas, y su año es un año y no un
+   * periodo: pedirlo a todo llenaba la ficha de casillas que no aplican. Se
+   * decide aquí, al pintar, y la isla lo rehace al cambiar el desplegable; sin
+   * JavaScript se queda lo que corresponda al tipo guardado. Un campo con
+   * error se enseña igual, o el mensaje se iría con el campo.
+   */
+  const serial = isSerial(item.contentType);
+  const serialTypes = SERIAL_CONTENT_TYPES.join(' ');
 
   return (
     <form method="post" action={action} class="editor">
@@ -177,7 +220,13 @@ export const WatchlistForm: FC<WatchlistFormProps> = ({
             <h2 class="panel__title">Ficha</h2>
 
             <Field label="Tipo de contenido" name="contentType" required>
-              <select id="f-contentType" class="select" name="contentType" required>
+              <select
+                id="f-contentType"
+                class="select"
+                name="contentType"
+                required
+                data-content-type
+              >
                 {CONTENT_TYPES.map((type) => (
                   <option value={type} selected={item.contentType === type}>
                     {CONTENT_TYPE_LABELS[type]}
@@ -202,13 +251,18 @@ export const WatchlistForm: FC<WatchlistFormProps> = ({
               un periodo. Partirlo en «desde», «hasta» y una casilla de «sigue
               en emisión» serían tres gestos para escribir lo que se dice de una
               vez, y en la mayoría de las fichas sólo hay un año que poner.
+
+              El campo se queda siempre —todo tiene año—, pero el «o periodo» y
+              su pista se destapan sólo en serie y anime. Va en un <span> dentro
+              de la etiqueta y no en dos etiquetas distintas: así el cliente sólo
+              tapa y destapa, y no hay dos textos que mantener. Por eso aquí no
+              se usa <Field>, que compone la etiqueta de una pieza.
             */}
-            <Field
-              label="Año o periodo"
-              name="year"
-              hint="«1999», «2020-2022» o «2023-actualidad»."
-              error={errors.year}
-            >
+            <div class={`field${errors.year ? ' field--error' : ''}`}>
+              <label class="field__label" for="f-year">
+                Año
+                <span data-types-only={serialTypes} hidden={!serial}> o periodo</span>
+              </label>
               <input
                 id="f-year"
                 class="input"
@@ -216,21 +270,38 @@ export const WatchlistForm: FC<WatchlistFormProps> = ({
                 name="year"
                 value={yearRangeToInput(item)}
                 maxlength={40}
-                placeholder="2020-2022"
+                placeholder={serial ? '2020-2022' : '2019'}
+                data-placeholder-types={serialTypes}
+                data-placeholder-on="2020-2022"
+                data-placeholder-off="2019"
               />
-            </Field>
+              <p class="field__hint" data-types-only={serialTypes} hidden={!serial}>
+                «1999», «2020-2022» o «2023-actualidad».
+              </p>
+              {errors.year ? (
+                <p class="field__error" role="alert">
+                  {errors.year}
+                </p>
+              ) : null}
+            </div>
 
-            <Field label="Temporadas" name="seasons" hint="Sólo si las tiene." error={errors.seasons}>
-              <input
-                id="f-seasons"
-                class="input input--sm"
-                type="number"
-                name="seasons"
-                value={item.seasons ?? ''}
-                min={1}
-                max={200}
-              />
-            </Field>
+            <div
+              data-types-only={serialTypes}
+              data-keep-visible={errors.seasons ? '1' : undefined}
+              hidden={!serial && !errors.seasons}
+            >
+              <Field label="Temporadas" name="seasons" hint="Sólo si las tiene." error={errors.seasons}>
+                <input
+                  id="f-seasons"
+                  class="input input--sm"
+                  type="number"
+                  name="seasons"
+                  value={item.seasons ?? ''}
+                  min={1}
+                  max={200}
+                />
+              </Field>
+            </div>
           </section>
 
           <section class="panel">

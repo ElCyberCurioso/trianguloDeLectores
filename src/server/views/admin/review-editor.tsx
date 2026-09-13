@@ -6,7 +6,8 @@ import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_SCORE_HALF, formatScore, formatAverageScore, isSerial,
+  MAX_SCORE_HALF, SERIAL_CONTENT_TYPES, VOLUME_CONTENT_TYPES,
+  formatScore, formatAverageScore, hasVolumes, isSerial,
 } from '../../../types/domain';
 import { computeEpisodeStats } from '../../lib/episode-stats';
 import { yearRangeToInput } from '../../lib/year';
@@ -33,6 +34,19 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
   const action = isNew ? '/admin/resenas/nueva' : `/admin/resenas/${review.id}`;
   const cover = variantUrl(env, review?.coverKey, 'card');
   const selectedGenres = new Set(review?.genres.map((g) => g.id) ?? []);
+
+  /*
+   * Lo que sólo tiene sentido en lo que se emite por temporadas, igual que en
+   * la ficha de un pendiente: «Temporadas» y el «o periodo» del año. En el alta
+   * no hay ficha todavía y el desplegable enseña el primer tipo de la lista,
+   * así que es ése el que decide —no un valor escrito aquí, que se quedaría
+   * atrás si la lista cambia de orden—. La isla lo rehace al cambiarlo.
+   */
+  const contentType = review?.contentType ?? CONTENT_TYPES[0];
+  const serial = isSerial(contentType);
+  const porTomos = hasVolumes(contentType);
+  const serialTypes = SERIAL_CONTENT_TYPES.join(' ');
+  const volumeTypes = VOLUME_CONTENT_TYPES.join(' ');
 
   return (
     <AdminPage
@@ -264,7 +278,13 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
             <section class="panel">
               <h2 class="panel__title">Ficha</h2>
               <Field label="Tipo de contenido" name="contentType" required>
-                <select id="f-contentType" class="select" name="contentType" required>
+                <select
+                  id="f-contentType"
+                  class="select"
+                  name="contentType"
+                  required
+                  data-content-type
+                >
                   {CONTENT_TYPES.map((type) => (
                     <option value={type} selected={review?.contentType === type}>
                       {CONTENT_TYPE_LABELS[type]}
@@ -285,12 +305,17 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
               </Field>
 
               <div class="editor__row">
-                <Field
-                  label="Año o periodo"
-                  name="year"
-                  hint="«1999», «2020-2022» o «2023-actualidad»."
-                  error={errors.year}
-                >
+                {/*
+                  El «o periodo» va en un <span> dentro de la etiqueta y no en
+                  dos etiquetas distintas: así el cliente sólo tapa y destapa, y
+                  no hay dos textos que mantener. Por eso aquí no se usa
+                  <Field>, que compone la etiqueta de una pieza.
+                */}
+                <div class={`field${errors.year ? ' field--error' : ''}`}>
+                  <label class="field__label" for="f-year">
+                    Año
+                    <span data-types-only={serialTypes} hidden={!serial}> o periodo</span>
+                  </label>
                   <input
                     id="f-year"
                     class="input"
@@ -298,9 +323,20 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                     name="year"
                     value={yearRangeToInput(review)}
                     maxlength={40}
-                    placeholder="2020-2022"
+                    placeholder={serial ? '2020-2022' : '2019'}
+                    data-placeholder-types={serialTypes}
+                    data-placeholder-on="2020-2022"
+                    data-placeholder-off="2019"
                   />
-                </Field>
+                  <p class="field__hint" data-types-only={serialTypes} hidden={!serial}>
+                    «1999», «2020-2022» o «2023-actualidad».
+                  </p>
+                  {errors.year ? (
+                    <p class="field__error" role="alert">
+                      {errors.year}
+                    </p>
+                  ) : null}
+                </div>
                 <Field label="País" name="country">
                   <input id="f-country" class="input" type="text" name="country" value={review?.country ?? ''} maxlength={100} />
                 </Field>
@@ -314,25 +350,50 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                 <Field label="Duración (min)" name="durationMin">
                   <input id="f-durationMin" class="input" type="number" name="durationMin" value={review?.durationMin ?? ''} min={1} />
                 </Field>
-                <Field label="Episodios" name="episodes">
-                  <input id="f-episodes" class="input" type="number" name="episodes" value={review?.episodes ?? ''} min={1} />
-                </Field>
-                <Field label="Volúmenes" name="volumes">
-                  <input id="f-volumes" class="input" type="number" name="volumes" value={review?.volumes ?? ''} min={1} />
-                </Field>
+                {/*
+                  Episodios va con temporadas —lo que se emite por entregas—, y
+                  volúmenes con lo que sale por tomos, que es cómic y manga. Son
+                  dos listas distintas y por eso cada campo lleva la suya: una
+                  serie no tiene tomos y un manga no tiene capítulos sueltos que
+                  puntuar.
+                */}
+                <div
+                  data-types-only={serialTypes}
+                  data-keep-visible={errors.episodes ? '1' : undefined}
+                  hidden={!serial && !errors.episodes}
+                >
+                  <Field label="Episodios" name="episodes" error={errors.episodes}>
+                    <input id="f-episodes" class="input" type="number" name="episodes" value={review?.episodes ?? ''} min={1} />
+                  </Field>
+                </div>
+                <div
+                  data-types-only={volumeTypes}
+                  data-keep-visible={errors.volumes ? '1' : undefined}
+                  hidden={!porTomos && !errors.volumes}
+                >
+                  <Field label="Volúmenes" name="volumes" error={errors.volumes}>
+                    <input id="f-volumes" class="input" type="number" name="volumes" value={review?.volumes ?? ''} min={1} />
+                  </Field>
+                </div>
               </div>
 
-              <Field label="Temporadas" name="seasons" hint="Sólo si las tiene." error={errors.seasons}>
-                <input
-                  id="f-seasons"
-                  class="input input--sm"
-                  type="number"
-                  name="seasons"
-                  value={review?.seasons ?? ''}
-                  min={1}
-                  max={200}
-                />
-              </Field>
+              <div
+                data-types-only={serialTypes}
+                data-keep-visible={errors.seasons ? '1' : undefined}
+                hidden={!serial && !errors.seasons}
+              >
+                <Field label="Temporadas" name="seasons" hint="Sólo si las tiene." error={errors.seasons}>
+                  <input
+                    id="f-seasons"
+                    class="input input--sm"
+                    type="number"
+                    name="seasons"
+                    value={review?.seasons ?? ''}
+                    min={1}
+                    max={200}
+                  />
+                </Field>
+              </div>
             </section>
 
             <section class="panel">

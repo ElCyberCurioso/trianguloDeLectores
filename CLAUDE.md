@@ -369,6 +369,35 @@ otra.
 - **Dar de alta un pendiente ya reseñado no es un error**: se guarda enlazado y
   fuera de la cola. Quien lo escribe no tiene por qué acordarse de lo que
   reseñó hace dos años, y un «ya existe» obliga a ir a buscarlo.
+- **La misma obra no entra dos veces en la cola.** Antes de insertar se busca un
+  item con el mismo título normalizado **y** el mismo tipo de contenido
+  (`duplicadoDe()`), y cuenta cualquiera: pendiente, en curso, terminado o
+  descartado. Lo que no cuenta es el tipo: la película y el libro de «Dune» son
+  dos fichas legítimas.
+- **Un duplicado no se contesta con un «ya existe» y nada más**, que es lo que
+  obliga a ir a buscarlo. El error lleva el id del original en `details` —se
+  reconoce por el **código** `watchlist_duplicate`, nunca leyendo el mensaje— y
+  cada sitio lo aprovecha: el alta rápida del panel redirige a la ficha que ya
+  había (`?dup=1`), y el alta pública vuelve al formulario con lo escrito, con
+  el original enlazado y un 409. Ahí no vale la página de error: ese formulario
+  lleva nota, enlace y hasta una portada ya subida.
+- **En el alta por lotes los repetidos se saltan, no tumban la lista.** Cincuenta
+  títulos pegados de golpe no se pueden tirar porque uno ya estuviera; se añade
+  lo que falta y se dice cuántos se quedaron fuera (`added` y `repetidos` en la
+  query). Cuenta también los repetidos dentro del propio pegote.
+- **Editar pasa por la misma comprobación**, excluyendo la propia ficha: sin esa
+  excepción, guardar sin tocar el título chocaría consigo misma y no se podría
+  cambiar ni la prioridad. Se llega al choque por dos caminos —renombrando hasta
+  coincidir con otra, o cambiándole el tipo a uno donde ese título ya estaba— y
+  los dos se cortan. Aquí no se redirige al original ni en el panel: lo que hay
+  en pantalla son cambios a medio guardar, y perderlos por un título repetido
+  sería peor que el duplicado.
+- **Guardar un pendiente devuelve a la cola**, tanto en la página pública como
+  en el panel. Se abre una ficha para tocarla y volver: quedarse delante de un
+  «guardado» obliga a pulsar «Volver» cada vez, y lo que se mira después de
+  tocar un item es dónde ha quedado respecto a los demás. El aviso lo da la
+  lista —`?ok=1` en la pública, `?guardado=1` en el panel, que allí `ok=1` ya
+  significaba «lista actualizada» por una acción de cola—.
 - **Se gestionan desde la página pública, no desde otra pantalla.** `/pendientes`
   lleva el botón de alta y cada tarjeta el de editar, y las dos cosas sólo
   aparecen con sesión. Las rutas (`/pendientes/nuevo`,

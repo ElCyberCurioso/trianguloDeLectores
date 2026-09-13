@@ -4,6 +4,9 @@
  * Sin dependencias, sin eval, compatible con CSP estricta.
  */
 
+import { initCoverUploader } from './cover-uploader';
+import { initTypeFields } from './type-fields';
+
 type ToastKind = 'ok' | 'error' | 'info';
 
 // ------------------------------------------------------------------ toasts --
@@ -355,6 +358,8 @@ function boot(): void {
   initUserMenu();
   initConfirms();
   initFlashFromQuery();
+  initTypeFields();
+  initCoverUploader(toast);
   loadTurnstile();
 }
 

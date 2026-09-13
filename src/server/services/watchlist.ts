@@ -2,10 +2,11 @@ import type { Container } from './container';
 import type { WatchlistInput } from '../../validation/schemas';
 import type { SessionUser } from '../lib/auth';
 import type { WatchlistRow } from '../../db/repos/watchlist';
-import { notFound, badRequest, conflict } from '../lib/http';
+import { AppError, notFound, badRequest, conflict } from '../lib/http';
 import { invalidateWatchlist } from '../lib/cache';
 import { uniqueSlug, slugify } from '../lib/slug';
 import { escapeHtml } from '../lib/sanitize';
+import { CONTENT_TYPE_LABELS } from '../../types/domain';
 import type { ContentType, WatchlistStatus } from '../../types/domain';
 
 export type WatchlistAction =
@@ -29,6 +30,22 @@ export class WatchlistService {
   async create(input: WatchlistInput, actor: SessionUser): Promise<string> {
     const id = crypto.randomUUID();
     const now = Date.now();
+
+    /*
+     * La misma obra no entra dos veces.
+     *
+     * Se mira por título normalizado **y** tipo de contenido: la película y el
+     * libro de «Dune» son dos fichas distintas y las dos son legítimas; dos
+     * fichas de la película no. Cuenta cualquier item del mismo tipo, esté
+     * pendiente, en curso, terminado o descartado: lo que importa es que la
+     * obra ya está en la lista, y volver a darla de alta duplicaría la fila en
+     * vez de llevar a la que ya había.
+     *
+     * El error lleva el id del original para que quien lo recibe pueda llevar
+     * allí en vez de dejar un «ya existe» a secas, que obligaría a ir a
+     * buscarlo.
+     */
+    await this.assertSinDuplicado(input);
 
     /*
      * Si la obra ya está reseñada, el pendiente nace enlazado y terminado.
@@ -82,6 +99,16 @@ export class WatchlistService {
   async update(id: string, input: WatchlistInput, actor: SessionUser): Promise<void> {
     const existing = await this.c.watchlist.getById(id);
     if (!existing) throw notFound('Ese pendiente no existe');
+
+    /*
+     * Editar tampoco puede acabar en dos fichas de la misma obra.
+     *
+     * Se comprueba lo mismo que en el alta, y por partida doble: se llega aquí
+     * corrigiendo un título hasta que coincide con otro, y también cambiándole
+     * el tipo a algo donde ese título ya estaba. La propia ficha se excluye, o
+     * guardar sin tocar el título chocaría consigo misma.
+     */
+    await this.assertSinDuplicado(input, id);
 
     await this.c.watchlist.update(id, {
       titleEs: input.titleEs,
@@ -209,6 +236,43 @@ export class WatchlistService {
    * de contenido, no por slug: el slug de una reseña puede llevar sufijo o
    * haberse editado a mano, y entonces dejaría de casar con su propio título.
    */
+  /**
+   * Corta el paso si la obra ya está en la lista.
+   *
+   * El error lleva el id del original en `details` para que quien lo recibe
+   * pueda llevar allí: un «ya existe» a secas obliga a ir a buscarlo en una
+   * cola de ciento y pico títulos. Se reconoce por el **código**, nunca por el
+   * texto del mensaje.
+   */
+  private async assertSinDuplicado(input: WatchlistInput, excepto?: string): Promise<void> {
+    const duplicado = await this.duplicadoDe(input.titleEs, input.contentType, excepto);
+    if (!duplicado) return;
+    throw new AppError(
+      409,
+      'watchlist_duplicate',
+      `«${duplicado.titleEs}» ya está en la lista de pendientes como ${CONTENT_TYPE_LABELS[input.contentType].toLowerCase()}.`,
+      { id: duplicado.id, titleEs: duplicado.titleEs },
+    );
+  }
+
+  /**
+   * El item que ya cubre esa obra, si lo hay.
+   *
+   * Compara con `slugify()` en el Worker y no con `LOWER()` en SQL: SQLite no
+   * toca los acentos, así que «Amélie» y «amelie» no le parecerían lo mismo.
+   */
+  private async duplicadoDe(
+    titleEs: string,
+    contentType: ContentType,
+    excepto?: string,
+  ): Promise<{ id: string; titleEs: string } | null> {
+    const buscado = slugify(titleEs);
+    const existentes = await this.c.watchlist.titulosDelTipo(contentType);
+    // `excepto` es la propia ficha al editarla: guardar sin tocar el título
+    // chocaría consigo misma y no se podría cambiar ni la prioridad.
+    return existentes.find((item) => item.id !== excepto && slugify(item.titleEs) === buscado) ?? null;
+  }
+
   private async resenaDelMismoTitulo(
     titleEs: string,
     contentType: ContentType,
@@ -298,7 +362,7 @@ export class WatchlistService {
     lines: string[],
     defaults: { contentType: WatchlistInput['contentType']; priority: WatchlistInput['priority']; isPublic: boolean },
     actor: SessionUser,
-  ): Promise<number> {
+  ): Promise<{ added: number; duplicados: number }> {
     const titulos = lines
       .map((line) => line.trim())
       .filter((line) => line.length >= 2)
@@ -306,11 +370,31 @@ export class WatchlistService {
 
     if (!titulos.length) throw badRequest('empty_batch', 'No hay títulos que añadir');
 
+    /*
+     * Aquí los repetidos se saltan, no se rechazan.
+     *
+     * Un alta suelta puede parar y decir dónde está el original; una lista de
+     * cincuenta títulos pegados de golpe, no: tirar las cuarenta y nueve buenas
+     * porque una ya estaba obligaría a editar el texto y volver a pegarlo. Se
+     * añade lo que falta y se dice cuántos se quedaron fuera.
+     *
+     * Se cuentan los que ya estaban **y** los repetidos dentro del propio
+     * pegote: la lista puede traer el mismo título dos veces.
+     */
+    const yaEstaban = await this.c.watchlist.titulosDelTipo(defaults.contentType);
+    const vistos = new Set(yaEstaban.map((item) => slugify(item.titleEs)));
+
     const now = Date.now();
+    let added = 0;
     for (const titleEs of titulos) {
+      const titulo = titleEs.slice(0, 200);
+      const marca = slugify(titulo);
+      if (vistos.has(marca)) continue;
+      vistos.add(marca);
+
       await this.c.watchlist.insert({
         id: crypto.randomUUID(),
-        titleEs: titleEs.slice(0, 200),
+        titleEs: titulo,
         contentType: defaults.contentType,
         priority: defaults.priority,
         status: 'PENDING',
@@ -320,17 +404,20 @@ export class WatchlistService {
         createdAt: now,
         updatedAt: now,
       });
+      added += 1;
     }
+
+    const duplicados = titulos.length - added;
 
     await this.c.audit.record({
       actorId: actor.id,
       actorRole: actor.role,
       action: 'watchlist.create',
       entityType: 'watchlist',
-      metadata: { batch: titulos.length },
+      metadata: { batch: added, duplicados },
     });
 
-    if (defaults.isPublic) await invalidateWatchlist(this.c.env);
-    return titulos.length;
+    if (added && defaults.isPublic) await invalidateWatchlist(this.c.env);
+    return { added, duplicados };
   }
 }

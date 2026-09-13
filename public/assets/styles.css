@@ -543,6 +543,16 @@ p { margin: 0 0 var(--space-3); }
 .field__req { color: var(--color-accent-text); }
 .field--error .input, .field--error .select, .field--error .textarea { border-color: var(--color-accent); }
 
+/*
+ * Lo que sólo aplica a algunos tipos de contenido: «Temporadas» y «Episodios»
+ * en lo que se emite por entregas, «Volúmenes» en lo que sale por tomos y el
+ * «o periodo» del año. El `hidden` lo pone el servidor según el tipo de la
+ * ficha y lo mueve la isla al cambiar el desplegable. La regla es explícita
+ * porque la del navegador la gana cualquier `display` propio, y aquí lo tapado
+ * es un párrafo de pista y un `<span>` dentro de la etiqueta.
+ */
+[data-types-only][hidden] { display: none; }
+
 .input, .select, .textarea {
   width: 100%; min-height: 36px; padding: 6px 10px;
   font: inherit; font-size: 14px;

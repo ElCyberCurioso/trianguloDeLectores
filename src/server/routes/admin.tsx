@@ -11,10 +11,11 @@ import { TaxonomyPage } from '../views/admin/taxonomy';
 import { SettingsPage } from '../views/admin/settings';
 import { RecommendationsPage } from '../views/admin/recommendations';
 import { AdminWatchlistPage, WatchlistEditorPage } from '../views/admin/watchlist';
+import { borradorDe } from '../views/components/watchlist-form';
 import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { rateLimit } from '../middleware/ratelimit';
 import { NO_STORE } from '../lib/cache';
-import { badRequest, forbidden, notFound, ok } from '../lib/http';
+import { AppError, badRequest, forbidden, notFound, ok } from '../lib/http';
 import {
   reviewInputSchema, adminReviewQuerySchema, adminCommentQuerySchema,
   moderationActionSchema, categoryInputSchema, genreInputSchema, platformInputSchema,
@@ -505,11 +506,13 @@ adminRoutes.get('/pendientes', async (c) => {
       totalPages={resultado.totalPages}
       total={resultado.total}
       flash={
-        c.req.query('ok') === '1'
-          ? { kind: 'ok', message: 'Lista actualizada.' }
-          : c.req.query('added')
-            ? { kind: 'ok', message: `${c.req.query('added')} títulos añadidos a la lista.` }
-            : null
+        c.req.query('guardado') === '1'
+          ? { kind: 'ok', message: 'Cambios guardados.' }
+          : c.req.query('ok') === '1'
+            ? { kind: 'ok', message: 'Lista actualizada.' }
+            : c.req.query('added')
+              ? { kind: 'ok', message: mensajeDeLote(c.req.query('added')!, c.req.query('repetidos')) }
+              : null
       }
     />,
   );
@@ -529,10 +532,35 @@ adminRoutes.get('/pendientes/:id', async (c) => {
       item={item}
       categories={categories}
       csrfToken={c.get('csrfToken')!}
-      flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Cambios guardados.' } : null}
+      flash={
+        c.req.query('dup') === '1'
+          ? { kind: 'error', message: 'Ese título ya estaba en la lista. Esto es lo que había.' }
+          : null
+      }
     />,
   );
 });
+
+/**
+ * El id del pendiente que ya cubría la obra, si el error es ése.
+ *
+ * Se mira el código del error y no su texto: el mensaje se puede reescribir sin
+ * darse cuenta de que alguien lo estaba leyendo, y entonces esto dejaría de
+ * funcionar en silencio.
+ */
+function idDeDuplicado(err: unknown): string | null {
+  if (!(err instanceof AppError) || err.code !== 'watchlist_duplicate') return null;
+  const id = err.details?.id;
+  return typeof id === 'string' ? id : null;
+}
+
+/** «12 títulos añadidos a la lista» y, si los hubo, los que ya estaban. */
+function mensajeDeLote(added: string, repetidos: string | undefined): string {
+  const base = `${added} títulos añadidos a la lista.`;
+  const repes = Number(repetidos ?? '0');
+  if (!repes) return base;
+  return `${base} ${repes === 1 ? 'Otro ya estaba' : `Otros ${repes} ya estaban`} y se ha dejado como estaba.`;
+}
 
 /** Normaliza el formulario de pendientes al esquema de dominio. */
 async function readWatchlistForm(c: Context<AppEnv>) {
@@ -563,7 +591,20 @@ async function readWatchlistForm(c: Context<AppEnv>) {
 adminRoutes.post('/pendientes', async (c) => {
   const parsed = await readWatchlistForm(c);
   if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
-  await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+
+  /*
+   * Si la obra ya estaba, se va a la ficha que ya había en vez de dar un error.
+   * El alta rápida son cuatro campos y lo que se quería era llegar a ese
+   * título: enseñarlo es mejor respuesta que decir «ya existe» y dejar a quien
+   * lo escribió buscándolo en una cola de ciento y pico.
+   */
+  try {
+    await new WatchlistService(c.get('container')).create(parsed.data, c.get('user')!);
+  } catch (err) {
+    const existente = idDeDuplicado(err);
+    if (!existente) throw err;
+    return c.redirect(`/admin/pendientes/${existente}?dup=1`, 303);
+  }
   return c.redirect('/admin/pendientes?ok=1', 303);
 });
 
@@ -571,7 +612,7 @@ adminRoutes.post('/pendientes/lote', async (c) => {
   const body = await c.req.parseBody({ all: true });
   const bruto = F.str(body, 'titles', 6000) ?? '';
   const service = new WatchlistService(c.get('container'));
-  const total = await service.createBatch(
+  const { added, duplicados } = await service.createBatch(
     bruto.split('\n'),
     {
       contentType: (F.str(body, 'contentType', 20) ?? 'OTHER') as ContentType,
@@ -580,14 +621,50 @@ adminRoutes.post('/pendientes/lote', async (c) => {
     },
     c.get('user')!,
   );
-  return c.redirect(`/admin/pendientes?added=${total}`, 303);
+  return c.redirect(`/admin/pendientes?added=${added}&repetidos=${duplicados}`, 303);
 });
 
 adminRoutes.post('/pendientes/:id', async (c) => {
+  const container = c.get('container');
   const parsed = await readWatchlistForm(c);
   if (!parsed.success) throw badRequest('validation', 'Revisa los datos del pendiente', fieldErrors(parsed.error));
-  await new WatchlistService(c.get('container')).update(c.req.param('id'), parsed.data, c.get('user')!);
-  return c.redirect(`/admin/pendientes/${c.req.param('id')}?ok=1`, 303);
+
+  const id = c.req.param('id');
+  try {
+    await new WatchlistService(container).update(id, parsed.data, c.get('user')!);
+  } catch (err) {
+    /*
+     * Editar hasta chocar con otra ficha devuelve el formulario, no un error.
+     *
+     * Al revés que el alta rápida, aquí no se puede llevar al original sin más:
+     * lo que hay en pantalla son cambios a medio guardar —puede haber una nota
+     * nueva o una portada recién subida— y perderlos por un título repetido
+     * sería peor que el duplicado. Se repinta con lo escrito y se enlaza el
+     * otro, que es lo único que hace falta para decidir.
+     */
+    if (!(err instanceof AppError) || err.code !== 'watchlist_duplicate') throw err;
+    const existing = await container.watchlist.getById(id);
+    if (!existing) throw err;
+    const categories = await container.taxonomy.listCategories(false);
+
+    c.status(409);
+    return adminShell(
+      c,
+      'Editar pendiente',
+      <WatchlistEditorPage
+        env={c.env}
+        item={{ ...existing, ...borradorDe(parsed.data) }}
+        categories={categories}
+        csrfToken={c.get('csrfToken')!}
+        duplicate={{ id: String(err.details?.id), titleEs: String(err.details?.titleEs) }}
+        errors={{ titleEs: err.message }}
+        flash={{ kind: 'error', message: 'Eso ya está en la lista.' }}
+      />,
+    );
+  }
+  // Guardar devuelve a la cola, igual que en la página pública: se abre una
+  // ficha para tocarla y volver, no para quedarse delante de un «guardado».
+  return c.redirect('/admin/pendientes?guardado=1', 303);
 });
 
 adminRoutes.post('/pendientes/:id/accion', async (c) => {

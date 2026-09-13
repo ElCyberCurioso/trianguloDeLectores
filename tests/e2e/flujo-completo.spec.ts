@@ -43,7 +43,30 @@ test('2-4. crea la reseña, sube portada y la publica', async ({ page }) => {
   await page.goto('/admin/resenas/nueva');
 
   await page.getByLabel('Título en español').fill(TITULO);
+
+  // Cada campo sale sólo en los tipos a los que aplica: temporadas y episodios
+  // en lo que se emite por entregas, volúmenes en lo que sale por tomos, y el
+  // «o periodo» del año con los primeros. En el alta el desplegable arranca por
+  // «Libro», que no lleva ninguno.
+  const temporadas = page.locator('#f-seasons');
+  const episodios = page.locator('#f-episodes');
+  const volumenes = page.locator('#f-volumes');
+  const periodo = page.locator('label[for="f-year"] [data-types-only]');
+  for (const campo of [temporadas, episodios, volumenes, periodo]) await expect(campo).toBeHidden();
+
+  await page.locator('#f-contentType').selectOption('SERIES');
+  await expect(temporadas).toBeVisible();
+  await expect(episodios).toBeVisible();
+  await expect(periodo).toBeVisible();
+  await expect(volumenes).toBeHidden();
+
+  await page.locator('#f-contentType').selectOption('MANGA');
+  await expect(volumenes).toBeVisible();
+  await expect(temporadas).toBeHidden();
+  await expect(episodios).toBeHidden();
+
   await page.locator('#f-contentType').selectOption('MOVIE');
+  for (const campo of [temporadas, episodios, volumenes, periodo]) await expect(campo).toBeHidden();
   await page.locator('#f-year').fill('2024');
   await page.locator('#f-creator').fill('Dirección de prueba');
   // La nota se pone **pulsando sobre las estrellas**, que es como se usa de

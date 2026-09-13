@@ -158,7 +158,10 @@ describe('gestión desde la página pública', () => {
       isPublic: '1',
       sortOrder: '0',
     });
+    // Guardar devuelve a la cola, no deja en el formulario: se edita desde la
+    // lista y lo que se quiere ver después es dónde ha quedado el item.
     expect(guardado.status).toBe(303);
+    expect(guardado.headers.get('Location')).toBe('/pendientes?ok=1');
 
     const despues = await env.DB
       .prepare('SELECT title_es, year, year_end, year_ongoing, seasons, priority, status FROM watchlist_items WHERE id = ?')

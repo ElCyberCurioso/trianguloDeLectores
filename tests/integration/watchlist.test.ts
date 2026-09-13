@@ -538,3 +538,196 @@ async function estado(id: string): Promise<string> {
     .first<{ status: string }>();
   return row!.status;
 }
+
+describe('la misma obra no entra dos veces', () => {
+  /*
+   * Los títulos llevan una marca única por corrida.
+   *
+   * Los ficheros de integración comparten base de datos y el orden entre ellos
+   * no está garantizado: un título fijo que otro fichero también use haría que
+   * estas pruebas —que cuentan filas por título— pasaran o fallaran según quién
+   * corriera antes.
+   */
+  const MARCA = crypto.randomUUID().slice(0, 8);
+  const T = (nombre: string) => `${nombre} ${MARCA}`;
+
+  /** El alta pública devuelve la página entera, que es lo que hay que mirar. */
+  async function altaPublica(fields: Record<string, string>): Promise<{ status: number; html: string }> {
+    const response = await SELF.fetch(`${ORIGIN}/pendientes/nuevo`, {
+      method: 'POST',
+      body: new URLSearchParams({ _csrf: session.csrf, priority: 'MEDIUM', status: 'PENDING', ...fields }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: session.cookie,
+        Origin: ORIGIN,
+        'Sec-Fetch-Site': 'same-origin',
+        Accept: 'text/html',
+      },
+      redirect: 'manual',
+    });
+    return { status: response.status, html: await response.text() };
+  }
+
+  async function cuantos(titleEs: string): Promise<number> {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM watchlist_items WHERE title_es = ?')
+      .bind(titleEs)
+      .first<{ n: number }>();
+    return row!.n;
+  }
+
+  it('el alta rápida del panel lleva a la ficha que ya había', async () => {
+    const original = await crearPendiente({ titleEs: T('Outer Wilds'), contentType: 'GAME' });
+
+    const response = await adminPost('/admin/pendientes', {
+      titleEs: T('Outer Wilds'),
+      contentType: 'GAME',
+      priority: 'HIGH',
+      isPublic: '1',
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe(`/admin/pendientes/${original}?dup=1`);
+    expect(await cuantos(T('Outer Wilds'))).toBe(1);
+  });
+
+  it('el alta pública vuelve al formulario con lo escrito y enlaza el original', async () => {
+    const original = await crearPendiente({ titleEs: T('Kentucky Route Zero'), contentType: 'GAME' });
+
+    const { status, html } = await altaPublica({
+      titleEs: T('Kentucky Route Zero'),
+      contentType: 'GAME',
+      note: 'Esta nota no se puede perder.',
+      creator: 'Cardboard Computer',
+    });
+
+    expect(status).toBe(409);
+    expect(html).toContain(`/pendientes/${original}/editar`);
+    // Lo escrito vuelve en el formulario: no hay que teclearlo otra vez.
+    expect(html).toContain('Esta nota no se puede perder.');
+    expect(html).toContain('Cardboard Computer');
+    expect(await cuantos(T('Kentucky Route Zero'))).toBe(1);
+  });
+
+  it('acentos y mayúsculas no hacen dos obras de una', async () => {
+    await crearPendiente({ titleEs: T('Amélie'), contentType: 'MOVIE' });
+
+    const { status } = await altaPublica({ titleEs: T('amelie').toLowerCase(), contentType: 'MOVIE' });
+
+    expect(status).toBe(409);
+    expect(await cuantos(T('amelie').toLowerCase())).toBe(0);
+  });
+
+  it('el mismo título en otro tipo de contenido sí entra', async () => {
+    await crearPendiente({ titleEs: T('Dune'), contentType: 'MOVIE' });
+
+    const { status } = await altaPublica({ titleEs: T('Dune'), contentType: 'BOOK' });
+
+    expect(status).toBe(303);
+    expect(await cuantos(T('Dune'))).toBe(2);
+  });
+
+  it('un terminado también cuenta: la obra ya está en la lista', async () => {
+    const original = await crearPendiente({ titleEs: T('Pentiment'), contentType: 'GAME' });
+    await env.DB.prepare("UPDATE watchlist_items SET status = 'DONE' WHERE id = ?").bind(original).run();
+
+    const { status } = await altaPublica({ titleEs: T('Pentiment'), contentType: 'GAME' });
+
+    expect(status).toBe(409);
+    expect(await cuantos(T('Pentiment'))).toBe(1);
+  });
+
+  it('guardar una ficha sin tocarle el título no choca consigo misma', async () => {
+    const id = await crearPendiente({ titleEs: T('Disco Elysium'), contentType: 'GAME' });
+
+    const response = await adminPost(`/admin/pendientes/${id}`, {
+      titleEs: T('Disco Elysium'),
+      contentType: 'GAME',
+      priority: 'LOW',
+      status: 'PENDING',
+      isPublic: '1',
+      sortOrder: '0',
+    });
+
+    // Guardar devuelve a la cola, igual que en la página pública.
+    expect(response.status).toBe(303);
+    expect(response.headers.get('Location')).toBe('/admin/pendientes?guardado=1');
+
+    const row = await env.DB.prepare('SELECT priority FROM watchlist_items WHERE id = ?').bind(id)
+      .first<{ priority: string }>();
+    expect(row!.priority).toBe('LOW');
+  });
+
+  it('renombrar hasta chocar con otra ficha devuelve el formulario con lo escrito', async () => {
+    const original = await crearPendiente({ titleEs: T('Return of the Obra Dinn'), contentType: 'GAME' });
+    const otro = await crearPendiente({ titleEs: T('Papers Please'), contentType: 'GAME' });
+
+    const response = await SELF.fetch(`${ORIGIN}/pendientes/${otro}/editar`, {
+      method: 'POST',
+      body: new URLSearchParams({
+        _csrf: session.csrf,
+        titleEs: T('Return of the Obra Dinn'),
+        contentType: 'GAME',
+        priority: 'MEDIUM',
+        status: 'PENDING',
+        note: 'Esta nota tampoco se puede perder.',
+        isPublic: '1',
+        sortOrder: '0',
+      }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: session.cookie,
+        Origin: ORIGIN,
+        'Sec-Fetch-Site': 'same-origin',
+        Accept: 'text/html',
+      },
+      redirect: 'manual',
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(409);
+    expect(html).toContain(`/pendientes/${original}/editar`);
+    expect(html).toContain('Esta nota tampoco se puede perder.');
+
+    // Y no se ha guardado: el otro sigue llamándose como se llamaba.
+    const row = await env.DB.prepare('SELECT title_es FROM watchlist_items WHERE id = ?').bind(otro)
+      .first<{ title_es: string }>();
+    expect(row!.title_es).toBe(T('Papers Please'));
+  });
+
+  it('cambiarle el tipo a uno donde ese título ya estaba también choca', async () => {
+    await crearPendiente({ titleEs: T('Akira'), contentType: 'MANGA' });
+    const pelicula = await crearPendiente({ titleEs: T('Akira'), contentType: 'MOVIE' });
+
+    const response = await adminPost(`/admin/pendientes/${pelicula}`, {
+      titleEs: T('Akira'),
+      contentType: 'MANGA',
+      priority: 'MEDIUM',
+      status: 'PENDING',
+      isPublic: '1',
+      sortOrder: '0',
+    });
+
+    expect(response.status).toBe(409);
+    const row = await env.DB.prepare('SELECT content_type FROM watchlist_items WHERE id = ?').bind(pelicula)
+      .first<{ content_type: string }>();
+    expect(row!.content_type).toBe('MOVIE');
+  });
+
+  it('el alta por lotes se salta los repetidos en vez de tirar la lista entera', async () => {
+    await crearPendiente({ titleEs: T('Celeste'), contentType: 'OTHER' });
+
+    const response = await adminPost('/admin/pendientes/lote', {
+      titles: [T('Celeste'), T('Hollow Knight'), T('hollow knight').toLowerCase(), T('Tunic')].join('\n'),
+      contentType: 'OTHER',
+      priority: 'MEDIUM',
+      isPublic: '1',
+    });
+
+    expect(response.status).toBe(303);
+    // Dos añadidos —«Hollow Knight» y «Tunic»—; los otros dos ya estaban, uno
+    // en la base y otro dentro del propio pegote.
+    expect(response.headers.get('Location')).toBe('/admin/pendientes?added=2&repetidos=2');
+    expect(await cuantos(T('Celeste'))).toBe(1);
+    expect(await cuantos(T('hollow knight').toLowerCase())).toBe(0);
+  });
+});
