@@ -138,4 +138,15 @@ export class RecommendationRepository {
       .get();
     return (row?.value ?? 0) > 0;
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  exportAll(): Promise<(typeof recommendations.$inferSelect)[]> {
+    return this.db.select().from(recommendations).orderBy(recommendations.createdAt).all();
+  }
 }

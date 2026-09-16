@@ -304,6 +304,16 @@ export class CommentRepository {
       .get();
     return row?.value ?? 0;
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Entran también los borrados y los rechazados: el hilo se reconstruye por
+   * `path`, y un comentario que falta parte la conversación de sus respuestas.
+   */
+  exportAll(): Promise<(typeof comments.$inferSelect)[]> {
+    return this.db.select().from(comments).orderBy(comments.createdAt).all();
+  }
 }
 
 // --------------------------------------------------------------- reportes --
@@ -415,5 +425,16 @@ export class ReportRepository {
       .update(commentReports)
       .set({ status: dismissed ? 'DISMISSED' : 'RESOLVED', resolvedAt: Date.now(), resolvedBy })
       .where(and(eq(commentReports.commentId, commentId), eq(commentReports.status, 'OPEN')));
+  }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  exportAll(): Promise<(typeof commentReports.$inferSelect)[]> {
+    return this.db.select().from(commentReports).orderBy(commentReports.createdAt).all();
   }
 }

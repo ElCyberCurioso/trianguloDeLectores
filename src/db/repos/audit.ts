@@ -17,7 +17,7 @@ export type AuditAction =
   | 'media.upload' | 'media.delete'
   | 'document.upload' | 'document.update' | 'document.delete'
   | 'library.create' | 'library.update' | 'library.delete'
-  | 'library.backup'
+  | 'library.backup' | 'public.backup'
   | 'device.pair' | 'device.revoke'
   | 'taxonomy.create' | 'taxonomy.update' | 'taxonomy.delete'
   | 'settings.update';

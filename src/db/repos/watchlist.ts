@@ -323,4 +323,15 @@ export class WatchlistRepository {
       .all();
     return rows;
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  exportAll(): Promise<(typeof watchlistItems.$inferSelect)[]> {
+    return this.db.select().from(watchlistItems).orderBy(watchlistItems.createdAt).all();
+  }
 }

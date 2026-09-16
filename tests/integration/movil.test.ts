@@ -584,3 +584,101 @@ describe('revocación', () => {
     expect(despues.status).toBe(401);
   });
 });
+
+/**
+ * La pantalla de dispositivos del panel.
+ *
+ * El repositorio sabía listarlos y revocarlos desde el primer día —el comentario
+ * de `listForUser()` decía «para poder echarlos desde el panel»—, pero no había
+ * panel: la única revocación la pedía el propio teléfono, que es justo el que se
+ * pierde. Lo que se comprueba aquí es que revocar desde la web deja el token
+ * fuera de verdad, no sólo que la fila cambie.
+ */
+describe('dispositivos desde el panel', () => {
+  async function listar(): Promise<string> {
+    const response = await SELF.fetch(`${BOOKS_ORIGIN}/dispositivos`, {
+      headers: { Cookie: books.cookie, Accept: 'text/html' },
+    });
+    expect(response.status).toBe(200);
+    return response.text();
+  }
+
+  async function revocar(id: string): Promise<Response> {
+    const response = await SELF.fetch(`${BOOKS_ORIGIN}/dispositivos/${id}/revocar`, {
+      method: 'POST',
+      body: new URLSearchParams({ _csrf: books.csrf }),
+      headers: booksHeaders(books, { 'Content-Type': 'application/x-www-form-urlencoded' }),
+      redirect: 'manual',
+    });
+    await response.text();
+    return response;
+  }
+
+  it('enseña los teléfonos emparejados con su último uso', async () => {
+    const html = await listar();
+    expect(html).toContain('Pixel de pruebas');
+    expect(html).toContain('Último uso');
+  });
+
+  /*
+   * El id sale del propio emparejamiento, no de buscar por nombre.
+   *
+   * Buscar por `device_name` parecía cómodo y muerde: los nombres se repiten
+   * entre pruebas de este mismo fichero y la consulta devolvía la fila vieja,
+   * ya revocada, así que el revocado fallaba con un 404 que no tenía nada que
+   * ver con lo que se estaba probando.
+   */
+  async function emparejarDispositivo(nombre: string): Promise<{ id: string; token: string }> {
+    const respuesta = await emparejar(ADMIN_EMAIL, ADMIN_PASSWORD, nombre);
+    const { data } = (await respuesta.json()) as { data: { token: string; deviceId: string } };
+    return { id: data.deviceId, token: data.token };
+  }
+
+  it('revocar desde la web deja el token fuera', async () => {
+    const telefono = await emparejarDispositivo('Teléfono que se pierde');
+
+    // Antes de revocar, el token entra.
+    const antes = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/yo`, {
+      headers: { Authorization: `Bearer ${telefono.token}`, Accept: 'application/json' },
+    });
+    await antes.text();
+    expect(antes.status).toBe(200);
+
+    const respuesta = await revocar(telefono.id);
+    expect(respuesta.status).toBe(303);
+    expect(respuesta.headers.get('Location')).toBe('/dispositivos?revocado=1');
+
+    // Y después ya no: es la propiedad que se busca, no que cambie la fila.
+    const despues = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/yo`, {
+      headers: { Authorization: `Bearer ${telefono.token}`, Accept: 'application/json' },
+    });
+    await despues.text();
+    expect(despues.status).toBe(401);
+  });
+
+  it('revocar dos veces el mismo dispositivo no vale', async () => {
+    const telefono = await emparejarDispositivo('Teléfono revocado dos veces');
+
+    expect((await revocar(telefono.id)).status).toBe(303);
+    // Ya revocado: no hay nada que revocar y se dice, en vez de fingir que sí.
+    expect((await revocar(telefono.id)).status).toBe(404);
+  });
+
+  it('sin sesión del navegador no se listan ni se revocan', async () => {
+    const listado = await SELF.fetch(`${BOOKS_ORIGIN}/dispositivos`, {
+      headers: { Accept: 'text/html' },
+      redirect: 'manual',
+    });
+    await listado.text();
+    expect([302, 401]).toContain(listado.status);
+
+    // Y el token del móvil tampoco abre la pantalla: es la propiedad de siempre
+    // —la credencial de la aplicación no es la sesión del navegador—.
+    const conToken = await SELF.fetch(`${BOOKS_ORIGIN}/dispositivos`, {
+      headers: { Authorization: `Bearer ${deviceToken}`, Accept: 'text/html' },
+      redirect: 'manual',
+    });
+    await conToken.text();
+    expect([302, 401]).toContain(conToken.status);
+  });
+});

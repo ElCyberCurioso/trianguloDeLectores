@@ -11,6 +11,8 @@ import { TaxonomyPage } from '../views/admin/taxonomy';
 import { SettingsPage } from '../views/admin/settings';
 import { RecommendationsPage } from '../views/admin/recommendations';
 import { AdminWatchlistPage, WatchlistEditorPage } from '../views/admin/watchlist';
+import { AdminBackupsPage } from '../views/admin/backups';
+import { listBackups, runPublicBackup, isBackupKey, PUBLIC_BACKUP_PREFIX } from '../services/backup';
 import { borradorDe } from '../views/components/watchlist-form';
 import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { rateLimit } from '../middleware/ratelimit';
@@ -914,6 +916,45 @@ adminRoutes.get('/api/slug', async (c) => {
   if (!title) throw badRequest('missing_title', 'Falta el título');
   const slug = await uniqueSlug(slugify(title), (s) => c.get('container').reviews.slugIsFree(s, c.req.query('id') ?? undefined));
   return ok(c, { slug });
+});
+
+// ========================================================== COPIAS =====
+adminRoutes.get('/copias', async (c) => {
+  const backups = await listBackups(c.env, PUBLIC_BACKUP_PREFIX);
+  return adminShell(
+    c,
+    'Copias de seguridad',
+    <AdminBackupsPage
+      backups={backups}
+      csrfToken={c.get('csrfToken')!}
+      flash={c.req.query('ok') === '1' ? { kind: 'ok', message: 'Copia hecha.' } : null}
+    />,
+  );
+});
+
+adminRoutes.post('/copias/ahora', async (c) => {
+  await runPublicBackup(c.env, c.get('requestId'));
+  return c.redirect('/admin/copias?ok=1', 303);
+});
+
+adminRoutes.get('/copias/:day', async (c) => {
+  const day = c.req.param('day');
+  const key = `${PUBLIC_BACKUP_PREFIX}${day}.json.gz`;
+  // La clave se compone aquí y se valida con un patrón cerrado: sin esto, el
+  // parámetro de la URL elegiría qué objeto del bucket se descarga.
+  if (!isBackupKey(key, PUBLIC_BACKUP_PREFIX)) throw notFound('Esa copia no existe');
+
+  const object = await c.env.MEDIA.get(key);
+  if (!object) throw notFound('Esa copia no existe');
+
+  return new Response(object.body, {
+    headers: {
+      'Content-Type': 'application/gzip',
+      'Content-Disposition': `attachment; filename="sitio-${day}.json.gz"`,
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });
 
 // ================================================== RECOMENDACIONES =====

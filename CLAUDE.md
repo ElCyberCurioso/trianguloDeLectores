@@ -652,13 +652,15 @@ que cuestan media hora cada vez que se olvidan.
 
 ### Del repositorio
 
-- **No te fíes de lo que diga `CAMBIOS-PENDIENTES.md` sobre qué está
-  commiteado.** Se quedó describiendo como pendiente algo que ya estaba en
-  `HEAD`. Compruébalo contra git antes de escribir nada:
-  `git cat-file -e HEAD:<fichero>` y `git show HEAD:<fichero> | grep …`.
-- **El historial no sirve de guía**: los últimos cuatro commits se llaman todos
-  `# Cambios pendientes de commitear`. Lo que hay en `HEAD` se averigua
-  mirándolo, no leyendo mensajes.
+- **Ningún documento dice qué está commiteado; lo dice git.** Hubo un
+  `CAMBIOS-PENDIENTES.md` que se quedó tres veces describiendo como pendiente
+  algo que ya estaba en `HEAD`. Se borró por eso. Compruébalo antes de escribir
+  nada: `git status`, `git cat-file -e HEAD:<fichero>` y
+  `git show HEAD:<fichero> | grep …`.
+- **El historial antiguo no sirve de guía**: cinco commits seguidos se llaman
+  todos `# Cambios pendientes de commitear`. De `9e45c2f` en adelante los
+  mensajes sí describen el cambio; para lo anterior, se averigua mirando el
+  diff, no leyendo el mensaje.
 - **El chequeo «Sin secretos en el repositorio» del preflight falla siempre**, y
   por dos motivos que no son este trabajo: los volcados `backup-prod-*.sql` que
   viven en el directorio —ignorados por git, pero el script mira el disco— y un
@@ -718,33 +720,35 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
 
 ## Estado del proyecto
 
-*Al 13 de septiembre de 2026.*
+*Al 16 de septiembre de 2026.*
+
+Esta sección sólo recoge lo que **no se deduce de git**. Lo que está commiteado
+se mira con `git log` y `git show`, nunca leyendo un documento: describir aquí el
+estado del árbol de trabajo salió mal tres veces —el documento se quedaba
+diciendo «pendiente» sobre algo que ya estaba en `HEAD`— y por eso se borró
+`CAMBIOS-PENDIENTES.md`, que existía justo para eso.
 
 - Desplegado en **staging** y en **producción**:
   `https://triangulodelectores.site` y `https://staging.triangulodelectores.site`,
   con la biblioteca privada en `books.triangulodelectores.site` y
   `books-staging.triangulodelectores.site`.
 - **Los dos entornos llevan el mismo código entre sí**, con las **seis**
-  migraciones aplicadas (`0006_periodos_y_episodios` incluida). Último
-  despliegue: 12 de septiembre de 2026, versión de producción `25ab7c89…`, de
-  staging `c2130308…`.
-- **El árbol de trabajo va por delante de lo desplegado**: el arreglo del modal,
-  el de los filtros y el de los documentos importados de Android (§3 de
-  `CAMBIOS-PENDIENTES.md`) están hechos y **sin desplegar**. No llevan
-  migración.
-- **El sitio público ya no está vacío**: 2 reseñas y 137 pendientes en
-  producción, 135 de ellos activos y públicos. La biblioteca privada sigue con
-  el catálogo de 229 libros importado desde MyLibrary.
+  migraciones aplicadas (`0006_periodos_y_episodios` incluida).
+- **Lo desplegado y lo commiteado pueden no coincidir**: el despliegue lo hace
+  el workflow de CI al empujar a `main`, así que la referencia de qué corre en
+  producción es la versión que informa Cloudflare, no la última línea de este
+  fichero. Compruébalo con `npx wrangler deployments list --env production`.
+- **El sitio público está casi vacío**: 2 reseñas y 137 pendientes en
+  producción, 135 de ellos activos y públicos. La biblioteca privada tiene el
+  catálogo de 229 libros importado desde MyLibrary. Es el dato que más condiciona
+  qué merece la pena hacer: no hay tráfico que optimizar todavía.
 - **La aplicación Android existe y compila**, en `android/`. El APK firmado
   **1.2.0** (versionCode 7) está publicado en el bucket de producción y se
   descarga de `triangulodelectores.site/aplicacion`, con la misma firma que el
   1.1.0 al que sustituye —comprobado antes de publicar, porque una firma
   distinta impediría actualizar—. **Nunca se ha ejecutado en un teléfono**: no
   hay dispositivo ni emulador en la máquina de desarrollo, así que está
-  verificada de compilación y firma, no de uso. Eso incluye lo último que se le
-  metió: el subrayado sobre texto, el escáner de códigos de barras, el arreglo
-  del encuadre del zoom y la copia de los documentos que llegan de otra
-  aplicación. El árbol va por la **1.2.1** (versionCode 8), sin publicar.
+  verificada de compilación y firma, no de uso.
 - **El almacén de claves de firma vive fuera del repositorio**, en
   `~/.tdl/tdl-release.jks`, con su contraseña en `~/.tdl/firma.properties`.
   Perderlo significa no poder publicar más actualizaciones de la aplicación:
@@ -754,16 +758,13 @@ Para probar a mano: `npm run local` deja el entorno completo levantado
   apuntando a un origen muerto, el mismo caso que tuvo el apex. Sin resolver.
 - `wrangler.jsonc` no tiene marcadores pendientes: dominios, D1, KV, R2 y claves
   públicas de Turnstile son reales en los dos entornos.
-- Hay trabajo **sin commitear**: 42 ficheros modificados y 15 nuevos, que son
-  las tres tandas que detalla `CAMBIOS-PENDIENTES.md`. **Producción está
-  corriendo código que sólo existe en el árbol de trabajo**: no hay ningún punto
-  de git al que volver, ni forma de revertir el despliegue a un estado conocido.
-  Es el riesgo más gordo que tiene el proyecto ahora mismo.
 - Pendiente en el **panel de Cloudflare**, que ningún script puede hacer: borrar
   el registro DNS de `www` y sustituirlo por una redirección al apex; SSL/TLS en
   Full (Strict) y Always Use HTTPS; las reglas de WAF y Rate Limiting del
-  README §12; y comprobar que el bucket R2 de producción **no** es público.
-- El informe de auditoría con las mejoras aún no implementadas (páginas de
-  categoría y género, canonical de las URLs filtradas, paginación de
-  comentarios, buscador sobre FTS5, reseñas relacionadas) vive en un artefacto
-  publicado, no en el repositorio. Las de prioridad alta siguen pendientes.
+  README §12; comprobar que el bucket R2 de producción **no** es público; y una
+  comprobación de estado (Health Check) sobre `/health`, porque entre despliegues
+  nada vigila producción.
+- El plan de mejoras vigente —qué hacer y en qué orden para que el sitio tenga
+  audiencia— vive fuera del repositorio, en el fichero de plan de la sesión del
+  16 de septiembre de 2026. Lo ya hecho de ese plan: la copia de seguridad del
+  sitio público y el panel de dispositivos emparejados.

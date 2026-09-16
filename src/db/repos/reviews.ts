@@ -434,6 +434,26 @@ export class ReviewRepository {
       .get();
     return row?.value ?? 0;
   }
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Incluye las borradas —`deleted_at` no es nulo—: una reseña en la
+   * papelera todavía se puede recuperar, y una copia que la tira convierte el
+   * borrado suave en definitivo.
+   */
+  async exportAll(): Promise<{
+    reviews: (typeof reviews.$inferSelect)[];
+    reviewGenres: (typeof reviewGenres.$inferSelect)[];
+    reviewPlatforms: (typeof reviewPlatforms.$inferSelect)[];
+  }> {
+    const [rows, genreLinks, platformLinks] = await Promise.all([
+      this.db.select().from(reviews).orderBy(reviews.createdAt).all(),
+      this.db.select().from(reviewGenres).all(),
+      this.db.select().from(reviewPlatforms).all(),
+    ]);
+    return { reviews: rows, reviewGenres: genreLinks, reviewPlatforms: platformLinks };
+  }
 }
 
 /**

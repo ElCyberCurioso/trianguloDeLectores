@@ -15,6 +15,7 @@ import { badRequest, notFound, ok, tooLarge } from '../lib/http';
 import { DocumentService } from '../services/documents';
 import { LibraryService } from '../services/library';
 import { runLibraryBackup, listBackups, isBackupKey } from '../services/backup';
+import { DevicesPage } from '../views/books/devices';
 import { bookCoverKeyFromPath, MAX_PDF_BYTES } from '../lib/books';
 import { parseIsbn } from '../lib/isbn';
 import { mapMyLibraryBook } from '../lib/mylibrary';
@@ -569,6 +570,65 @@ booksRoutes.get('/portadas/*', async (c) => {
   const key = bookCoverKeyFromPath(path);
   if (!key) throw notFound('La portada no existe');
   return new LibraryService(c.get('container')).serveCover(key, c.req.raw);
+});
+
+// ========================================================= DISPOSITIVOS =====
+/*
+ * Los teléfonos emparejados, y el botón de echarlos.
+ *
+ * `DeviceRepository.listForUser()` llevaba escrito desde el principio el
+ * comentario «para poder echarlos desde el panel»; el panel es lo que faltaba.
+ * Sin él, un teléfono perdido seguía entrando hasta 90 días y la única salida
+ * era tocar la base de datos a mano.
+ */
+booksRoutes.get('/dispositivos', async (c) => {
+  const devices = await c.get('container').devices.listForUser(c.get('user')!.id);
+  return shell(
+    c,
+    'Dispositivos',
+    <DevicesPage
+      devices={devices}
+      ahora={Date.now()}
+      csrfToken={c.get('csrfToken')}
+      flash={
+        c.req.query('revocado') === '1'
+          ? { kind: 'ok', message: 'Dispositivo revocado. Tendrá que volver a emparejarse.' }
+          : c.req.query('revocados')
+            ? { kind: 'ok', message: `${c.req.query('revocados')} dispositivos revocados.` }
+            : null
+      }
+    />,
+  );
+});
+
+booksRoutes.post('/dispositivos/:id/revocar', async (c) => {
+  const user = c.get('user')!;
+  // El id de la persona va en el `WHERE` además del del dispositivo: lo hace
+  // `revoke()`, y por eso aquí no hay que comprobar de quién es.
+  const revocado = await c.get('container').devices.revoke(c.req.param('id'), user.id);
+  if (!revocado) throw notFound('Ese dispositivo no existe o ya estaba revocado');
+
+  await c.get('container').audit.record({
+    actorId: user.id,
+    actorRole: user.role,
+    action: 'device.revoke',
+    entityType: 'device',
+    entityId: c.req.param('id'),
+  });
+  return c.redirect('/dispositivos?revocado=1', 303);
+});
+
+booksRoutes.post('/dispositivos/revocar-todos', async (c) => {
+  const user = c.get('user')!;
+  const total = await c.get('container').devices.revokeAllForUser(user.id);
+  await c.get('container').audit.record({
+    actorId: user.id,
+    actorRole: user.role,
+    action: 'device.revoke',
+    entityType: 'device',
+    metadata: { total },
+  });
+  return c.redirect(`/dispositivos?revocados=${total}`, 303);
 });
 
 // =============================================================== COPIAS =====

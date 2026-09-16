@@ -157,4 +157,24 @@ export class TaxonomyRepository {
       .all();
     return rows.map((r) => ({ type: r.type, total: r.total }));
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  async exportAll(): Promise<{
+    categories: Category[];
+    genres: Genre[];
+    platforms: Platform[];
+  }> {
+    const [cats, gens, plats] = await Promise.all([
+      this.db.select().from(categories).orderBy(categories.sortOrder).all(),
+      this.db.select().from(genres).orderBy(genres.name).all(),
+      this.db.select().from(platforms).orderBy(platforms.name).all(),
+    ]);
+    return { categories: cats, genres: gens, platforms: plats };
+  }
 }

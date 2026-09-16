@@ -118,4 +118,15 @@ export class EpisodeRepository {
       .all();
     return new Map(rows.map((r) => [r.reviewId, r.total]));
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  exportAll(): Promise<(typeof reviewEpisodes.$inferSelect)[]> {
+    return this.db.select().from(reviewEpisodes).orderBy(reviewEpisodes.createdAt).all();
+  }
 }

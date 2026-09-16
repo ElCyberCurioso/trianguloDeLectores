@@ -25,4 +25,15 @@ export class MediaRepository {
   list(limit = 60) {
     return this.db.select().from(mediaObjects).orderBy(desc(mediaObjects.createdAt)).limit(limit).all();
   }
+
+  /**
+   * Volcado completo para la copia diaria.
+   *
+   * Sin filtros ni paginación a propósito: una copia parcial es una copia que
+   * engaña. Se ordena por fecha de creación para que dos volcados del mismo día
+   * salgan iguales y se puedan comparar.
+   */
+  exportAll(): Promise<(typeof mediaObjects.$inferSelect)[]> {
+    return this.db.select().from(mediaObjects).orderBy(mediaObjects.createdAt).all();
+  }
 }

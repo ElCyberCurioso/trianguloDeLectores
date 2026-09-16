@@ -1008,6 +1008,14 @@ entran**: ya están en R2, que es donde iría la copia, y duplicarlos gastaría
 cuota sin proteger de lo que de verdad puede perderse, que es la base de datos.
 Se conservan 30 días y se pueden descargar desde `/copias`.
 
+### Dispositivos emparejados
+
+`/dispositivos` lista los teléfonos que tienen credencial viva, con su último uso
+y su caducidad, y permite revocarlos de uno en uno o todos a la vez. Hacía falta
+porque la credencial dura 90 días y se renueva sola mientras se use: el único
+revocado que existía lo pedía el propio teléfono (`DELETE /api/movil/sesion`),
+que es justamente el que ya no se tiene cuando hace falta.
+
 ---
 
 ## 15e. Aplicación Android
@@ -1213,6 +1221,36 @@ Para activar la purga programada, añade en `wrangler.jsonc` del entorno corresp
 
 ---
 
+## 16b. Copias de seguridad
+
+Dos volcados distintos, los dos en el mismo cron de las 4:00 y los dos con 30
+días de retención:
+
+| Qué | Dónde | Se ve en |
+|---|---|---|
+| Sitio público: reseñas, episodios, comentarios, reportes, pendientes, taxonomías, recomendaciones y ajustes | `backups/public/<fecha>.json.gz` | `/admin/copias` |
+| Biblioteca privada: fichas de libros y de PDF, progreso, anotaciones y marcadores | `backups/library/<fecha>.json.gz` | `books.<dominio>/copias` |
+
+Son dos y no uno porque son dos aplicaciones con datos distintos, y quien
+restaura una casi nunca quiere restaurar la otra.
+
+**Qué no entra en la copia del sitio, y por qué:**
+
+- `users` y `sessions`. La tabla de usuarios lleva los hash de contraseña, y una
+  copia en R2 es un sitio más donde acaban. Restaurar significa volver a crear la
+  cuenta con `npm run admin:create`; las sesiones caducan solas.
+- `audit_log`. Tiene retención propia y configurable, y se purga a propósito:
+  copiarlo cada día resucitaría lo que la política de privacidad borra.
+- Las portadas y los PDF. Son ficheros y ya viven en R2, que es donde iría la
+  copia.
+
+Los volcados son JSON con gzip: `zcat` los abre y se reinsertan sin herramientas
+especiales. Lo que **no** hay es un script de restauración automática; antes de
+migrar sigue haciendo falta el volcado SQL completo (`wrangler d1 export`) que
+describe la §20.
+
+---
+
 ## 17. Observabilidad y analítica
 
 **Workers Logs** está activado (`observability.enabled`). Los logs son JSON estructurado con `requestId` (el `CF-Ray`), ruta, método, estado, duración y país.
@@ -1223,6 +1261,8 @@ npx wrangler tail --env production --status error
 ```
 
 Se registra: errores no controlados, fallos de autenticación, límites alcanzados, Turnstile rechazado, errores de base de datos y de subida.
+
+**Vigilancia entre despliegues**: el workflow `.github/workflows/salud.yml` pide `/health` cada 30 minutos, reintenta tres veces antes de dar nada por roto y abre —o comenta— un issue etiquetado `salud`. No sustituye a un Health Check de Cloudflare, que mira desde varias regiones y avisa antes; es lo que se puede tener sin depender del panel. Antes de esto, la única comprobación vivía dentro del job de despliegue: corría al publicar y nunca más.
 
 **Nunca se registra**: contraseñas, tokens, cookies, secretos ni claves de API. La redacción es recursiva por nombre de clave (`src/server/lib/logger.ts`) y está cubierta por tests.
 

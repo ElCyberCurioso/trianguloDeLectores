@@ -29,6 +29,7 @@ export interface BooksLayoutProps {
 const NAV = [
   { href: '/', label: 'Estantería', icon: 'book-open' as const },
   { href: '/biblioteca', label: 'Biblioteca', icon: 'book' as const },
+  { href: '/dispositivos', label: 'Dispositivos', icon: 'lock' as const },
   { href: '/copias', label: 'Copias', icon: 'download' as const },
 ];
 

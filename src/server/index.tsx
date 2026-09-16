@@ -15,7 +15,7 @@ import { Logger } from './lib/logger';
 import { createContainer } from './services/container';
 import { purgeExpiredSessions } from './lib/auth';
 import { isBooksRequest } from './lib/books';
-import { runLibraryBackup } from './services/backup';
+import { runLibraryBackup, runPublicBackup } from './services/backup';
 import { rateLimit } from './middleware/ratelimit';
 
 const app = new Hono<AppEnv>();
@@ -259,12 +259,21 @@ export default {
           const retention = await container.settings.get('privacy.audit_retention_days');
           await container.audit.purgeOlderThan(retention);
 
-          // Copia diaria del catálogo de la biblioteca. Va dentro del mismo
-          // cron que ya existía: un único disparo a las 4:00 hace la higiene y
-          // el respaldo, sin añadir otro trigger que mantener.
+          // Copia diaria, en el mismo cron que ya existía: un único disparo a
+          // las 4:00 hace la higiene y los dos respaldos, sin añadir otro
+          // trigger que mantener. Las dos aplicaciones tienen su propio volcado
+          // porque son datos distintos y quien restaura una casi nunca quiere
+          // restaurar la otra.
           const backup = await runLibraryBackup(env, `cron-${crypto.randomUUID()}`);
+          const publico = await runPublicBackup(env, `cron-${crypto.randomUUID()}`);
 
-          container.log.info('cron_maintenance_ok', { retention, backup: backup.key, backupBytes: backup.bytes });
+          container.log.info('cron_maintenance_ok', {
+            retention,
+            backup: backup.key,
+            backupBytes: backup.bytes,
+            publicBackup: publico.key,
+            publicBackupBytes: publico.bytes,
+          });
         } catch (error) {
           container.log.error('cron_maintenance_failed', {
             message: error instanceof Error ? error.message : String(error),

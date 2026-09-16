@@ -155,6 +155,7 @@ const NAV_ADMIN = [
   { href: '/admin/comentarios', label: 'Comentarios' },
   { href: '/admin/recomendaciones', label: 'Recomendaciones' },
   { href: '/admin/taxonomias', label: 'Taxonomías' },
+  { href: '/admin/copias', label: 'Copias' },
   { href: '/admin/ajustes', label: 'Ajustes' },
 ];
 
