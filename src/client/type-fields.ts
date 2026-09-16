@@ -34,13 +34,14 @@ export function initTypeFields(): void {
 
     const aplica = (el: HTMLElement, attr = 'data-types-only') => tipos(el, attr).includes(select.value);
 
-    let anterior = select.value;
-
-    select.addEventListener('change', () => {
-      if (select.value === anterior) return;
-      anterior = select.value;
-
+    const pintar = (inicial: boolean) => {
       campos.forEach((campo) => {
+        // En la primera pasada no se toca lo que ya pintó el servidor: sabe el
+        // tipo de la ficha y acierta. La excepción son los bloques que no
+        // sirven de nada sin JavaScript —un buscador que no busca—, que nacen
+        // tapados y sólo los destapa esto.
+        if (inicial && !campo.hasAttribute('data-js-only')) return;
+
         const sale = aplica(campo);
         // Un campo con error se queda a la vista aunque no aplique: si no, el
         // mensaje que explica por qué no se guardó la ficha desaparecería con
@@ -51,17 +52,26 @@ export function initTypeFields(): void {
         // un número de temporadas pegado a una película. Se borra sólo al
         // cambiar de tipo a mano, nunca al abrir la ficha, que es donde ese
         // valor puede ser el que ya estaba guardado.
-        if (!sale) {
+        if (!sale && !inicial) {
           campo.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
             input.value = '';
           });
         }
       });
 
-      if (year) {
+      if (year && !inicial) {
         const periodo = aplica(year, 'data-placeholder-types');
         year.placeholder = (periodo ? year.dataset.placeholderOn : year.dataset.placeholderOff) ?? '';
       }
+    };
+
+    pintar(true);
+
+    let anterior = select.value;
+    select.addEventListener('change', () => {
+      if (select.value === anterior) return;
+      anterior = select.value;
+      pintar(false);
     });
   });
 }

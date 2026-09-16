@@ -24,6 +24,7 @@ import {
   watchlistInputSchema, watchlistQuerySchema, watchlistActionSchema,
   episodeInputSchema,
   recommendationQuerySchema, recommendationActionSchema,
+  worksSearchSchema, remoteCoverSchema,
   fieldErrors,
 } from '../../validation/schemas';
 import { attemptLogin } from '../lib/login';
@@ -39,6 +40,7 @@ import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
 import { parseYearRange } from '../lib/year';
 import { variantUrl } from '../lib/images';
+import { searchWorks, fetchCover } from '../lib/openlibrary';
 import * as F from '../lib/form';
 import type { CommentStatus, ContentType, Priority } from '../../types/domain';
 
@@ -904,6 +906,42 @@ adminRoutes.delete('/api/media/portada', async (c) => {
   if (!key) throw badRequest('missing_key', 'Falta la clave');
   await new MediaService(c.get('container')).deleteCover(key, c.get('user')!, { force: true });
   return ok(c, { deleted: true });
+});
+
+/*
+ * Buscar la ficha de una obra fuera y traérsela.
+ *
+ * La consulta la hace **el Worker**, igual que en la biblioteca privada: la CSP
+ * mantiene `connect-src 'self'` y la dirección de quien escribe no llega a un
+ * tercero. Lo que se devuelve son candidatas para elegir, nunca una ficha que
+ * se aplique sola.
+ */
+adminRoutes.post('/api/obras', rateLimit('publicApi'), async (c) => {
+  const parsed = worksSearchSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw badRequest('bad_query', 'Escribe al menos dos letras');
+
+  const results = await searchWorks(parsed.data.q);
+  return ok(c, { results });
+});
+
+/**
+ * Trae la portada que ha devuelto la búsqueda y la guarda en R2.
+ *
+ * Nunca se enlaza la imagen de un tercero desde el HTML: la dirección puede
+ * cambiar, caer o registrar a quien la mira. Se descarga aquí —sólo del dominio
+ * de portadas de Open Library, sin seguir redirecciones y con techo de bytes— y
+ * pasa por el mismo `uploadCover()` que una imagen subida a mano: magic bytes,
+ * rango de dimensiones y clave generada en servidor.
+ */
+adminRoutes.post('/api/obras/portada', rateLimit('upload', { identity: (c) => c.get('user')?.id ?? null }), async (c) => {
+  const parsed = remoteCoverSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw badRequest('bad_url', 'Esa dirección no vale');
+
+  const bytes = await fetchCover(parsed.data.url);
+  if (!bytes) throw badRequest('cover_unavailable', 'No se ha podido traer la portada');
+
+  const result = await new MediaService(c.get('container')).uploadCover(new Blob([bytes]), c.get('user')!);
+  return ok(c, { key: result.key, url: variantUrl(c.env, result.key, 'card') }, 201);
 });
 
 adminRoutes.get('/api/stats/pendientes', async (c) => {

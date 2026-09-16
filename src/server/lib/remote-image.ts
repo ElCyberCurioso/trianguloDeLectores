@@ -93,14 +93,23 @@ export async function fetchRemoteImage(
        * Sin seguir saltos. Un redirect es la forma clásica de convertir una URL
        * permitida en una petición a donde no se debe: las guardas de arriba se
        * aplican a lo que se escribe, no a donde acabe llevando.
+       *
+       * `'manual'` y no `'error'`: workerd **rechaza** `redirect: 'error'` con
+       * un `TypeError` y dice que no piensa implementarlo. Como el fallo caía
+       * dentro del `catch` de aquí abajo, la descarga devolvía siempre
+       * «no se ha podido» y nadie se enteraba. Con `'manual'` la respuesta 3xx
+       * llega tal cual y se rechaza abajo, a mano.
        */
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {
     return { ok: false, error: 'fetch_failed' };
   }
 
+  // El salto no se sigue: se descarta. Es la misma decisión que antes, sólo que
+  // tomada aquí en vez de delegada en el runtime.
+  if (response.status >= 300 && response.status < 400) return { ok: false, error: 'fetch_failed' };
   if (!response.ok) return { ok: false, error: 'fetch_failed' };
 
   // `Content-Length` es un dato del servidor remoto: sirve para cortar pronto,

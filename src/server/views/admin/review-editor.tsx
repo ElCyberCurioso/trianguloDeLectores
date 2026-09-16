@@ -6,7 +6,7 @@ import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_SCORE_HALF, SERIAL_CONTENT_TYPES, VOLUME_CONTENT_TYPES,
+  MAX_SCORE_HALF, OPENLIBRARY_CONTENT_TYPES, SERIAL_CONTENT_TYPES, VOLUME_CONTENT_TYPES,
   formatScore, formatAverageScore, hasVolumes, isSerial,
 } from '../../../types/domain';
 import { computeEpisodeStats } from '../../lib/episode-stats';
@@ -46,6 +46,7 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
   const serial = isSerial(contentType);
   const porTomos = hasVolumes(contentType);
   const serialTypes = SERIAL_CONTENT_TYPES.join(' ');
+  const openLibraryTypes = OPENLIBRARY_CONTENT_TYPES.join(' ');
   const volumeTypes = VOLUME_CONTENT_TYPES.join(' ');
 
   return (
@@ -85,6 +86,48 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
 
         <div class="editor__grid">
           <div class="editor__main">
+            {/*
+              Buscar la ficha fuera en vez de teclear veinticinco campos.
+              
+              Nace tapado y lo destapa la isla (`data-js-only`): sin JavaScript
+              un buscador que no busca sólo estorba, y el formulario entero
+              funciona igual escribiéndolo a mano. Sólo sale en lo que Open
+              Library sabe buscar —obra publicada—, por la misma lista cerrada
+              del dominio que usan los demás campos por tipo.
+            */}
+            <div
+              class="lookup"
+              data-lookup
+              data-types-only={openLibraryTypes}
+              data-js-only
+              hidden
+            >
+              <p class="lookup__label">Buscar la ficha</p>
+              <div class="lookup__bar">
+                {/* Sin `name`: este campo no se envía con la reseña, sólo sirve
+                    para preguntar fuera. */}
+                <input
+                  class="input"
+                  type="search"
+                  data-lookup-input
+                  placeholder="Título de la obra"
+                  maxlength={120}
+                  aria-label="Buscar la ficha de la obra"
+                />
+                <button class="btn btn--ghost" type="button" data-lookup-go>
+                  <Icon name="search" size={14} />
+                  <span>Buscar</span>
+                </button>
+              </div>
+              <p class="lookup__hint">
+                La consulta la hace el servidor, no tu navegador. Lo que salga es una sugerencia: se rellena al
+                elegirla y todo sigue siendo editable.
+              </p>
+              {/* El hueco de resultados está reservado de antemano para que
+                  aparecer no empuje el formulario hacia abajo. */}
+              <div class="lookup__results" data-lookup-results aria-live="polite" />
+            </div>
+
             <Field label="Título en español" name="titleEs" required error={errors.titleEs}>
               <input
                 id="f-titleEs"

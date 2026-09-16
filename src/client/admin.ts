@@ -6,6 +6,7 @@
 
 import { initCoverUploader } from './cover-uploader';
 import { initTypeFields } from './type-fields';
+import { initLookup } from './lookup';
 
 function toast(message: string, kind: 'ok' | 'error' | 'info' = 'info'): void {
   const host = document.getElementById('toasts');
@@ -287,6 +288,7 @@ function boot(): void {
   initSlugHelper();
   initPendingBadge();
   initTypeFields();
+  initLookup(toast);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

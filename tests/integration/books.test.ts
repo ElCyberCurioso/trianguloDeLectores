@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { env, SELF } from 'cloudflare:test';
+import { env, SELF, fetchMock } from 'cloudflare:test';
 import {
   ORIGIN, BOOKS_ORIGIN, ADMIN_EMAIL, ADMIN_PASSWORD, loginAsBooks, booksHeaders,
   pdfBytes, pngBytes, resetAdminRateLimit, type AdminSession,
@@ -443,6 +443,42 @@ describe('biblioteca física', () => {
   it('un libro sin ISBN se guarda igual', async () => {
     const response = await createBook({ title: 'Cuaderno sin ISBN' });
     expect(response.status).toBe(303);
+  });
+
+  it('la portada de Open Library la baja el servidor y acaba en R2', async () => {
+    /*
+     * Esto estuvo roto desde el primer día y no se notaba.
+     *
+     * La descarga pedía `redirect: 'error'`, que workerd rechaza con un
+     * TypeError diciendo que no lo va a implementar. El fallo caía en el
+     * `catch` de `fetchCover()`, que devuelve `null`, así que el libro se
+     * guardaba **sin portada y sin avisar**. La prueba que faltaba era ésta:
+     * no que la ruta responda 303, sino que la imagen esté.
+     */
+    fetchMock.activate();
+    fetchMock.disableNetConnect();
+    fetchMock
+      .get('https://covers.openlibrary.org')
+      .intercept({ path: '/b/id/777-L.jpg' })
+      // Cuerpo ASCII a propósito: la respuesta simulada viaja como texto y se
+      // codifica en UTF-8, así que una firma con bytes altos llegaría rota.
+      .reply(200, `RIFF\u0000\u0010\u0000\u0000WEBPXXXX${'x'.repeat(240)}`, {
+        headers: { 'Content-Type': 'image/webp' },
+      });
+
+    const response = await createBook({
+      title: 'Libro con portada de fuera',
+      coverUrl: 'https://covers.openlibrary.org/b/id/777-L.jpg',
+    });
+    expect(response.status).toBe(303);
+
+    const row = await env.DB.prepare('SELECT cover_key FROM library_books WHERE title = ?')
+      .bind('Libro con portada de fuera')
+      .first<{ cover_key: string | null }>();
+    expect(row?.cover_key).toMatch(/^books\/covers\//);
+
+    const guardada = await env.MEDIA.get(row!.cover_key!);
+    expect(guardada).not.toBeNull();
   });
 });
 

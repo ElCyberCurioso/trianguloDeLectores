@@ -17,9 +17,23 @@ import type { Bindings } from '../../src/types/env';
  */
 const env = { IMAGE_RESIZING: 'false', SITE_URL: 'https://example.test' } as unknown as Bindings;
 
-/** Cada bloque que depende del tipo, con su atributo `hidden` si lo lleva. */
+/**
+ * Cada bloque que depende del tipo, con su atributo `hidden` si lo lleva.
+ *
+ * Se dejan fuera los `data-js-only` —hoy, el buscador de fichas—: ésos nacen
+ * siempre tapados pase lo que pase con el tipo, porque sin JavaScript no hacen
+ * nada, y contarlos aquí mezclaría dos reglas distintas. Tienen su propia
+ * prueba más abajo.
+ */
 function marcas(html: string): string[] {
-  return [...html.matchAll(/<[a-z]+[^>]*data-types-only[^>]*>/g)].map((m) => m[0]);
+  return [...html.matchAll(/<[a-z]+[^>]*data-types-only[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((etiqueta) => !etiqueta.includes('data-js-only'));
+}
+
+/** El bloque del buscador de fichas, que va por su cuenta. */
+function buscador(html: string): string | undefined {
+  return [...html.matchAll(/<[a-z]+[^>]*data-js-only[^>]*>/g)].map((m) => m[0])[0];
 }
 
 /** El bloque cuya lista de tipos es exactamente ésta. */
@@ -142,6 +156,17 @@ describe('ReviewEditorPage — campos por tipo', () => {
     const bloques = marcas(renderResena('MOVIE'));
     expect(bloques).toHaveLength(5);
     expect(bloques.every((b) => b.includes('hidden'))).toBe(true);
+  });
+
+  it('el buscador de fichas nace tapado y sólo declara los tipos que Open Library cubre', () => {
+    for (const contentType of ['BOOK', 'NOVEL', 'COMIC', 'MANGA', 'MOVIE', null] as const) {
+      const bloque = buscador(renderResena(contentType));
+      expect(bloque, String(contentType)).toBeDefined();
+      // Siempre tapado en el servidor: lo destapa la isla, y sólo si aplica.
+      // Sin JavaScript, un buscador que no busca sólo estorba.
+      expect(bloque, String(contentType)).toContain('hidden');
+      expect(bloque, String(contentType)).toContain('data-types-only="BOOK NOVEL COMIC MANGA"');
+    }
   });
 
   it('un error deja el campo a la vista aunque el tipo no aplique', () => {

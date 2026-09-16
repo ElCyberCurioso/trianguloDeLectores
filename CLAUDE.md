@@ -274,6 +274,15 @@ otra.
   en `lib/remote-image.ts`: sólo http/https, puertos 80 y 443, sin direcciones
   privadas ni de metadatos, sin IPv6 literal, **sin seguir redirecciones** y con
   techo real de bytes leídos. No relajes ninguna sin sustituirla por otra cosa.
+- **«Sin seguir redirecciones» se escribe `redirect: 'manual'` y se comprueba a
+  mano.** `redirect: 'error'` **no existe en workerd**: lanza un `TypeError`
+  diciendo que no lo van a implementar. Como las dos descargas que lo usaban
+  —`remote-image.ts` y `fetchCover()` de Open Library— tienen un `catch` que
+  devuelve «no se ha podido», el fallo se tradujo en que **ninguna portada de
+  Open Library se descargó nunca**, ni en la biblioteca ni en el móvil, y el
+  libro se guardaba sin ella sin decir nada. Ahora se pide `'manual'` y la 3xx
+  se descarta en el código, que es la misma decisión tomada donde se ve. Hay
+  test de regresión en `tests/integration/obras.test.ts` y en `books.test.ts`.
 - **Los metadatos por ISBN los consulta el Worker**, no el navegador: la CSP
   mantiene `connect-src 'self'` y la IP de quien usa la aplicación no llega a
   Open Library. La portada también la descarga el servidor y la guarda en R2,
@@ -304,6 +313,33 @@ otra.
 - **El backup diario cuelga del cron que ya había** (`0 4 * * *`). Vuelca los
   registros —no los ficheros— a `backups/library/<fecha>.json.gz` con
   `CompressionStream`, y conserva 30 días.
+
+## Reglas del buscador de fichas
+
+- **La consulta la hace el Worker, nunca el navegador** (`lib/openlibrary.ts`,
+  `POST /admin/api/obras`). Es la misma excepción que ya se aceptó para la
+  biblioteca privada: un tercero en la operación, no en el navegador de quien
+  escribe. La CSP sigue con `connect-src 'self'` y no hay que tocarla.
+- **Lo que llega de fuera es una sugerencia, no una decisión.** Se ofrecen hasta
+  cinco candidatas y no se aplica nada hasta que se pulsa una; después todos los
+  campos siguen siendo editables. Al rellenar **no se pisa lo ya escrito**: sólo
+  entra donde el campo está vacío.
+- **La portada se guarda, nunca se enlaza.** Igual que en la biblioteca: la baja
+  el servidor desde el dominio de portadas de Open Library y pasa por el mismo
+  `MediaService.uploadCover()` que una imagen subida a mano —magic bytes, rango
+  de dimensiones y clave generada en servidor—. Enlazar la de un tercero dejaría
+  la reseña a merced de que la cambien, la borren o registren a quien la mira.
+- **El buscador sólo sale en lo que Open Library sabe buscar**
+  (`OPENLIBRARY_CONTENT_TYPES`: libro, novela, cómic y manga). De una película o
+  un videojuego no tiene ficha, y ofrecerlo ahí sería prometer una búsqueda que
+  siempre vuelve vacía.
+- **Nace tapado y lo destapa la isla** (`data-js-only`). Sin JavaScript un
+  buscador que no busca sólo estorba, y el formulario entero se rellena a mano
+  igual que antes. Es la única marca que `initTypeFields()` mira en la primera
+  pasada: el resto de campos por tipo se quedan como los pintó el servidor.
+- **Su campo no lleva `name` y su Intro se intercepta.** Vive dentro del
+  formulario de la reseña: con `name` se enviaría con ella, y sin interceptar el
+  Intro el navegador enviaría la reseña a medio escribir.
 
 ## Reglas del año y de las temporadas
 

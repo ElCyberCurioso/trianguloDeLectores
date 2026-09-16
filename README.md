@@ -1221,6 +1221,26 @@ Para activar la purga programada, añade en `wrangler.jsonc` del entorno corresp
 
 ---
 
+## 15f. Buscar la ficha de una obra
+
+Escribir una reseña son unos veinticinco campos. En libros, novelas, cómics y
+manga el editor ofrece un buscador que los rellena: se escribe el título, el
+**Worker** consulta Open Library —nunca el navegador: la CSP mantiene
+`connect-src 'self'` y la dirección de quien escribe no llega a un tercero— y
+devuelve hasta cinco candidatas con autor y año.
+
+Al elegir una se rellenan título, año y autor **sólo donde el campo está
+vacío**: lo escrito a mano manda. La portada la descarga el servidor del dominio
+de portadas de Open Library y la guarda en R2 con la misma validación que una
+imagen subida a mano; nunca se enlaza la imagen de un tercero.
+
+El bloque nace oculto y lo destapa la isla de cliente, así que sin JavaScript no
+estorba: la ficha se rellena a mano como siempre. Y no aparece en películas,
+series, anime ni videojuegos, que es contenido del que Open Library no tiene
+ficha.
+
+---
+
 ## 16b. Copias de seguridad
 
 Dos volcados distintos, los dos en el mismo cron de las 4:00 y los dos con 30

@@ -241,3 +241,41 @@ test('la reseña se puede despublicar y desaparece del catálogo', async ({ page
   await expect(page.getByRole('heading', { name: TITULO })).toHaveCount(0);
   expect(reviewId).toMatch(/[0-9a-f-]{36}/);
 });
+
+/**
+ * El buscador de fichas del editor de reseñas.
+ *
+ * No se prueba la búsqueda de verdad: la consulta la hace el Worker contra Open
+ * Library y un test no debe depender de que un tercero esté en pie. Lo que sí
+ * se prueba es lo que se rompe en silencio: que el bloque sólo salga donde
+ * aplica, y que el Intro dentro de su campo no envíe la reseña a medio escribir
+ * —el campo vive dentro del formulario y el navegador hace lo que hace—.
+ */
+test('el buscador de fichas sale donde aplica y su Intro no envía la reseña', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/resenas/nueva');
+
+  const buscador = page.locator('[data-lookup]');
+  const tipo = page.locator('#f-contentType');
+
+  // Arranca en «Libro», que es lo primero de la lista y algo que Open Library
+  // sabe buscar: la isla lo destapa al cargar.
+  await expect(tipo).toHaveValue('BOOK');
+  await expect(buscador).toBeVisible();
+
+  await tipo.selectOption('MOVIE');
+  await expect(buscador).toBeHidden();
+
+  await tipo.selectOption('MANGA');
+  await expect(buscador).toBeVisible();
+
+  // El Intro se queda dentro del buscador: seguimos en el alta, no en la ficha
+  // recién creada ni en una página de error de validación.
+  const titulo = `Sin enviar ${Date.now()}`;
+  await page.locator('#f-titleEs').fill(titulo);
+  await page.locator('[data-lookup-input]').fill('lo que sea');
+  await page.locator('[data-lookup-input]').press('Enter');
+
+  await expect(page).toHaveURL(/\/admin\/resenas\/nueva$/);
+  await expect(page.locator('#f-titleEs')).toHaveValue(titulo);
+});

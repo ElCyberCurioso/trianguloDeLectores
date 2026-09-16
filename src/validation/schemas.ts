@@ -470,6 +470,27 @@ export const isbnSchema = z.object({
   isbn: z.string().trim().max(20).regex(/^[\d\sXx-]+$/, 'Un ISBN sólo lleva dígitos, guiones y una X final'),
 });
 
+/**
+ * Búsqueda de una ficha por título en una fuente externa.
+ *
+ * Esquema cerrado como todo lo demás: lo que viaja es un texto corto, y el
+ * servidor lo mete en un parámetro de query, nunca en una ruta.
+ */
+export const worksSearchSchema = z.object({
+  q: z.string().trim().min(2, 'Escribe al menos dos letras').max(120),
+});
+
+/**
+ * Importar una portada desde una dirección que ha devuelto la propia búsqueda.
+ *
+ * Se valida que sea una URL http/https antes de tocarla, pero la comprobación
+ * que de verdad cierra el paso es la de dominio (`isOpenLibraryCoverUrl`), en
+ * el servidor: sin ella, este campo sería una petición a donde el cliente diga.
+ */
+export const remoteCoverSchema = z.object({
+  url: httpUrl(500),
+});
+
 export const LIBRARY_STATUSES = ['OWNED', 'READING', 'READ', 'LENT', 'WISHLIST'] as const;
 
 export const libraryBookSchema = z.object({

@@ -134,6 +134,84 @@ export async function lookupIsbn(rawIsbn: string): Promise<BookDraft | null> {
   };
 }
 
+/** Una obra encontrada por título, para elegir entre varias. */
+export interface WorkCandidate {
+  title: string;
+  authors: string | null;
+  year: number | null;
+  /** URL de la portada en Open Library, para que la descargue el servidor. */
+  coverUrl: string | null;
+  /** El primer ISBN conocido, si lo hay. Sólo informativo. */
+  isbn13: string | null;
+}
+
+interface SearchDoc {
+  title?: unknown;
+  author_name?: unknown;
+  first_publish_year?: unknown;
+  cover_i?: unknown;
+  isbn?: unknown;
+}
+
+/** Cuántas se ofrecen. Cinco caben en pantalla y se eligen de un vistazo. */
+const MAX_CANDIDATES = 5;
+
+/**
+ * Busca obras por título.
+ *
+ * Es la otra mitad de `lookupIsbn()`: quien reseña un libro casi nunca tiene el
+ * ISBN a mano —lo leyó hace meses, o es prestado—, pero el título sí. Devuelve
+ * candidatas para elegir, nunca una ficha que se aplique sola: lo que llega de
+ * fuera es una sugerencia y la decisión es de quien escribe.
+ *
+ * `fields` acota lo que pide: sin él, Open Library devuelve fichas enormes con
+ * decenas de campos que aquí no se miran y que hay que descargar igual.
+ */
+export async function searchWorks(query: string): Promise<WorkCandidate[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const url = new URL(`${ORIGIN}/search.json`);
+  url.searchParams.set('q', q);
+  url.searchParams.set('limit', String(MAX_CANDIDATES));
+  url.searchParams.set('fields', 'title,author_name,first_publish_year,cover_i,isbn');
+
+  const payload = await getJson(url.toString());
+  const docs = (payload as { docs?: unknown } | null)?.docs;
+  if (!Array.isArray(docs)) return [];
+
+  return docs
+    .slice(0, MAX_CANDIDATES)
+    .map((raw) => toCandidate(raw as SearchDoc))
+    .filter((candidate): candidate is WorkCandidate => candidate !== null);
+}
+
+function toCandidate(doc: SearchDoc): WorkCandidate | null {
+  const title = str(doc.title);
+  if (!title) return null;
+
+  const authors = Array.isArray(doc.author_name)
+    ? doc.author_name
+        .map(str)
+        .filter((name): name is string => Boolean(name))
+        .slice(0, 3)
+        .join(', ')
+    : null;
+
+  // `cover_i` es el identificador de portada del buscador; se compone igual que
+  // el de una edición, así que la descarga pasa por la misma comprobación de
+  // dominio que todo lo demás.
+  const coverId = typeof doc.cover_i === 'number' && Number.isInteger(doc.cover_i) ? doc.cover_i : null;
+
+  return {
+    title,
+    authors: authors && authors.length ? authors : null,
+    year: typeof doc.first_publish_year === 'number' ? doc.first_publish_year : null,
+    coverUrl: coverId ? `${COVERS_ORIGIN}/b/id/${coverId}-L.jpg` : null,
+    isbn13: Array.isArray(doc.isbn) ? (doc.isbn.map(str).find((v) => v?.length === 13) ?? null) : null,
+  };
+}
+
 /** Sólo se descargan portadas del dominio de portadas de Open Library. */
 export function isOpenLibraryCoverUrl(url: string): boolean {
   try {
@@ -149,11 +227,21 @@ export async function fetchCover(url: string): Promise<Uint8Array | null> {
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT },
-      // Sin seguir saltos a otro sitio: un redirect es la vía clásica para
-      // convertir una descarga permitida en una petición a la red interna.
-      redirect: 'error',
+      /*
+       * Sin seguir saltos a otro sitio: un redirect es la vía clásica para
+       * convertir una descarga permitida en una petición a la red interna.
+       *
+       * `'manual'` y no `'error'`: workerd rechaza `redirect: 'error'` con un
+       * `TypeError` y dice que no lo va a implementar. Como aquí abajo hay un
+       * `catch` que devuelve `null`, esto hacía que **ninguna portada de Open
+       * Library se descargara nunca** —ni en la biblioteca ni en el móvil—, y
+       * el libro se guardaba sin ella sin decir nada.
+       */
+      redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    // El salto se descarta a mano, que es lo que antes se creía delegado.
+    if (response.status >= 300 && response.status < 400) return null;
     if (!response.ok) return null;
     return new Uint8Array(await response.arrayBuffer());
   } catch {

@@ -1805,6 +1805,36 @@ p { margin: 0 0 var(--space-3); }
 .backup__day { font-family: var(--font-heading); font-weight: 800; font-variant-numeric: tabular-nums; }
 .backup__size { flex: 1; font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
+/* -------------------------------------------- buscar la ficha de la obra -- */
+/* Nace tapado y lo destapa la isla: sin JavaScript no busca nada. La regla
+   explícita hace falta porque el bloque tiene su propio `display`. */
+.lookup[hidden] { display: none; }
+.lookup {
+  display: grid; gap: var(--space-2);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-rule);
+}
+.lookup__label { margin: 0; font-size: 12px; font-weight: 600; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.lookup__bar { display: flex; gap: var(--space-2); align-items: stretch; }
+.lookup__bar .input { flex: 1; min-width: 0; }
+.lookup__hint { margin: 0; font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+/* El hueco se reserva de antemano: los resultados llegan por JavaScript y sin
+   esto empujarían el formulario hacia abajo al aparecer. */
+.lookup__results { min-height: 44px; }
+.lookup__list { list-style: none; margin: 0; padding: 0; }
+.lookup__hit {
+  display: grid; gap: 2px; width: 100%;
+  padding: var(--space-2) 0;
+  border: 0; border-bottom: 1px solid var(--color-rule);
+  background: none; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.lookup__hit:hover, .lookup__hit:focus-visible { background: var(--color-surface); }
+.lookup__hit-title { font-weight: 600; }
+.lookup__hit-meta { font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.lookup__empty { margin: 0; padding-top: var(--space-2); font-size: 13px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+
 /* ------------------------------------------------- dispositivos móviles -- */
 .devicelist { list-style: none; margin: var(--space-6) 0 0; padding: 0; }
 .device {

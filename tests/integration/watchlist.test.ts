@@ -297,6 +297,50 @@ describe('conversión en reseña', () => {
     expect(item!.review_id).toBe(reviewId);
   });
 
+  it('la conversión arrastra la portada, el periodo y la ficha entera', async () => {
+    /*
+     * Es el camino más barato que hay para publicar: la cola tiene ciento y
+     * pico fichas con título, tipo, año y portada ya puestos. Si la conversión
+     * deja algo por el camino hay que volver a teclearlo, y entonces deja de
+     * ser un atajo. Por eso se comprueba campo a campo y no sólo que responda.
+     */
+    const clave = `reviews/covers/2026/cd/${crypto.randomUUID()}.jpg`;
+    const id = await crearPendiente({
+      titleEs: 'Serie con periodo abierto',
+      titleOriginal: 'Series With An Open Period',
+      contentType: 'SERIES',
+      categoryId: CATEGORY_ID,
+      year: '2020-actualidad',
+      seasons: '3',
+      creator: 'Quien sea',
+      priority: 'HIGH',
+      status: 'PENDING',
+      isPublic: '1',
+    });
+    await env.DB.prepare('UPDATE watchlist_items SET cover_key = ?, cover_alt = ? WHERE id = ?')
+      .bind(clave, 'Portada de la serie', id)
+      .run();
+
+    const response = await adminPost(`/admin/pendientes/${id}/accion`, { action: 'convert' });
+    expect(response.status).toBe(303);
+    const reviewId = /\/admin\/resenas\/([0-9a-f-]{36})/.exec(response.headers.get('Location') ?? '')![1];
+
+    const review = await env.DB.prepare('SELECT * FROM reviews WHERE id = ?').bind(reviewId)
+      .first<Record<string, unknown>>();
+
+    expect(review!.title_original).toBe('Series With An Open Period');
+    expect(review!.category_id).toBe(CATEGORY_ID);
+    expect(review!.seasons).toBe(3);
+    // El periodo entero, no sólo el año de inicio: «2020-actualidad» son tres
+    // columnas y perder la tercera convertiría una serie en emisión en un año
+    // suelto de 2020.
+    expect(review!.year).toBe(2020);
+    expect(review!.year_ongoing).toBe(1);
+    // Y la portada, que es lo que más cuesta volver a conseguir.
+    expect(review!.cover_key).toBe(clave);
+    expect(review!.cover_alt).toBe('Portada de la serie');
+  });
+
   it('escapa la nota al pasarla al cuerpo de la reseña', async () => {
     const id = await crearPendiente({ titleEs: 'Nota con XSS' });
     await adminPost(`/admin/pendientes/${id}`, {
