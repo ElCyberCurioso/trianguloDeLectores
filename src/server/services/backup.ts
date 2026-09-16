@@ -133,7 +133,18 @@ export interface PublicBackupResult {
  *
  * Igual que la de la biblioteca: JSON con gzip, legible con `zcat`, sin
  * herramientas especiales para volver a meterlo.
+ *
+ * **Sólo se programa en producción** (`copiaDelSitioProcede`). Lo de staging es
+ * un banco de pruebas que se siembra y se tira: guardarlo cada día gastaría
+ * cuota de R2 y llenaría el bucket de volcados que nadie va a restaurar. La
+ * función en sí no mira el entorno —el botón «Hacer una copia ahora» del panel
+ * la usa donde sea, y en staging es justo donde conviene poder probarla—; quien
+ * decide es el cron.
  */
+export function copiaDelSitioProcede(env: Pick<Bindings, 'ENVIRONMENT'>): boolean {
+  return env.ENVIRONMENT === 'production';
+}
+
 export async function runPublicBackup(env: Bindings, requestId: string): Promise<PublicBackupResult> {
   const container = createContainer(env, requestId);
   const now = new Date();

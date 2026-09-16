@@ -1258,13 +1258,19 @@ ficha.
 Dos volcados distintos, los dos en el mismo cron de las 4:00 y los dos con 30
 días de retención:
 
-| Qué | Dónde | Se ve en |
-|---|---|---|
-| Sitio público: reseñas, episodios, comentarios, reportes, pendientes, taxonomías, recomendaciones y ajustes | `backups/public/<fecha>.json.gz` | `/admin/copias` |
-| Biblioteca privada: fichas de libros y de PDF, progreso, anotaciones y marcadores | `backups/library/<fecha>.json.gz` | `books.<dominio>/copias` |
+| Qué | Dónde | Se ve en | Se programa en |
+|---|---|---|---|
+| Sitio público: reseñas, episodios, comentarios, reportes, pendientes, taxonomías, recomendaciones y ajustes | `backups/public/<fecha>.json.gz` | `/admin/copias` | **sólo producción** |
+| Biblioteca privada: fichas de libros y de PDF, progreso, anotaciones y marcadores | `backups/library/<fecha>.json.gz` | `books.<dominio>/copias` | staging y producción |
 
 Son dos y no uno porque son dos aplicaciones con datos distintos, y quien
 restaura una casi nunca quiere restaurar la otra.
+
+La del sitio público **no se programa en staging**: ahí los datos son un banco
+de pruebas que se siembra y se tira, y un volcado diario suyo gastaría cuota de
+R2 y llenaría el bucket de ficheros que nadie va a restaurar. El botón «Hacer
+una copia ahora» del panel sigue funcionando en todos los entornos, que es lo
+que permite probarla fuera de producción.
 
 **Qué no entra en la copia del sitio, y por qué:**
 

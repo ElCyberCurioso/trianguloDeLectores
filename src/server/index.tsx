@@ -15,7 +15,7 @@ import { Logger } from './lib/logger';
 import { createContainer } from './services/container';
 import { purgeExpiredSessions } from './lib/auth';
 import { isBooksRequest } from './lib/books';
-import { runLibraryBackup, runPublicBackup } from './services/backup';
+import { runLibraryBackup, runPublicBackup, copiaDelSitioProcede } from './services/backup';
 import { rateLimit } from './middleware/ratelimit';
 
 const app = new Hono<AppEnv>();
@@ -265,14 +265,25 @@ export default {
           // porque son datos distintos y quien restaura una casi nunca quiere
           // restaurar la otra.
           const backup = await runLibraryBackup(env, `cron-${crypto.randomUUID()}`);
-          const publico = await runPublicBackup(env, `cron-${crypto.randomUUID()}`);
+
+          /*
+           * La copia del sitio público, sólo en producción.
+           *
+           * Staging es un banco de pruebas que se siembra y se tira: un volcado
+           * diario suyo gasta cuota de R2 y llena el bucket de ficheros que
+           * nadie va a restaurar. La higiene de arriba sí corre en los dos,
+           * porque ahí lo que se prueba es que funcione.
+           */
+          const publico = copiaDelSitioProcede(env)
+            ? await runPublicBackup(env, `cron-${crypto.randomUUID()}`)
+            : null;
 
           container.log.info('cron_maintenance_ok', {
             retention,
             backup: backup.key,
             backupBytes: backup.bytes,
-            publicBackup: publico.key,
-            publicBackupBytes: publico.bytes,
+            publicBackup: publico?.key ?? 'omitida (sólo en producción)',
+            publicBackupBytes: publico?.bytes ?? 0,
           });
         } catch (error) {
           container.log.error('cron_maintenance_failed', {

@@ -314,6 +314,29 @@ otra.
   registros —no los ficheros— a `backups/library/<fecha>.json.gz` con
   `CompressionStream`, y conserva 30 días.
 
+## Reglas de las copias de seguridad
+
+- **Hay dos volcados y son cosas distintas**: el del sitio público
+  (`backups/public/`) y el de la biblioteca privada (`backups/library/`). Quien
+  restaura uno casi nunca quiere restaurar el otro, y el recorte por retención
+  mira el prefijo, así que mezclarlos ataría el borrado de uno al calendario del
+  otro.
+- **Se copian registros, nunca ficheros.** Ni portadas ni PDF: ya viven en R2,
+  que es el mismo sitio donde iría la copia, y duplicarlos gastaría cuota sin
+  proteger de lo que de verdad se pierde, que es la base de datos.
+- **Fuera de la copia del sitio, a propósito**: `users` y `sessions` —la tabla
+  de usuarios lleva los hash de contraseña, y una copia en R2 es un sitio más
+  donde acaban; restaurar es rehacer la cuenta con `npm run admin:create`— y
+  `audit_log`, que tiene retención propia y se purga por política de privacidad:
+  copiarlo cada día resucitaría lo que esa política borra.
+- **La del sitio público se programa sólo en producción**
+  (`copiaDelSitioProcede`). Staging se siembra y se tira. El criterio es lista
+  blanca y no negra: un entorno nuevo no hereda la copia por descuido, y un
+  nombre mal escrito hace que no se copie, no que se copie donde no debe.
+- **El disparo manual no mira el entorno.** El botón «Hacer una copia ahora»
+  funciona en todos, que es justo lo que permite probarla fuera de producción.
+  Quien decide por calendario es el cron, no la función.
+
 ## Reglas del buscador de fichas
 
 - **La consulta la hace el Worker, nunca el navegador** (`lib/openlibrary.ts`,
