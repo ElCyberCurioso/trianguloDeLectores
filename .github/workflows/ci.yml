@@ -1,10 +1,21 @@
+# El despliegue automático corre con `master`, que es la rama de este
+# repositorio. Estuvo escrito `main` —el nombre por omisión de GitHub— desde el
+# principio, así que este workflow **no se ejecutó nunca**: producción se
+# desplegaba a mano y nadie veía que el CI no hacía nada.
+#
+# Necesita cuatro secretos en el repositorio; sin ellos los jobs de despliegue
+# fallan y el de calidad pasa igual:
+#   CLOUDFLARE_API_TOKEN   token con permiso de editar Workers, D1 y R2
+#   CLOUDFLARE_ACCOUNT_ID  identificador de la cuenta
+#   E2E_ADMIN_EMAIL        cuenta de pruebas contra staging
+#   E2E_ADMIN_PASSWORD
 name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 # Un despliegue a la vez: evita carreras entre dos merges seguidos.
@@ -57,7 +68,7 @@ jobs:
   deploy-staging:
     name: Desplegar en staging
     needs: quality
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -123,7 +134,7 @@ jobs:
   deploy-production:
     name: Desplegar en producción
     needs: e2e
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Requiere aprobación manual si el entorno de GitHub tiene revisores.

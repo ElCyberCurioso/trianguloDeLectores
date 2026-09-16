@@ -756,6 +756,19 @@ que cuestan media hora cada vez que se olvidan.
 
 ### De los despliegues
 
+- **El CI despliega con `master`, no con `main`.** Estuvo escrito `main` desde el
+  principio y en este repositorio esa rama no existe, así que
+  `.github/workflows/ci.yml` **no se ejecutó nunca**: producción se desplegaba a
+  mano y el semáforo no significaba nada. Si algún día se renombra la rama, hay
+  que tocar los dos workflows.
+- **Sin secretos en GitHub, el CI compila pero no despliega.** Hacen falta
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `E2E_ADMIN_EMAIL` y
+  `E2E_ADMIN_PASSWORD`. El job de calidad pasa sin ellos; los de despliegue y
+  E2E, no.
+- **Que algo esté commiteado no quiere decir que esté desplegado.** Lo que corre
+  en producción se comprueba con `npx wrangler deployments list --env
+  production`, nunca leyendo el historial de git.
+
 - **Antes de migrar, copia de seguridad de las dos bases**: `npx wrangler d1
   export DB --env production --remote --output backup-prod-<fecha>-antes-<mig>.sql`.
   El patrón `backup-prod-*.sql` ya está en `.gitignore`.
