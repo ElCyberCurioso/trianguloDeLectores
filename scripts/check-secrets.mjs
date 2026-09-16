@@ -4,7 +4,11 @@
  * Se ejecuta en CI antes de cualquier despliegue.
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import { join, extname } from 'node:path';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.wrangler', 'dist', 'coverage', 'test-results', 'playwright-report',
@@ -37,9 +41,45 @@ const ALLOWLIST = [
   /REPLACE_WITH_/,
   /\$\{\{\s*secrets\./,
   /process\.env\./,
+  /**
+   * Excepción explícita, escrita al lado del valor.
+   *
+   * Es la única forma de silenciar un hallazgo, y a propósito: obliga a
+   * escribirlo en la misma línea, donde se ve al revisar, en vez de en una
+   * lista aparte que nadie vuelve a mirar. Antes esto no existía y un token
+   * inventado de un test dejaba el chequeo en rojo para siempre, que es peor
+   * que no tenerlo: enseña a ignorarlo.
+   */
+  /NO-ES-UN-SECRETO/,
 ];
 
 let findings = 0;
+
+/**
+ * Lo que git ignora no está en el repositorio, y esto busca secretos **en el
+ * repositorio**.
+ *
+ * Sin esto, los volcados `backup-prod-*.sql` que viven en el directorio de
+ * trabajo —ignorados por git— salían como hallazgo en cada ejecución local. El
+ * chequeo llevaba meses en rojo por eso, y un chequeo que siempre falla no
+ * avisa de nada: enseña a saltárselo.
+ *
+ * La excepción son los `.env`: ésos se ignoran precisamente porque no deben
+ * commitearse, y avisar de lo que llevan dentro antes de que alguien los añada
+ * es justo para lo que sirve esto.
+ */
+async function ignoradoPorGit(path) {
+  if (path.split(/[\\/]/).some((part) => part.startsWith('.env'))) return false;
+  try {
+    await run('git', ['check-ignore', '-q', path]);
+    return true;
+  } catch {
+    // Código 1 es «no está ignorado», y cualquier otro fallo —que no haya git,
+    // que esto no sea un repositorio— deja el fichero dentro. Ante la duda se
+    // mira: es un chequeo de seguridad, y lo caro es el falso negativo.
+    return false;
+  }
+}
 
 async function walk(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -56,6 +96,7 @@ async function walk(dir) {
     const ext = extname(entry.name);
     if (ext && !SCAN_EXT.has(ext) && !entry.name.startsWith('.env')) continue;
     if ((await stat(path)).size > 1_000_000) continue;
+    if (await ignoradoPorGit(path)) continue;
 
     const content = await readFile(path, 'utf8');
     content.split('\n').forEach((line, index) => {

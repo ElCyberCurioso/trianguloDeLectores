@@ -729,11 +729,14 @@ que cuestan media hora cada vez que se olvidan.
   todos `# Cambios pendientes de commitear`. De `9e45c2f` en adelante los
   mensajes sí describen el cambio; para lo anterior, se averigua mirando el
   diff, no leyendo el mensaje.
-- **El chequeo «Sin secretos en el repositorio» del preflight falla siempre**, y
-  por dos motivos que no son este trabajo: los volcados `backup-prod-*.sql` que
-  viven en el directorio —ignorados por git, pero el script mira el disco— y un
-  token falso en `tests/integration/movil.test.ts`. No lo persigas; comprueba que
-  los hallazgos siguen siendo esos tres y sigue.
+- **El chequeo «Sin secretos en el repositorio» ya no falla siempre**, y por eso
+  vuelve a significar algo. Fallaba por dos motivos ajenos al trabajo: los
+  volcados `backup-prod-*.sql` del directorio —ignorados por git, pero el script
+  miraba el disco— y un token inventado en `tests/integration/movil.test.ts`.
+  Ahora salta lo que git ignora, salvo los `.env`, que se miran precisamente
+  porque no deben commitearse; y un hallazgo se silencia escribiendo
+  `NO-ES-UN-SECRETO` **en la misma línea**, donde se ve al revisar. Si vuelve a
+  ponerse rojo, es de verdad: no lo ignores.
 - **Los tests de integración fallan de vez en cuando sin motivo**, con un
   `Unhandled Rejection: fetch failed / ECONNRESET` al cerrar workerd. Ha pasado
   dos veces en corridas completas y en ninguna se reprodujo al repetir. Antes de

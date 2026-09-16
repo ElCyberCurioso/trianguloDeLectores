@@ -124,8 +124,11 @@ describe('guardián de la API del móvil', () => {
   });
 
   it('rechaza un token inventado', async () => {
+    // NO-ES-UN-SECRETO: cadena inventada para comprobar que se rechaza. La marca
+    // es lo que impide que el chequeo de secretos la confunda con una de verdad.
+    const inventado = 'Bearer noExisteEsteTokenDeDispositivo123456'; // NO-ES-UN-SECRETO
     const response = await SELF.fetch(`${BOOKS_ORIGIN}/api/movil/documentos`, {
-      headers: { Authorization: 'Bearer noExisteEsteTokenDeDispositivo123456', Accept: 'application/json' },
+      headers: { Authorization: inventado, Accept: 'application/json' },
     });
     expect(response.status).toBe(401);
   });
