@@ -181,8 +181,22 @@ export function mintFormToken(reviewId: string): Promise<string> {
  * minuto) tiene su propio test; aquí sólo estorbaría.
  */
 export async function resetAdminRateLimit(): Promise<void> {
+  await resetRateLimit('adminWrite');
+}
+
+/**
+ * Vacía el cubo de un límite concreto para el administrador.
+ *
+ * Hace falta porque los ficheros de integración comparten runtime y, con él,
+ * los Durable Objects del limitador: un fichero que gasta el presupuesto de
+ * `upload` hace fallar al siguiente que suba una portada, y el fallo aparece
+ * sólo en la corrida completa —nunca al ejecutar ese fichero solo—, que es la
+ * peor forma de encontrarlo. Quien gaste un cubo que no es el suyo, que lo deje
+ * como estaba.
+ */
+export async function resetRateLimit(scope: string): Promise<void> {
   const identidad = (await pseudonymize(adminId ?? '', env.HASH_PEPPER)) ?? adminId ?? 'anonymous';
-  const stub = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName(`adminWrite:${identidad}`));
+  const stub = env.RATE_LIMITER.get(env.RATE_LIMITER.idFromName(`${scope}:${identidad}`));
   await stub.reset();
 }
 

@@ -329,10 +329,19 @@ otra.
   `MediaService.uploadCover()` que una imagen subida a mano —magic bytes, rango
   de dimensiones y clave generada en servidor—. Enlazar la de un tercero dejaría
   la reseña a merced de que la cambien, la borren o registren a quien la mira.
-- **El buscador sólo sale en lo que Open Library sabe buscar**
-  (`OPENLIBRARY_CONTENT_TYPES`: libro, novela, cómic y manga). De una película o
-  un videojuego no tiene ficha, y ofrecerlo ahí sería prometer una búsqueda que
+- **Qué catálogo se consulta lo decide el tipo de obra, en un solo sitio**
+  (`PROVEEDOR`, en `lib/obras.ts`): obra publicada a Open Library, cine y series
+  a TMDB. El tipo viaja en la petición por la lista cerrada de Zod; el cliente
+  nunca elige proveedor. Lo que no está en ese mapa —videojuego y «Otro»— no
+  tiene buscador, y el bloque se tapa: ofrecerlo sería prometer una búsqueda que
   siempre vuelve vacía.
+- **TMDB pide clave y Open Library no.** `TMDB_API_KEY` es un secreto opcional:
+  sin ella el cliente ni pregunta y devuelve lista vacía, así que un entorno sin
+  clave tiene menos ayuda, no un error. La clave va en la cabecera
+  `Authorization`, nunca en la query, para que no acabe en los logs del
+  proveedor ni en un `Referer`. Y sus condiciones exigen atribución donde se
+  use: está en el pie **del panel**, no en el sitio público, porque es ahí donde
+  se usa.
 - **Nace tapado y lo destapa la isla** (`data-js-only`). Sin JavaScript un
   buscador que no busca sólo estorba, y el formulario entero se rellena a mano
   igual que antes. Es la única marca que `initTypeFields()` mira en la primera

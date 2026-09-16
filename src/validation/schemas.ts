@@ -478,6 +478,9 @@ export const isbnSchema = z.object({
  */
 export const worksSearchSchema = z.object({
   q: z.string().trim().min(2, 'Escribe al menos dos letras').max(120),
+  // El tipo decide a qué catálogo se pregunta, así que entra por la lista
+  // cerrada del dominio: nunca un nombre de proveedor que venga del cliente.
+  type: z.enum(CONTENT_TYPES),
 });
 
 /**

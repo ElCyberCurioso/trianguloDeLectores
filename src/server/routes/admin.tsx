@@ -40,7 +40,7 @@ import { SettingsSchema, type AppSettings } from '../lib/settings';
 import { slugify, uniqueSlug } from '../lib/slug';
 import { parseYearRange } from '../lib/year';
 import { variantUrl } from '../lib/images';
-import { searchWorks, fetchCover } from '../lib/openlibrary';
+import { buscarObras, traerPortada } from '../lib/obras';
 import * as F from '../lib/form';
 import type { CommentStatus, ContentType, Priority } from '../../types/domain';
 
@@ -920,7 +920,7 @@ adminRoutes.post('/api/obras', rateLimit('publicApi'), async (c) => {
   const parsed = worksSearchSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw badRequest('bad_query', 'Escribe al menos dos letras');
 
-  const results = await searchWorks(parsed.data.q);
+  const results = await buscarObras(c.env, parsed.data.q, parsed.data.type);
   return ok(c, { results });
 });
 
@@ -937,7 +937,7 @@ adminRoutes.post('/api/obras/portada', rateLimit('upload', { identity: (c) => c.
   const parsed = remoteCoverSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw badRequest('bad_url', 'Esa dirección no vale');
 
-  const bytes = await fetchCover(parsed.data.url);
+  const bytes = await traerPortada(parsed.data.url);
   if (!bytes) throw badRequest('cover_unavailable', 'No se ha podido traer la portada');
 
   const result = await new MediaService(c.get('container')).uploadCover(new Blob([bytes]), c.get('user')!);

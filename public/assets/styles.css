@@ -1805,6 +1805,12 @@ p { margin: 0 0 var(--space-3); }
 .backup__day { font-family: var(--font-heading); font-weight: 800; font-variant-numeric: tabular-nums; }
 .backup__size { flex: 1; font-size: 12px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
+.site-footer__credit {
+  margin: var(--space-2) 0 0;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
 /* -------------------------------------------- buscar la ficha de la obra -- */
 /* Nace tapado y lo destapa la isla: sin JavaScript no busca nada. La regla
    explícita hace falta porque el bloque tiene su propio `display`. */

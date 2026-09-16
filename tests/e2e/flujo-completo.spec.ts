@@ -263,7 +263,15 @@ test('el buscador de fichas sale donde aplica y su Intro no envía la reseña', 
   await expect(tipo).toHaveValue('BOOK');
   await expect(buscador).toBeVisible();
 
+  // Cine y series también tienen catálogo (TMDB), así que el bloque se queda.
   await tipo.selectOption('MOVIE');
+  await expect(buscador).toBeVisible();
+  await tipo.selectOption('ANIME');
+  await expect(buscador).toBeVisible();
+
+  // Un videojuego no: no hay fuente que valga la pena y ofrecerlo sería
+  // prometer una búsqueda que siempre vuelve vacía.
+  await tipo.selectOption('GAME');
   await expect(buscador).toBeHidden();
 
   await tipo.selectOption('MANGA');

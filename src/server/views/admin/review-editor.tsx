@@ -6,9 +6,10 @@ import type { Category, Genre, Platform } from '../../../db/schema';
 import type { Bindings } from '../../../types/env';
 import {
   CONTENT_TYPES, CONTENT_TYPE_LABELS, AVAILABILITY, AVAILABILITY_LABELS,
-  MAX_SCORE_HALF, OPENLIBRARY_CONTENT_TYPES, SERIAL_CONTENT_TYPES, VOLUME_CONTENT_TYPES,
+  MAX_SCORE_HALF, SERIAL_CONTENT_TYPES, VOLUME_CONTENT_TYPES,
   formatScore, formatAverageScore, hasVolumes, isSerial,
 } from '../../../types/domain';
+import { LOOKUP_CONTENT_TYPES } from '../../lib/obras';
 import { computeEpisodeStats } from '../../lib/episode-stats';
 import { yearRangeToInput } from '../../lib/year';
 import { variantUrl } from '../../lib/images';
@@ -46,7 +47,7 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
   const serial = isSerial(contentType);
   const porTomos = hasVolumes(contentType);
   const serialTypes = SERIAL_CONTENT_TYPES.join(' ');
-  const openLibraryTypes = OPENLIBRARY_CONTENT_TYPES.join(' ');
+  const lookupTypes = LOOKUP_CONTENT_TYPES.join(' ');
   const volumeTypes = VOLUME_CONTENT_TYPES.join(' ');
 
   return (
@@ -98,7 +99,7 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
             <div
               class="lookup"
               data-lookup
-              data-types-only={openLibraryTypes}
+              data-types-only={lookupTypes}
               data-js-only
               hidden
             >
@@ -120,8 +121,9 @@ export const ReviewEditorPage: FC<ReviewEditorProps> = (props) => {
                 </button>
               </div>
               <p class="lookup__hint">
-                La consulta la hace el servidor, no tu navegador. Lo que salga es una sugerencia: se rellena al
-                elegirla y todo sigue siendo editable.
+                La consulta la hace el servidor, no tu navegador: en libros y cómics pregunta a Open Library, y en
+                cine, series y anime a TMDB. Lo que salga es una sugerencia: se rellena al elegirla y todo sigue
+                siendo editable.
               </p>
               {/* El hueco de resultados está reservado de antemano para que
                   aparecer no empuje el formulario hacia abajo. */}

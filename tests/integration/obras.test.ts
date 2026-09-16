@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { env, SELF, fetchMock } from 'cloudflare:test';
-import { ORIGIN, loginAsAdmin, resetAdminRateLimit, type AdminSession } from './helpers';
+import { ORIGIN, loginAsAdmin, resetAdminRateLimit, resetRateLimit, type AdminSession } from './helpers';
 
 let session: AdminSession;
 
@@ -9,12 +9,20 @@ beforeAll(async () => {
   await resetAdminRateLimit();
   // Nada de salir a la red de verdad desde un test: lo que no esté declarado
   // explícitamente abajo falla en vez de llamar a Open Library.
+  await resetRateLimit('upload');
   fetchMock.activate();
   fetchMock.disableNetConnect();
 });
 
 afterEach(() => {
   fetchMock.assertNoPendingInterceptors();
+});
+
+// Traer una portada consume el mismo cubo de `upload` que subir una a mano, y
+// los ficheros comparten runtime: sin esto, el siguiente que suba una imagen se
+// come el 429 y falla sólo en la corrida completa.
+afterAll(async () => {
+  await resetRateLimit('upload');
 });
 
 async function postJson(path: string, body: unknown, conSesion = true): Promise<Response> {
@@ -53,7 +61,7 @@ describe('buscar la ficha de una obra', () => {
       .intercept({ path: (p) => p.startsWith('/search.json') })
       .reply(200, { docs: [{ title: 'Pedro Páramo', author_name: ['Juan Rulfo'], first_publish_year: 1955 }] });
 
-    const response = await postJson('/admin/api/obras', { q: 'pedro paramo' });
+    const response = await postJson('/admin/api/obras', { q: 'pedro paramo', type: 'BOOK' });
     const payload = (await response.json()) as { data: { results: { title: string; year: number }[] } };
 
     expect(response.status).toBe(200);
@@ -62,13 +70,45 @@ describe('buscar la ficha de una obra', () => {
   });
 
   it('exige al menos dos letras', async () => {
-    const response = await postJson('/admin/api/obras', { q: 'a' });
+    const response = await postJson('/admin/api/obras', { q: 'a', type: 'BOOK' });
+    await response.text();
+    expect(response.status).toBe(400);
+  });
+
+  it('el tipo decide a qué catálogo se pregunta', async () => {
+    // Un libro va a Open Library. Si fuera a TMDB, este interceptor quedaría
+    // sin consumir y `assertNoPendingInterceptors` lo cantaría.
+    fetchMock
+      .get('https://openlibrary.org')
+      .intercept({ path: (p) => p.startsWith('/search.json') })
+      .reply(200, { docs: [{ title: 'Un libro' }] });
+    const libro = await postJson('/admin/api/obras', { q: 'un libro', type: 'NOVEL' });
+    await libro.text();
+    expect(libro.status).toBe(200);
+
+    // Una serie va a TMDB. En los tests no hay clave, así que el cliente ni
+    // pregunta y devuelve vacío: sin clave hay menos ayuda, no un error.
+    const serie = await postJson('/admin/api/obras', { q: 'una serie', type: 'ANIME' });
+    const payload = (await serie.json()) as { data: { results: unknown[] } };
+    expect(serie.status).toBe(200);
+    expect(payload.data.results).toEqual([]);
+  });
+
+  it('un tipo sin buscador no rompe: devuelve vacío', async () => {
+    const response = await postJson('/admin/api/obras', { q: 'lo que sea', type: 'GAME' });
+    const payload = (await response.json()) as { data: { results: unknown[] } };
+    expect(response.status).toBe(200);
+    expect(payload.data.results).toEqual([]);
+  });
+
+  it('un tipo inventado se rechaza', async () => {
+    const response = await postJson('/admin/api/obras', { q: 'lo que sea', type: 'PODCAST' });
     await response.text();
     expect(response.status).toBe(400);
   });
 
   it('sin sesión no se busca', async () => {
-    const response = await postJson('/admin/api/obras', { q: 'lo que sea' }, false);
+    const response = await postJson('/admin/api/obras', { q: 'lo que sea', type: 'BOOK' }, false);
     await response.text();
     expect([401, 403]).toContain(response.status);
   });
@@ -101,11 +141,29 @@ describe('traer la portada de la obra', () => {
     expect(fila?.mime).toBe('image/webp');
   });
 
-  it('no baja nada de un dominio que no sea el de las portadas', async () => {
+  it('también baja el póster de TMDB, que es el otro catálogo', async () => {
+    fetchMock
+      .get('https://image.tmdb.org')
+      .intercept({ path: '/t/p/w780/poster.jpg' })
+      .reply(200, WEBP_FALSO, { headers: { 'Content-Type': 'image/webp' } });
+
+    const response = await postJson('/admin/api/obras/portada', {
+      url: 'https://image.tmdb.org/t/p/w780/poster.jpg',
+    });
+    const payload = (await response.json()) as { data: { key: string } };
+    expect(response.status).toBe(201);
+    expect(payload.data.key).toMatch(/^reviews\/covers\//);
+  });
+
+  it('no baja nada de un dominio que no sea el de los dos catálogos', async () => {
     for (const url of [
       'https://ejemplo.test/portada.jpg',
       'http://127.0.0.1/portada.jpg',
       'https://openlibrary.org.atacante.test/b/id/1-L.jpg',
+      'https://image.tmdb.org.atacante.test/t/p/w780/a.jpg',
+      // La API de TMDB no es su CDN de imágenes: sólo entra el dominio de
+      // imágenes, no cualquier cosa del proveedor.
+      'https://api.themoviedb.org/3/movie/1',
     ]) {
       const response = await postJson('/admin/api/obras/portada', { url });
       await response.text();

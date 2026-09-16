@@ -13,3 +13,9 @@ HASH_PEPPER="cambia-esto-por-un-valor-aleatorio-de-32-bytes"
 # Clave privada de Turnstile.
 # Clave de PRUEBA que siempre valida (documentada por Cloudflare):
 TURNSTILE_SECRET_KEY="1x0000000000000000000000000000000AA"
+
+# Clave de TMDB (https://www.themoviedb.org/settings/api) para buscar fichas de
+# cine, series y anime desde el editor de reseñas. La consulta la hace el
+# Worker, nunca el navegador. Es OPCIONAL: sin ella el buscador sigue valiendo
+# para libros y en cine devuelve vacío.
+TMDB_API_KEY=""

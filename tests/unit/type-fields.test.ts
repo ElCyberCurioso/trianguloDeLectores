@@ -158,14 +158,18 @@ describe('ReviewEditorPage — campos por tipo', () => {
     expect(bloques.every((b) => b.includes('hidden'))).toBe(true);
   });
 
-  it('el buscador de fichas nace tapado y sólo declara los tipos que Open Library cubre', () => {
-    for (const contentType of ['BOOK', 'NOVEL', 'COMIC', 'MANGA', 'MOVIE', null] as const) {
+  it('el buscador de fichas nace tapado y declara los tipos que tienen catálogo', () => {
+    for (const contentType of ['BOOK', 'NOVEL', 'COMIC', 'MANGA', 'MOVIE', 'GAME', null] as const) {
       const bloque = buscador(renderResena(contentType));
       expect(bloque, String(contentType)).toBeDefined();
       // Siempre tapado en el servidor: lo destapa la isla, y sólo si aplica.
       // Sin JavaScript, un buscador que no busca sólo estorba.
       expect(bloque, String(contentType)).toContain('hidden');
-      expect(bloque, String(contentType)).toContain('data-types-only="BOOK NOVEL COMIC MANGA"');
+      // La lista sale del mapa de proveedores, que es quien decide de verdad a
+      // qué catálogo se pregunta. Un videojuego no está: no hay fuente.
+      expect(bloque, String(contentType)).toContain(
+        'data-types-only="BOOK NOVEL COMIC MANGA MOVIE SERIES ANIME"',
+      );
     }
   });
 

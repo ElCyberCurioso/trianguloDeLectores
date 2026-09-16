@@ -1223,11 +1223,23 @@ Para activar la purga programada, añade en `wrangler.jsonc` del entorno corresp
 
 ## 15f. Buscar la ficha de una obra
 
-Escribir una reseña son unos veinticinco campos. En libros, novelas, cómics y
-manga el editor ofrece un buscador que los rellena: se escribe el título, el
-**Worker** consulta Open Library —nunca el navegador: la CSP mantiene
-`connect-src 'self'` y la dirección de quien escribe no llega a un tercero— y
-devuelve hasta cinco candidatas con autor y año.
+Escribir una reseña son unos veinticinco campos. El editor ofrece un buscador
+que los rellena: se escribe el título, el **Worker** consulta el catálogo que
+corresponda —nunca el navegador: la CSP mantiene `connect-src 'self'` y la
+dirección de quien escribe no llega a un tercero— y devuelve hasta cinco
+candidatas.
+
+| Tipo de obra | Catálogo | Clave |
+|---|---|---|
+| Libro, novela, cómic, manga | Open Library | no hace falta |
+| Película, serie, anime | TMDB | `TMDB_API_KEY` |
+| Videojuego, otro | ninguno, se escribe a mano | — |
+
+La clave de TMDB es **opcional**: sin ella el buscador sigue valiendo para
+libros y en cine devuelve vacío en lugar de fallar. Se pone con
+`npx wrangler secret put TMDB_API_KEY --env <entorno>`, va en la cabecera
+`Authorization` y nunca en la URL. TMDB exige atribución a quien use su API:
+está en el pie del panel, que es donde se usa.
 
 Al elegir una se rellenan título, año y autor **sólo donde el campo está
 vacío**: lo escrito a mano manda. La portada la descarga el servidor del dominio

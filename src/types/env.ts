@@ -44,6 +44,14 @@ export interface Bindings {
   TURNSTILE_SECRET_KEY?: string;
   /** Pepper HMAC para pseudonimizar IP/UA (GDPR: no guardamos IP en claro). */
   HASH_PEPPER?: string;
+  /**
+   * Clave de TMDB para buscar fichas de cine, series y anime.
+   *
+   * Opcional a propósito: sin ella el buscador sigue funcionando para libros
+   * —Open Library no pide clave— y en cine devuelve vacío en vez de romperse.
+   * Un entorno sin la clave es un entorno con menos ayuda, no uno averiado.
+   */
+  TMDB_API_KEY?: string;
 }
 
 export interface Variables {

@@ -137,9 +137,11 @@ export async function lookupIsbn(rawIsbn: string): Promise<BookDraft | null> {
 /** Una obra encontrada por título, para elegir entre varias. */
 export interface WorkCandidate {
   title: string;
+  /** Sólo cuando de verdad es otro; si no, nulo. Lo usa TMDB. */
+  titleOriginal?: string | null;
   authors: string | null;
   year: number | null;
-  /** URL de la portada en Open Library, para que la descargue el servidor. */
+  /** URL de la portada en el proveedor, para que la descargue el servidor. */
   coverUrl: string | null;
   /** El primer ISBN conocido, si lo hay. Sólo informativo. */
   isbn13: string | null;

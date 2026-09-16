@@ -15,6 +15,7 @@ type Toast = (message: string, kind?: 'ok' | 'error' | 'info', timeout?: number)
 
 interface Candidata {
   title: string;
+  titleOriginal?: string | null;
   authors: string | null;
   year: number | null;
   coverUrl: string | null;
@@ -69,6 +70,7 @@ export function initLookup(toast: Toast): void {
 
   const elegir = async (candidata: Candidata) => {
     rellenar('#f-titleEs', candidata.title);
+    rellenar('#f-titleOriginal', candidata.titleOriginal ?? null);
     rellenar('#f-year', candidata.year ? String(candidata.year) : null);
     rellenar('#f-creator', candidata.authors);
 
@@ -159,9 +161,15 @@ export function initLookup(toast: Toast): void {
       return;
     }
 
+    // El tipo viaja con la búsqueda porque decide a qué catálogo se pregunta:
+    // un libro a Open Library, una serie a TMDB. Lo elige el servidor a partir
+    // de él; aquí sólo se dice cuál está seleccionado.
+    const tipo = form.querySelector<HTMLSelectElement>('[data-content-type]')?.value;
+    if (!tipo) return;
+
     boton.disabled = true;
     try {
-      const data = await pedir<{ results: Candidata[] }>('/admin/api/obras', { q }, form);
+      const data = await pedir<{ results: Candidata[] }>('/admin/api/obras', { q, type: tipo }, form);
       pintar(data.results);
     } catch (error) {
       toast(error instanceof Error ? error.message : 'No se ha podido buscar.', 'error');

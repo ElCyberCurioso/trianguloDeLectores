@@ -122,7 +122,7 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
           {children}
         </main>
 
-        <SiteFooter siteName={env.SITE_NAME} />
+        <SiteFooter siteName={env.SITE_NAME} isAdmin={isAdmin} />
 
         <div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false" />
 
@@ -285,12 +285,28 @@ const SiteHeader: FC<{
   </header>
 );
 
-const SiteFooter: FC<{ siteName: string }> = ({ siteName }) => (
+const SiteFooter: FC<{ siteName: string; isAdmin?: boolean }> = ({ siteName, isAdmin }) => (
   <footer class="site-footer">
     <div class="wrap site-footer__inner">
       <p class="site-footer__copy">
         © {new Date().getFullYear()} {siteName}
       </p>
+      {/*
+        Atribución de TMDB, que sus condiciones exigen a quien use su API.
+        Va sólo en el panel porque es donde se usa —el buscador de fichas del
+        editor—: ponerla en el sitio público sería anunciar en todas las páginas
+        un servicio que el visitante no toca. El enlace lleva `rel` de enlace
+        externo, como los demás del sitio.
+      */}
+      {isAdmin ? (
+        <p class="site-footer__credit">
+          Fichas de cine y series de{' '}
+          <a href="https://www.themoviedb.org/" rel="noopener noreferrer" target="_blank">
+            TMDB
+          </a>
+          . Este producto usa su API, pero no está avalado ni certificado por TMDB.
+        </p>
+      ) : null}
       <nav class="site-footer__nav" aria-label="Enlaces del pie">
         <a href="/sobre">Sobre el sitio</a>
         <a href="/recomendar">Recomendar</a>

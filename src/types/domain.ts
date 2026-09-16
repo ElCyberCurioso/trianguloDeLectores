@@ -47,19 +47,6 @@ export function hasVolumes(type: ContentType): type is VolumeContentType {
   return (VOLUME_CONTENT_TYPES as readonly string[]).includes(type);
 }
 
-/**
- * Lo que Open Library sabe buscar.
- *
- * Es un catálogo de obra publicada: libros, novelas y, con menos suerte, cómics
- * y manga. De una película o un videojuego no tiene ficha, así que ofrecer ahí
- * el buscador sería prometer algo que devuelve siempre vacío.
- */
-export const OPENLIBRARY_CONTENT_TYPES = ['BOOK', 'NOVEL', 'COMIC', 'MANGA'] as const;
-
-export function hasOpenLibrary(type: ContentType): boolean {
-  return (OPENLIBRARY_CONTENT_TYPES as readonly string[]).includes(type);
-}
-
 export const AVAILABILITY = [
   'SUBSCRIPTION', 'RENT', 'BUY', 'FREE', 'LIBRARY', 'PHYSICAL', 'OTHER',
 ] as const;
