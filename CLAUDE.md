@@ -737,6 +737,11 @@ que cuestan media hora cada vez que se olvidan.
   porque no deben commitearse; y un hallazgo se silencia escribiendo
   `NO-ES-UN-SECRETO` **en la misma línea**, donde se ve al revisar. Si vuelve a
   ponerse rojo, es de verdad: no lo ignores.
+- **Los tests de integración necesitan las islas compiladas.** Hay una prueba
+  que pide `/assets/books.js` al subdominio privado para comprobar que los
+  estáticos se sirven sin sesión, y ese fichero lo genera `npm run build:client`.
+  En local nunca falla porque el bundle ya está ahí; en CI hubo que compilarlo
+  antes de los tests, no después.
 - **Los tests de integración fallan de vez en cuando sin motivo**, con un
   `Unhandled Rejection: fetch failed / ECONNRESET` al cerrar workerd. Ha pasado
   dos veces en corridas completas y en ninguna se reprodujo al repetir. Antes de

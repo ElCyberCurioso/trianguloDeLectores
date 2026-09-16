@@ -55,6 +55,14 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Antes de los tests de integración, no después: el subdominio privado
+      # sirve `/assets/books.js` desde `public/`, y hay una prueba que comprueba
+      # que se sirve sin sesión. Sin compilar, ese fichero no existe y el test
+      # falla por una razón que no tiene nada que ver con lo que prueba. En
+      # local no se veía porque el bundle ya estaba ahí de compilarlo a mano.
+      - name: Compilar las islas de cliente
+        run: npm run build:client
+
       - name: Tests unitarios
         run: npm run test:unit
 
