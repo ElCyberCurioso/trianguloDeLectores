@@ -91,7 +91,7 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
             <ul class="tags tags--lg" aria-label="Géneros">
               {review.genres.map((genre) => (
                 <li>
-                  <a class="tag" href={`/?genre=${encodeURIComponent(genre.slug)}`}>
+                  <a class="tag" href={`/genero/${encodeURIComponent(genre.slug)}`}>
                     {genre.name}
                   </a>
                 </li>

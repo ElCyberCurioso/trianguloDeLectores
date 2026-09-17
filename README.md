@@ -543,6 +543,25 @@ Comprobación manual recomendada antes de abrir al público:
 
 ---
 
+## 15a. Páginas de categoría y de género
+
+`/categoria/:slug` y `/genero/:slug` son páginas propias, con su titular, su
+texto de presentación, su miga de pan y su entrada en el sitemap —sólo si tienen
+reseñas dentro—. Reutilizan la vista del catálogo: la retícula, los filtros y la
+paginación son los mismos.
+
+El canónico de una portada filtrada ya no es ella misma: si el único filtro es
+una categoría o un género apunta a su página, y cualquier otra combinación
+canoniza a `/` con `noindex`. Lo que se ve no cambia; lo que cambia es qué URL
+se le dice al buscador que indexe.
+
+La ficha de una reseña termina con tres relacionadas, elegidas por cuántos
+géneros comparten y desempatando por la más reciente. Van antes de los
+comentarios, porque es ahí donde se decide seguir leyendo o irse, y no aparecen
+dentro del modal: allí el catálogo está justo detrás.
+
+---
+
 ## 15b. Lista de pendientes
 
 La cola de trabajo: lo que hay por ver, leer o jugar antes de reseñarlo.

@@ -75,7 +75,7 @@ export const ReviewCard: FC<ReviewCardProps> = ({ review, env, priority = false 
         <ul class="tags" aria-label="Géneros">
           {review.genres.slice(0, 2).map((genre) => (
             <li>
-              <a class="tag" href={`/?genre=${encodeURIComponent(genre.slug)}`}>
+              <a class="tag" href={`/genero/${encodeURIComponent(genre.slug)}`}>
                 {genre.name}
               </a>
             </li>
@@ -151,7 +151,7 @@ export const ReviewLead: FC<{ review: ReviewListItem; env: Bindings }> = ({ revi
           <ul class="tags" aria-label="Géneros">
             {review.genres.slice(0, 4).map((genre) => (
               <li>
-                <a class="tag" href={`/?genre=${encodeURIComponent(genre.slug)}`}>
+                <a class="tag" href={`/genero/${encodeURIComponent(genre.slug)}`}>
                   {genre.name}
                 </a>
               </li>

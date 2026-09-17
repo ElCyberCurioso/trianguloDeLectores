@@ -1811,6 +1811,22 @@ p { margin: 0 0 var(--space-3); }
   color: color-mix(in srgb, var(--color-text) 45%, transparent);
 }
 
+/* ------------------------------------ páginas de categoría y de género -- */
+/* El titular manda sobre la marca: quien llega desde un buscador necesita leer
+   de qué va la página antes que cómo se llama el sitio. */
+.hero--seccion .hero__inner { gap: var(--space-2); }
+.hero__title--texto {
+  font-family: var(--font-heading); font-weight: 800;
+  font-size: clamp(32px, 6vw, 56px); line-height: 1.02;
+  letter-spacing: -0.02em; margin: 0;
+}
+
+/* --------------------------------------------- reseñas relacionadas ----- */
+.related { margin-top: var(--space-6); }
+/* Tres como mucho, así que caben en una fila holgada en escritorio y se
+   apilan solas en el teléfono sin regla aparte. */
+.grid--related { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+
 /* -------------------------------------------- buscar la ficha de la obra -- */
 /* Nace tapado y lo destapa la isla: sin JavaScript no busca nada. La regla
    explícita hace falta porque el bloque tiene su propio `display`. */

@@ -3,7 +3,8 @@ import type { Child } from 'hono/jsx';
 import { Hono } from 'hono';
 import type { AppEnv } from '../../types/env';
 import { Layout } from '../views/layout';
-import { HomePage } from '../views/pages/home';
+import { HomePage, rutaDeSeccion, type Seccion } from '../views/pages/home';
+import { hayFiltros } from '../views/components/filters';
 import { ReviewPage } from '../views/pages/review';
 import { AboutPage, PrivacyPage, CookiesPage } from '../views/pages/static';
 import { AppPage } from '../views/pages/app';
@@ -16,7 +17,7 @@ import {
   type PublicWatchlistQuery, type WatchlistInput,
 } from '../../validation/schemas';
 import { edgeCached, CACHE_NS, NO_STORE } from '../lib/cache';
-import { reviewJsonLd, websiteJsonLd, reviewSeoTitle } from '../lib/seo';
+import { reviewJsonLd, websiteJsonLd, reviewSeoTitle, itemListJsonLd, breadcrumbJsonLd } from '../lib/seo';
 import { variantUrl } from '../lib/images';
 import { issueFormToken } from '../lib/formtoken';
 import { AppError, badRequest, notFound } from '../lib/http';
@@ -27,6 +28,7 @@ import { requireAdmin, requireCsrf } from '../middleware/auth';
 import { parseYearRange } from '../lib/year';
 import * as F from '../lib/form';
 import { WatchlistService } from '../services/watchlist';
+import type { Container } from '../services/container';
 import { htmlToText } from '../lib/sanitize';
 import { MediaService } from '../services/media';
 import { ReviewService } from '../services/reviews';
@@ -52,8 +54,34 @@ publicRoutes.get('/', async (c) => {
     ]);
 
     const description = settings['site.description'];
-    const canonicalParams = new URL(c.req.url);
-    canonicalParams.searchParams.delete('__v');
+    const siteUrl = c.env.SITE_URL.replace(/\/$/, '');
+
+    /*
+     * El canónico de una portada filtrada no es ella misma.
+     *
+     * Antes se publicaba `/?genre=drama&sort=rating&page=2` como página propia
+     * e indexable, y con cinco filtros combinables salen cientos de URLs con
+     * casi el mismo contenido repartiéndose la autoridad. Ahora:
+     *
+     *   - si el único filtro es una categoría o un género, el canónico es su
+     *     página propia, que sí es una página de verdad y está en el sitemap;
+     *   - cualquier otra combinación canoniza a la portada y lleva `noindex`.
+     *
+     * Lo que no cambia es lo que se ve: la página sigue listando lo filtrado.
+     * Esto sólo le dice al buscador cuál de todas las formas de escribirla es
+     * la buena.
+     */
+    const soloCategoria = Boolean(query.category) && !query.genre && !query.q && !query.type
+      && query.sort === 'recent' && query.page === 1;
+    const soloGenero = Boolean(query.genre) && !query.category && !query.q && !query.type
+      && query.sort === 'recent' && query.page === 1;
+
+    const canonical = soloCategoria
+      ? `${siteUrl}/categoria/${query.category}`
+      : soloGenero
+        ? `${siteUrl}/genero/${query.genre}`
+        : `${siteUrl}/`;
+    const filtrada = hayFiltros(query) || query.page > 1;
 
     return c.html(
       <Layout
@@ -65,9 +93,16 @@ publicRoutes.get('/', async (c) => {
         seo={{
           title: `${c.env.SITE_NAME} — ${settings['site.tagline']}`,
           description,
-          canonical: `${c.env.SITE_URL.replace(/\/$/, '')}${canonicalParams.pathname}${canonicalParams.search}`,
+          canonical,
           type: 'website',
-          jsonLd: websiteJsonLd(c.env, description),
+          // Una portada con filtros no es una página distinta que indexar. La
+          // canónica de arriba ya dice cuál es la buena; el `noindex` evita que
+          // se cuelen igual las combinaciones que no llevan a ningún sitio.
+          noindex: filtrada && !soloCategoria && !soloGenero,
+          jsonLd: [
+            websiteJsonLd(c.env, description),
+            itemListJsonLd(c.env, results.items),
+          ],
         }}
       >
         <HomePage
@@ -82,6 +117,124 @@ publicRoutes.get('/', async (c) => {
     );
   });
 });
+
+/*
+ * Páginas propias de categoría y de género.
+ *
+ * `/?genre=drama` lista lo mismo que `/genero/drama`, pero no es lo mismo: la
+ * primera es una consulta sobre la portada —sin titular propio, sin texto y
+ * fuera del sitemap— y la segunda es una página. Son justo por las que entra
+ * quien todavía no conoce el sitio, y por eso existen.
+ *
+ * Reutilizan la vista del catálogo entera: la retícula, los filtros y la
+ * paginación ya estaban escritos y lo único que cambia es la cabecera y a dónde
+ * apuntan los enlaces.
+ */
+const SECCION_CACHE = { ns: CACHE_NS.reviews, edgeTtl: 600, browserTtl: 120, swr: 3600 } as const;
+
+publicRoutes.get('/categoria/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  return seccion(c, async (container) => {
+    const categoria = await container.taxonomy.getCategoryBySlug(slug);
+    // Una categoría desactivada deja de existir para el público: si no, se
+    // seguiría entrando por un enlace viejo a una página que ya no se enseña.
+    if (!categoria || categoria.isActive !== 1) return null;
+    return {
+      kind: 'categoria' as const,
+      slug: categoria.slug,
+      name: categoria.name,
+      description:
+        categoria.description ??
+        `Todas las reseñas de ${categoria.name.toLowerCase()} publicadas en ${c.env.SITE_NAME}.`,
+    };
+  });
+});
+
+publicRoutes.get('/genero/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  return seccion(c, async (container) => {
+    const genero = await container.taxonomy.getGenreBySlug(slug);
+    if (!genero) return null;
+    return {
+      kind: 'genero' as const,
+      slug: genero.slug,
+      name: genero.name,
+      // Los géneros no tienen columna de descripción y no hacía falta añadirla:
+      // el texto se compone del nombre, que es lo único que distingue a uno de
+      // otro, y así no hay veinte descripciones que escribir a mano.
+      description: `Reseñas de ${genero.name.toLowerCase()} en ${c.env.SITE_NAME}: libros, cine, series, anime, cómic y videojuegos.`,
+    };
+  });
+});
+
+/** Lo que comparten las dos: buscar la sección, listar y pintar. */
+async function seccion(
+  c: Context<AppEnv>,
+  buscar: (container: Container) => Promise<Seccion | null>,
+): Promise<Response> {
+  return edgeCached(c, SECCION_CACHE, async () => {
+    const container = c.get('container');
+    const encontrada = await buscar(container);
+    if (!encontrada) throw notFound('Esa sección no existe');
+
+    const parsed = reviewQuerySchema.safeParse(F.queryParams(c.req.url));
+    const base = parsed.success ? parsed.data : reviewQuerySchema.parse({});
+    // El filtro de la sección lo manda la ruta, no la query: escribir
+    // `/genero/drama?genre=terror` no puede enseñar terror.
+    const query = {
+      ...base,
+      category: encontrada.kind === 'categoria' ? encontrada.slug : base.category,
+      genre: encontrada.kind === 'genero' ? encontrada.slug : base.genre,
+    };
+
+    const [results, categories, genres, settings] = await Promise.all([
+      container.reviews.listPublished(query),
+      container.taxonomy.listCategoriesWithCounts(),
+      container.taxonomy.listGenresWithCounts(),
+      container.settings.all(),
+    ]);
+
+    const ruta = rutaDeSeccion(encontrada);
+    const siteUrl = c.env.SITE_URL.replace(/\/$/, '');
+    // Refinar dentro de la sección no crea páginas nuevas que indexar: la
+    // canónica es siempre la sección limpia, y lo filtrado lleva `noindex`.
+    const refinada = Boolean(base.q || base.type) || base.sort !== 'recent' || base.page > 1;
+
+    return c.html(
+      <Layout
+        env={c.env}
+        nonce={c.get('nonce')}
+        path={ruta}
+        user={c.get('user')}
+        csrfToken={c.get('csrfToken')}
+        seo={{
+          title: `${encontrada.name} — reseñas | ${c.env.SITE_NAME}`,
+          description: encontrada.description,
+          canonical: `${siteUrl}${ruta}`,
+          type: 'website',
+          noindex: refinada,
+          jsonLd: [
+            itemListJsonLd(c.env, results.items),
+            breadcrumbJsonLd(c.env, [
+              { name: c.env.SITE_NAME, path: '/' },
+              { name: encontrada.name, path: ruta },
+            ]),
+          ],
+        }}
+      >
+        <HomePage
+          env={c.env}
+          results={results}
+          categories={categories}
+          genres={genres}
+          query={query}
+          tagline={settings['site.tagline']}
+          seccion={encontrada}
+        />
+      </Layout>,
+    );
+  });
+}
 
 // ----------------------------------------------------------------- reseña --
 async function buildCommentProps(
@@ -122,13 +275,16 @@ publicRoutes.get('/resena/:slug', async (c) => {
     if (!review) throw notFound('Esa reseña no existe o todavía no está publicada');
 
     const policy = await new ReviewService(container).commentPolicy(review);
-    const [comments, episodes] = await Promise.all([
+    const [comments, episodes, relacionadas] = await Promise.all([
       buildCommentProps(c, review.id, review.slug, policy),
       container.episodes.byReview(review.id),
+      // En la misma tanda que lo demás: es una consulta más, no una espera más.
+      container.reviews.relacionadas(review.id),
     ]);
 
     if (isPartial) {
-      // Fragmento para el modal: sin <html>, mismas cabeceras de seguridad.
+      // Fragmento para el modal: sin <html>, mismas cabeceras de seguridad. Sin
+      // relacionadas: el catálogo entero está justo detrás del modal.
       return c.html(<ReviewPage env={c.env} review={review} comments={comments} episodes={episodes} inModal />);
     }
 
@@ -152,10 +308,33 @@ publicRoutes.get('/resena/:slug', async (c) => {
           type: 'article',
           publishedTime: review.publishedAt ? new Date(review.publishedAt).toISOString() : undefined,
           modifiedTime: new Date(review.updatedAt).toISOString(),
-          jsonLd: reviewJsonLd(c.env, review),
+          /*
+           * La ficha declara dos cosas: la reseña y dónde está.
+           *
+           * La miga de pan visual ya se pintaba arriba; ésta es la misma ruta
+           * en datos, que es lo que el buscador convierte en la línea de
+           * navegación bajo el resultado. Se cuelga de la categoría cuando la
+           * tiene, porque ahora es una página de verdad a la que llevar.
+           */
+          jsonLd: [
+            reviewJsonLd(c.env, review),
+            breadcrumbJsonLd(c.env, [
+              { name: c.env.SITE_NAME, path: '/' },
+              ...(review.categorySlug && review.categoryName
+                ? [{ name: review.categoryName, path: `/categoria/${review.categorySlug}` }]
+                : []),
+              { name: review.titleEs, path: `/resena/${review.slug}` },
+            ]),
+          ],
         }}
       >
-        <ReviewPage env={c.env} review={review} comments={comments} episodes={episodes} />
+        <ReviewPage
+          env={c.env}
+          review={review}
+          comments={comments}
+          episodes={episodes}
+          relacionadas={relacionadas}
+        />
       </Layout>,
     );
   };
@@ -681,11 +860,37 @@ publicRoutes.get('/sitemap.xml', async (c) =>
   edgeCached(c, { ns: CACHE_NS.reviews, edgeTtl: 1800, browserTtl: 300 }, async () => {
     const container = c.get('container');
     const siteUrl = c.env.SITE_URL.replace(/\/$/, '');
-    const reviews = await container.reviews.allPublishedForSitemap();
+    const [reviews, categories, genres] = await Promise.all([
+      container.reviews.allPublishedForSitemap(),
+      container.taxonomy.listCategoriesWithCounts(),
+      container.taxonomy.listGenresWithCounts(),
+    ]);
 
     const urls = [
       { loc: `${siteUrl}/`, lastmod: new Date().toISOString(), priority: '1.0' },
       { loc: `${siteUrl}/pendientes`, lastmod: new Date().toISOString(), priority: '0.6' },
+      /*
+       * Las secciones, sólo si tienen algo dentro.
+       *
+       * Un género vacío es una página que dice «no hay reseñas»: mandarla al
+       * buscador es pedir que indexe un hueco, y encima el día que se llene no
+       * hay forma de que vuelva antes. Entran cuando tienen contenido y salen
+       * solas del sitemap si alguna vez se quedan sin él.
+       */
+      ...categories
+        .filter((categoria) => categoria.reviewCount > 0)
+        .map((categoria) => ({
+          loc: `${siteUrl}/categoria/${categoria.slug}`,
+          lastmod: undefined,
+          priority: '0.7',
+        })),
+      ...genres
+        .filter((genero) => genero.reviewCount > 0)
+        .map((genero) => ({
+          loc: `${siteUrl}/genero/${genero.slug}`,
+          lastmod: undefined,
+          priority: '0.7',
+        })),
       { loc: `${siteUrl}/aplicacion`, lastmod: undefined, priority: '0.5' },
       { loc: `${siteUrl}/sobre`, lastmod: undefined, priority: '0.3' },
       { loc: `${siteUrl}/privacidad`, lastmod: undefined, priority: '0.2' },

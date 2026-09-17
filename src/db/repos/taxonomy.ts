@@ -32,9 +32,20 @@ export class TaxonomyRepository {
         isActive: categories.isActive,
         createdAt: categories.createdAt,
         updatedAt: categories.updatedAt,
+        /*
+         * La columna de fuera se nombra **cualificada y a mano**.
+         *
+         * Interpolando `${categories.id}` en la plantilla, Drizzle emite
+         * `"id"` a secas, y dentro del subselect `FROM reviews r` eso resuelve
+         * contra `reviews`: la condición se convertía en `r.category_id = r.id`
+         * y no se cumplía nunca. El resultado era que **todas las categorías
+         * contaban cero**, en los filtros del catálogo y en todas partes, sin
+         * que nada fallara. Escrito así correlaciona con la tabla de fuera, que
+         * es lo que se quería.
+         */
         reviewCount: sql<number>`(
           SELECT COUNT(*) FROM reviews r
-          WHERE r.category_id = ${categories.id}
+          WHERE r.category_id = categories.id
             AND r.status = 'PUBLISHED' AND r.deleted_at IS NULL
         )`,
       })
@@ -47,6 +58,11 @@ export class TaxonomyRepository {
 
   getCategoryBySlug(slug: string): Promise<Category | undefined> {
     return this.db.select().from(categories).where(eq(categories.slug, slug)).get();
+  }
+
+  /** Un género por su slug. Lo pide la página propia de cada género. */
+  getGenreBySlug(slug: string): Promise<Genre | undefined> {
+    return this.db.select().from(genres).where(eq(genres.slug, slug)).get();
   }
 
   getCategoryById(id: string): Promise<Category | undefined> {
@@ -90,10 +106,12 @@ export class TaxonomyRepository {
         name: genres.name,
         createdAt: genres.createdAt,
         updatedAt: genres.updatedAt,
+        // Mismo caso que en las categorías: `${genres.id}` salía como `"id"`
+        // sin cualificar y dentro del subselect resolvía contra otra tabla.
         reviewCount: sql<number>`(
           SELECT COUNT(*) FROM review_genres rg
           JOIN reviews r ON r.id = rg.review_id
-          WHERE rg.genre_id = ${genres.id}
+          WHERE rg.genre_id = genres.id
             AND r.status = 'PUBLISHED' AND r.deleted_at IS NULL
         )`,
       })

@@ -105,6 +105,34 @@ Reglas que no se rompen:
   1480 px (el kit dice 1180 sobre lienzo gris), y el tema oscuro no existe en el
   kit —se deriva intercambiando hueso y tinta y subiendo el rojo un paso—.
 
+## Reglas de las páginas de sección
+
+- **`/categoria/:slug` y `/genero/:slug` son páginas; `/?genre=…` es una
+  consulta.** Listan lo mismo y no son lo mismo: la sección tiene titular
+  propio, texto y sitio en el sitemap, y es por donde entra quien no conoce el
+  sitio. Reutilizan la vista del catálogo entera —retícula, filtros,
+  paginación—; lo único suyo es la cabecera y a dónde apuntan los enlaces.
+- **El filtro de la sección lo manda la ruta, nunca la query.**
+  `/genero/drama?genre=terror` enseña drama. Y dentro de una sección su propio
+  filtro no se repite en los enlaces: `/genero/drama?genre=drama` sería la misma
+  página escrita dos veces.
+- **Una portada filtrada no es una página nueva.** Si el único filtro es una
+  categoría o un género, el canónico apunta a su página propia; cualquier otra
+  combinación canoniza a `/` y lleva `noindex`. Antes cada combinación se
+  publicaba como página indexable y con cinco filtros salían cientos de URLs
+  casi iguales repartiéndose la autoridad.
+- **Al sitemap sólo van las secciones con contenido.** Un género vacío es una
+  página que dice «no hay reseñas»; mandarla a indexar es pedir que se guarde un
+  hueco. Entran y salen solas según tengan reseñas.
+- **Una categoría desactivada deja de existir para el público** (404), o se
+  seguiría entrando por un enlace viejo a algo que ya no se enseña.
+- **Un subselect correlado hay que cualificarlo a mano.** Interpolar
+  `${categories.id}` en una plantilla `sql` emite `"id"` a secas, y dentro de un
+  `FROM reviews r` eso resuelve contra `reviews`: la condición se convertía en
+  `r.category_id = r.id` y **todos los contadores daban cero** —en los filtros,
+  en la portada y en el sitemap— sin que nada fallara. Se escribe
+  `r.category_id = categories.id`. Hay test que lo pilla.
+
 ## Reglas de los filtros y los listados
 
 - **Un parámetro vacío en la query significa «sin filtro», y hay que quitarlo

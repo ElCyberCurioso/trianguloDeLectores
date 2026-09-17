@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, like, or, sql, count } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, like, ne, or, sql, count } from 'drizzle-orm';
 import { getDb, type Db } from '../client';
 import {
   reviews, reviewGenres, reviewPlatforms, categories, genres, platforms,
@@ -190,6 +190,48 @@ export class ReviewRepository {
 
   async listPublished(query: ReviewQuery): Promise<Paginated<ReviewListItem>> {
     return this.list({ ...query, includeDrafts: false });
+  }
+
+  /**
+   * Reseñas parecidas a una dada, por géneros compartidos.
+   *
+   * Terminar de leer era un callejón sin salida: ni relacionadas, ni anterior y
+   * siguiente, ni «más de este género». La única salida era el menú.
+   *
+   * El parecido se mide contando **cuántos géneros comparten**, que con los
+   * datos que ya hay es la señal más barata y la más honesta: dos reseñas con
+   * tres géneros en común se parecen más que dos que comparten uno. A igualdad,
+   * manda la más reciente. Si la reseña no tiene géneros no se inventa nada:
+   * devuelve vacío y la sección no se pinta.
+   */
+  async relacionadas(reviewId: string, limit = 3): Promise<ReviewListItem[]> {
+    const suyos = this.db
+      .select({ genreId: reviewGenres.genreId })
+      .from(reviewGenres)
+      .where(eq(reviewGenres.reviewId, reviewId));
+
+    const rows = await this.db
+      .select({ ...listColumns, comunes: sql<number>`COUNT(${reviewGenres.genreId})` })
+      .from(reviews)
+      .innerJoin(reviewGenres, eq(reviewGenres.reviewId, reviews.id))
+      .leftJoin(categories, eq(categories.id, reviews.categoryId))
+      .where(
+        and(
+          inArray(reviewGenres.genreId, suyos),
+          // La propia no se recomienda a sí misma, y un borrador o algo en la
+          // papelera no se enseña al público por esta puerta de atrás.
+          ne(reviews.id, reviewId),
+          eq(reviews.status, 'PUBLISHED'),
+          isNull(reviews.deletedAt),
+        ),
+      )
+      .groupBy(reviews.id)
+      .orderBy(desc(sql`COUNT(${reviewGenres.genreId})`), desc(publishedOrCreated))
+      .limit(limit)
+      .all();
+
+    const genreMap = await loadGenres(this.db, rows.map((r) => r.id));
+    return rows.map(({ comunes: _comunes, ...r }) => ({ ...r, genres: genreMap.get(r.id) ?? [] }));
   }
 
   async list(

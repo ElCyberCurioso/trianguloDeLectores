@@ -84,6 +84,49 @@ export function websiteJsonLd(env: Bindings, description: string): string {
   }).replace(/</g, '\\u003c');
 }
 
+/**
+ * La miga de pan que se pinta bajo el resultado de búsqueda.
+ *
+ * La visual ya existía en la ficha y en las secciones; esto es la misma ruta en
+ * datos, que es lo que lee el buscador. Sin ella enseña el dominio pelado y se
+ * pierde la única pista de dónde encaja la página dentro del sitio.
+ */
+export function breadcrumbJsonLd(env: Bindings, trail: { name: string; path: string }[]): string {
+  const siteUrl = env.SITE_URL.replace(/\/$/, '');
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: trail.map((step, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: step.name,
+      item: `${siteUrl}${step.path}`,
+    })),
+  }).replace(/</g, '\\u003c');
+}
+
+/**
+ * El listado como datos: qué reseñas hay en esta página y en qué orden.
+ *
+ * Se emiten sólo las URL, no las fichas enteras: cada reseña ya publica su
+ * propio `Review` con la nota, y repetirlo aquí sería decir dos veces lo mismo
+ * y arriesgarse a que las dos copias se contradigan.
+ */
+export function itemListJsonLd(env: Bindings, items: { slug: string; titleEs: string }[]): string {
+  const siteUrl = env.SITE_URL.replace(/\/$/, '');
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    numberOfItems: items.length,
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      url: `${siteUrl}/resena/${item.slug}`,
+      name: item.titleEs,
+    })),
+  }).replace(/</g, '\\u003c');
+}
+
 export function reviewSeoTitle(env: Bindings, review: ReviewDetail): string {
   if (review.seoTitle) return review.seoTitle;
   const type = CONTENT_TYPE_LABELS[review.contentType];

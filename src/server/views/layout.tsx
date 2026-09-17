@@ -15,8 +15,13 @@ export interface SeoMeta {
   publishedTime?: string;
   modifiedTime?: string;
   noindex?: boolean;
-  /** JSON-LD ya serializado */
-  jsonLd?: string | null;
+  /**
+   * JSON-LD ya serializado. Admite varios porque una página puede declarar más
+   * de una cosa a la vez —un listado y su miga de pan— y meterlos en un solo
+   * objeto obligaría a un `@graph` que no hace falta: cada bloque en su
+   * `<script>` es igual de válido y se lee mejor.
+   */
+  jsonLd?: string | string[] | null;
 }
 
 export interface LayoutProps {
@@ -98,11 +103,13 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
         <link rel="alternate" type="application/rss+xml" title={env.SITE_NAME} href={`${siteUrl}/rss.xml`} />
 
         <script nonce={nonce}>{raw(THEME_BOOTSTRAP)}</script>
-        {seo.jsonLd ? (
-          <script type="application/ld+json" nonce={nonce}>
-            {raw(seo.jsonLd)}
-          </script>
-        ) : null}
+        {(Array.isArray(seo.jsonLd) ? seo.jsonLd : [seo.jsonLd])
+          .filter((bloque): bloque is string => Boolean(bloque))
+          .map((bloque) => (
+            <script type="application/ld+json" nonce={nonce}>
+              {raw(bloque)}
+            </script>
+          ))}
       </head>
       <body class={props.bodyClass ?? ''}>
         <a class="skip-link" href="#contenido">

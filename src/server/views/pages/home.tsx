@@ -8,6 +8,22 @@ import { Filters, ActiveFilters, hayFiltros } from '../components/filters';
 import { EmptyState, Pagination } from '../components/ui';
 import { BrandStack } from '../components/brand';
 
+/**
+ * La sección propia en la que se está, cuando no es la portada.
+ *
+ * `/genero/drama` y `/?genre=drama` listan lo mismo, pero no son lo mismo: la
+ * primera es una página con titular, texto y sitio en el sitemap, y es por
+ * donde entra quien no conoce el sitio. Reutilizan esta vista porque la
+ * retícula, los filtros y la paginación ya están aquí; lo único que cambia es
+ * la cabecera y a dónde apuntan los enlaces.
+ */
+export interface Seccion {
+  kind: 'categoria' | 'genero';
+  slug: string;
+  name: string;
+  description: string;
+}
+
 export interface HomePageProps {
   env: Bindings;
   results: Paginated<ReviewListItem>;
@@ -15,22 +31,34 @@ export interface HomePageProps {
   genres: GenreWithCount[];
   query: ReviewQuery;
   tagline: string;
+  seccion?: Seccion;
 }
 
-function buildHref(query: ReviewQuery, page: number): string {
+/** `/genero/drama` o `/categoria/cine`; la portada es `/`. */
+export function rutaDeSeccion(seccion: Seccion | undefined): string {
+  if (!seccion) return '/';
+  return seccion.kind === 'genero' ? `/genero/${seccion.slug}` : `/categoria/${seccion.slug}`;
+}
+
+function buildHref(query: ReviewQuery, page: number, seccion?: Seccion): string {
   const params = new URLSearchParams();
   if (query.q) params.set('q', query.q);
-  if (query.category) params.set('category', query.category);
-  if (query.genre) params.set('genre', query.genre);
+  // Dentro de una sección, su filtro va en la ruta y no se repite en la query:
+  // `/genero/drama?genre=drama` sería la misma página escrita dos veces, y cada
+  // forma de escribirla es una URL más que el buscador tiene que reconciliar.
+  if (query.category && seccion?.kind !== 'categoria') params.set('category', query.category);
+  if (query.genre && seccion?.kind !== 'genero') params.set('genre', query.genre);
   if (query.type) params.set('type', query.type);
   if (query.sort !== 'recent') params.set('sort', query.sort);
   if (page > 1) params.set('page', String(page));
   const qs = params.toString();
-  return qs ? `/?${qs}` : '/';
+  const base = rutaDeSeccion(seccion);
+  return qs ? `${base}?${qs}` : base;
 }
 
-export const HomePage: FC<HomePageProps> = ({ env, results, categories, genres, query, tagline }) => {
+export const HomePage: FC<HomePageProps> = ({ env, results, categories, genres, query, tagline, seccion }) => {
   const filtrado = hayFiltros(query);
+  const href = (q: ReviewQuery, page: number) => buildHref(q, page, seccion);
   // La pieza de apertura sólo tiene sentido en la portada limpia: con filtros o
   // en páginas siguientes, destacar una reseña sería arbitrario.
   const lead = !filtrado && query.page === 1 && query.sort === 'recent' ? results.items[0] : undefined;
@@ -42,29 +70,54 @@ export const HomePage: FC<HomePageProps> = ({ env, results, categories, genres, 
         Mancheta a la izquierda, sin centrar: el lockup vertical de la marca y
         debajo el lema y la franja de cifras del catálogo.
       */}
-      <section class="hero">
-        <div class="wrap hero__inner">
-          <h1 class="hero__title">
-            <BrandStack siteName={env.SITE_NAME} class="hero__logo" />
-          </h1>
-          <p class="hero__tagline">{tagline}</p>
-          {!filtrado ? (
+      {seccion ? (
+        /*
+          En una sección manda el titular, no la marca: quien llega aquí desde
+          un buscador tiene que leer de qué va la página antes que cómo se
+          llama el sitio. La miga de pan da la vuelta a la portada y se marca
+          además en JSON-LD, que es lo que pinta la ruta bajo el resultado.
+        */
+        <section class="hero hero--seccion">
+          <div class="wrap hero__inner">
+            <nav class="breadcrumb" aria-label="Migas de pan">
+              <a href="/">{env.SITE_NAME}</a>
+              <span aria-hidden="true">/</span>
+              <span>{seccion.kind === 'genero' ? 'Género' : 'Categoría'}</span>
+            </nav>
+            <h1 class="hero__title hero__title--texto">{seccion.name}</h1>
+            <p class="hero__tagline">{seccion.description}</p>
             <ul class="hero__meta">
               <li>
-                <b>{results.total}</b> {results.total === 1 ? 'reseña publicada' : 'reseñas publicadas'}
-              </li>
-              <li>
-                <b>{categories.length}</b> {categories.length === 1 ? 'categoría' : 'categorías'}
+                <b>{results.total}</b> {results.total === 1 ? 'reseña' : 'reseñas'}
               </li>
             </ul>
-          ) : null}
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : (
+        <section class="hero">
+          <div class="wrap hero__inner">
+            <h1 class="hero__title">
+              <BrandStack siteName={env.SITE_NAME} class="hero__logo" />
+            </h1>
+            <p class="hero__tagline">{tagline}</p>
+            {!filtrado ? (
+              <ul class="hero__meta">
+                <li>
+                  <b>{results.total}</b> {results.total === 1 ? 'reseña publicada' : 'reseñas publicadas'}
+                </li>
+                <li>
+                  <b>{categories.length}</b> {categories.length === 1 ? 'categoría' : 'categorías'}
+                </li>
+              </ul>
+            ) : null}
+          </div>
+        </section>
+      )}
 
       <Filters query={query} categories={categories} genres={genres} total={results.total} />
 
       <div class="wrap">
-        <ActiveFilters query={query} categories={categories} genres={genres} hrefFor={buildHref} />
+        <ActiveFilters query={query} categories={categories} genres={genres} hrefFor={href} />
 
         {results.items.length === 0 ? (
           <EmptyState
@@ -93,7 +146,7 @@ export const HomePage: FC<HomePageProps> = ({ env, results, categories, genres, 
           </>
         )}
 
-        <Pagination page={results.page} totalPages={results.totalPages} hrefFor={(p) => buildHref(query, p)} />
+        <Pagination page={results.page} totalPages={results.totalPages} hrefFor={(p) => href(query, p)} />
       </div>
 
       {/*
