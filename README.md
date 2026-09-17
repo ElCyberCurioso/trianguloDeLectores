@@ -555,6 +555,12 @@ una categoría o un género apunta a su página, y cualquier otra combinación
 canoniza a `/` con `noindex`. Lo que se ve no cambia; lo que cambia es qué URL
 se le dice al buscador que indexe.
 
+En la ficha, el cuerpo de la reseña es lo primero que se lee: el resumen vive
+plegado en un `<details>` de una línea —nativo, sin JavaScript— y las
+plataformas donde encontrar la obra van después del texto, que es cuando
+interesan. El resumen sigue estando en el HTML aunque esté cerrado, así que se
+indexa igual.
+
 La ficha de una reseña termina con tres relacionadas, elegidas por cuántos
 géneros comparten y desempatando por la más reciente. Van antes de los
 comentarios, porque es ahí donde se decide seguir leyendo o irse, y no aparecen

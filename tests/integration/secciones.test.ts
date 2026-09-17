@@ -195,3 +195,57 @@ describe('reseñas relacionadas', () => {
     expect(html).not.toContain('Si te ha gustado');
   });
 });
+
+describe('la ficha de una reseña', () => {
+  /*
+   * El resumen estaba encima del cuerpo y en tipografía de titular: lo primero
+   * que se leía de una reseña era su propio resumen, y el texto de verdad
+   * quedaba debajo y más pequeño. Lo que tiene que resaltar es la reseña.
+   */
+  it('el cuerpo va antes que el resumen y que las plataformas', async () => {
+    const una = await createReview(session, { title: `Orden ${crypto.randomUUID().slice(0, 8)}` });
+    const { html } = await get(`/resena/${una.slug}`);
+
+    const cuerpo = html.indexOf('class="prose prose--review"');
+    const resumen = html.indexOf('class="verdict"');
+    const plataformas = html.indexOf('class="platforms"');
+
+    expect(resumen).toBeGreaterThan(-1);
+    expect(cuerpo).toBeGreaterThan(-1);
+    // El resumen queda por encima como una línea plegada, no como entradilla;
+    // lo que importa es que el cuerpo vaya antes que la tabla de plataformas,
+    // que es lo que antes lo empujaba hacia abajo.
+    expect(resumen).toBeLessThan(cuerpo);
+    expect(cuerpo).toBeLessThan(plataformas);
+  });
+
+  it('el resumen se consulta plegado, y se puede abrir sin JavaScript', async () => {
+    const una = await createReview(session, { title: `Plegado ${crypto.randomUUID().slice(0, 8)}` });
+    const { html } = await get(`/resena/${una.slug}`);
+
+    // `<details>` nativo: el navegador lo abre solo, así que la página sigue
+    // sirviendo con el JavaScript desactivado.
+    expect(html).toContain('<details class="verdict">');
+    // Nace cerrado: sin `open`, el resumen no se lee de entrada.
+    expect(/<details class="verdict"[^>]*\bopen\b/.test(html)).toBe(false);
+    // Y el texto está en el HTML, no detrás de una petición: se indexa igual.
+    expect(html).toContain('Una adaptación monumental.');
+  });
+
+  it('sin escribir resumen, el desplegable enseña lo que el servidor deriva del cuerpo', async () => {
+    /*
+     * No hay reseñas sin resumen: si no se escribe, `ReviewService.prepare()`
+     * lo saca del cuerpo (`htmlToText`, 280 caracteres). Por eso el desplegable
+     * sale siempre y no hace falta un caso «sin resumen» —esta prueba empezó
+     * comprobando lo contrario y estaba equivocada, no el código—.
+     */
+    const una = await createReview(session, {
+      title: `Sin resumen ${crypto.randomUUID().slice(0, 8)}`,
+      extra: { summary: '', bodyHtml: '<p>Este cuerpo acaba siendo el resumen.</p>' },
+    });
+    const { html } = await get(`/resena/${una.slug}`);
+
+    expect(html).toContain('class="verdict"');
+    expect(html).toContain('Este cuerpo acaba siendo el resumen.');
+  });
+});

@@ -105,6 +105,29 @@ Reglas que no se rompen:
   1480 px (el kit dice 1180 sobre lienzo gris), y el tema oscuro no existe en el
   kit —se deriva intercambiando hueso y tinta y subiendo el rojo un paso—.
 
+## Reglas de la ficha de una reseña
+
+- **Lo que resalta es la reseña, no su resumen.** El resumen estaba encima del
+  cuerpo, en tipografía de titular y a 20 px: lo primero que se leía era el
+  propio resumen y el texto de verdad quedaba debajo y más pequeño. Ahora vive
+  en un `<details>` plegado de una línea y se lee a tamaño de cuerpo, porque es
+  una nota al margen y no la obra.
+- **El desplegable es nativo y sin JavaScript.** El navegador ya le da el papel
+  de botón y lo anuncia a los lectores de pantalla. Las dos etiquetas —«Ver» y
+  «Ocultar»— están las dos en el HTML y la CSS enseña la que toca según
+  `[open]`: con JavaScript haría falta una isla para algo que el navegador sabe
+  hacer, y sin él el botón se quedaría diciendo «ver» con el resumen a la vista.
+- **El resumen va en el HTML aunque esté plegado**, no detrás de una petición:
+  se indexa igual y se lee con el buscador del navegador.
+- **Las plataformas van después del cuerpo.** Estaban entre el resumen y la
+  reseña, empujándola hacia abajo con una tabla que sólo interesa cuando ya has
+  decidido que quieres verlo, y ese momento es el final.
+- **El control se alinea a la columna de texto** (`max-width: var(--measure)`),
+  no al ancho de la página: un filete cruzando los 1480 px lo convierte en un
+  separador de sección y parte la ficha en dos.
+- **No hay reseñas sin resumen.** Si no se escribe, `ReviewService.prepare()` lo
+  deriva del cuerpo con `htmlToText`, así que el desplegable sale siempre.
+
 ## Reglas de las páginas de sección
 
 - **`/categoria/:slug` y `/genero/:slug` son páginas; `/?genre=…` es una

@@ -110,14 +110,49 @@ export const ReviewDetailView: FC<ReviewDetailProps> = ({ review, env, inModal =
         </p>
       ) : null}
 
-      {review.summary ? <p class="review__summary">{review.summary}</p> : null}
+      {/*
+        El resumen, a un clic y no delante.
 
-      {review.platforms.length ? <PlatformSection review={review} /> : null}
+        Estaba encima del cuerpo, en tipografía de titular y a 20 px: lo primero
+        que se leía de una reseña era su propio spoiler, contado en negrita, y
+        el texto de verdad empezaba debajo y más pequeño. Aquí lo que tiene que
+        resaltar es la reseña.
+
+        Es un `<details>` nativo: se abre y se cierra sin JavaScript, el
+        navegador ya le pone el papel de botón y lo anuncia a los lectores de
+        pantalla. Cerrado ocupa una línea; abierto, el resumen se lee a tamaño
+        de cuerpo, no de titular, porque es una nota al margen y no la obra.
+      */}
+      {review.summary ? (
+        <details class="verdict">
+          {/*
+            Las dos etiquetas van en el HTML y la CSS enseña la que toca según
+            `[open]`. Cambiarla con JavaScript obligaría a una isla para algo
+            que el navegador ya sabe hacer solo, y sin JavaScript el botón se
+            quedaría diciendo «ver» con el resumen a la vista.
+          */}
+          <summary class="verdict__toggle">
+            <Icon name="list" size={14} />
+            <span class="verdict__label verdict__label--cerrado">Ver el resumen en una frase</span>
+            <span class="verdict__label verdict__label--abierto">Ocultar el resumen</span>
+          </summary>
+          <p class="verdict__text">{review.summary}</p>
+        </details>
+      ) : null}
 
       {/* `bodyHtml` se saneó en servidor antes de guardarse en la base de datos. */}
-      <div class="prose" data-spoiler-scope>
+      <div class="prose prose--review" data-spoiler-scope>
         {raw(review.bodyHtml)}
       </div>
+
+      {/*
+        Dónde verlo, después de leer.
+        
+        Estaba entre el resumen y el cuerpo, o sea empujando la reseña hacia
+        abajo con una tabla de plataformas que sólo interesa cuando ya has
+        decidido que quieres verlo. Ese momento es el final, no el principio.
+      */}
+      {review.platforms.length ? <PlatformSection review={review} /> : null}
     </article>
   );
 };
