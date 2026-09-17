@@ -125,8 +125,11 @@ Reglas que no se rompen:
 - **El control se alinea a la columna de texto** (`max-width: var(--measure)`),
   no al ancho de la página: un filete cruzando los 1480 px lo convierte en un
   separador de sección y parte la ficha en dos.
-- **No hay reseñas sin resumen.** Si no se escribe, `ReviewService.prepare()` lo
-  deriva del cuerpo con `htmlToText`, así que el desplegable sale siempre.
+- **Casi nunca hay reseñas sin resumen, pero haberlas haylas.** Si no se
+  escribe, `ReviewService.prepare()` lo deriva del cuerpo con `htmlToText`; lo
+  que no puede es derivarlo de un cuerpo vacío, y entonces el desplegable
+  simplemente no se pinta. Hay una así en staging —una ficha a medio crear— y es
+  el comportamiento correcto, no un fallo: comprobado en el HTML servido.
 
 ## Reglas de las páginas de sección
 
