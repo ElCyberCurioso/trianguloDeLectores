@@ -886,12 +886,17 @@ diciendo «pendiente» sobre algo que ya estaba en `HEAD`— y por eso se borró
   catálogo de 229 libros importado desde MyLibrary. Es el dato que más condiciona
   qué merece la pena hacer: no hay tráfico que optimizar todavía.
 - **La aplicación Android existe y compila**, en `android/`. El APK firmado
-  **1.2.0** (versionCode 7) está publicado en el bucket de producción y se
+  **1.2.1** (versionCode 8) está publicado en el bucket de producción y se
   descarga de `triangulodelectores.site/aplicacion`, con la misma firma que el
-  1.1.0 al que sustituye —comprobado antes de publicar, porque una firma
-  distinta impediría actualizar—. **Nunca se ha ejecutado en un teléfono**: no
-  hay dispositivo ni emulador en la máquina de desarrollo, así que está
-  verificada de compilación y firma, no de uso.
+  1.2.0 al que sustituye —huella `c7ad2857…`, comprobada con `apksigner` antes
+  de publicar, porque una firma distinta impediría actualizar—. **Nunca se ha
+  ejecutado en un teléfono**: no hay dispositivo ni emulador en la máquina de
+  desarrollo, así que está verificada de compilación y firma, no de uso.
+- **El tamaño del APK no sirve para distinguir versiones**: la 1.2.0 y la 1.2.1
+  pesan exactamente lo mismo, 9.212.285 bytes, y son binarios distintos. Lo que
+  distingue es el `sha256`, el `versionCode` que declara el propio APK y, si
+  hace falta, el hash del `classes.dex`. Comparar tamaños habría dicho que no se
+  había compilado nada.
 - **El almacén de claves de firma vive fuera del repositorio**, en
   `~/.tdl/tdl-release.jks`, con su contraseña en `~/.tdl/firma.properties`.
   Perderlo significa no poder publicar más actualizaciones de la aplicación:
