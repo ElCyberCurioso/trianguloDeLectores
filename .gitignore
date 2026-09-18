@@ -48,6 +48,7 @@ __pycache__/
 # cópialo a un sitio seguro.
 android/build/
 android/app/build/
+android/.kotlin/
 android/.gradle/
 android/local.properties
 android/.idea/

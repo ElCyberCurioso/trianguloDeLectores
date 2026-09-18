@@ -669,6 +669,18 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   tirón. Al cambiar `zoomRaster` hay que **recolocar el scroll**: la lista mide
   en píxeles de rasterizado y el alto de cada página cambia con el ancho, así
   que sin recolocarlo la página salta al soltar los dedos.
+- **La lista del lector se dimensiona con `requiredWidth`, nunca con `width`.**
+  Estar ampliado es, literalmente, ser más ancho que el hueco, y `width` es sólo
+  una preferencia: las restricciones que baja el `Box` la recortaban al ancho de
+  la pantalla sin decir nada. Con el recorte, `anchoRaster * escala` dejaba de
+  valer `anchoViewport * zoom`, así que al soltar los dedos —con la escala otra
+  vez en uno— el documento volvía al ancho del hueco mientras `desplazamientoX`
+  seguía apuntando a donde estaba ampliado: **se veía sólo el borde derecho**.
+  Pasaba entre el 100 % y el techo de rasterizado, que es donde el ancho de
+  pintado todavía crece; por encima del techo la escala vuelve a subir con el
+  zoom y por eso allí no se notaba. `requiredHeight` va por lo mismo: el alto
+  sin escalar pasa del hueco en cuanto la escala baja de uno. Esto **ningún test
+  unitario lo ve**: es una restricción de medida, y hace falta el aparato.
 - **La recolocación va después de remedir, nunca antes.** `scrollToItem` fuerza
   una medida en el acto y esa medida todavía usa las alturas viejas: si el
   desplazamiento nuevo se sale de la página —y se sale en cuanto se amplía desde

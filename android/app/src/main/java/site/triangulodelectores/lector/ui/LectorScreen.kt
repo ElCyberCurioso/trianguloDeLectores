@@ -22,8 +22,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -551,8 +552,24 @@ private fun PaginasDelDocumento(
     LazyColumn(
         state = estadoLista,
         modifier = Modifier
-            .width(anchoDp)
-            .height(altoDp)
+            /*
+             * **`requiredWidth`, nunca `width`.**
+             *
+             * La lista tiene que poder ser más ancha que el hueco: ésa es la
+             * definición misma de estar ampliado. `width` es una preferencia y
+             * las restricciones que baja el `Box` la recortan sin decir nada, y
+             * entonces `anchoRaster * escala` deja de valer `anchoViewport *
+             * zoom`: al soltar los dedos, con la escala otra vez en uno, el
+             * documento volvía a la anchura del hueco mientras el encuadre
+             * seguía apuntando a donde estaba ampliado, y se veía sólo su borde
+             * derecho. `requiredHeight` va por lo mismo: el alto sin escalar
+             * pasa del hueco en cuanto la escala baja de uno.
+             *
+             * El `Box` de fuera recorta lo que sobresale (`clipToBounds`) y
+             * alinea arriba a la izquierda, que es donde tiene que empezar.
+             */
+            .requiredWidth(anchoDp)
+            .requiredHeight(altoDp)
             /*
              * El zoom y el encuadre son una transformación de la GPU, no una
              * remedida: nada se vuelve a pintar por moverlos. El origen va en
