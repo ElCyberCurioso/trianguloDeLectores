@@ -624,6 +624,19 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   sección del panel, sin borrar y sin sincronizar, y en la página se pintan en
   contorno y no en relleno: mezclarlas con las propias prometería que se pueden
   borrar, y están dentro del fichero.
+- **Al leerlas no hay lista blanca de subtipos.** Se descarta sólo lo que no es
+  una nota —`Popup`, `Link` y `Widget`— y todo lo demás entra, con nombre en
+  castellano si se sabe y «Anotación» si no. Con la lista cerrada que había
+  antes, un `Line`, un `Polygon` o un `Redact` con su comentario dentro
+  desaparecían sin decir nada y el documento parecía no traer notas.
+- **El texto de una nota viene por dos sitios.** `Contents` es el llano y es el
+  normal, pero unos cuantos anotadores escriben sólo `RC`, el mismo comentario
+  en XHTML, **dejando `Contents` vacío**. Mirando sólo el primero, esos
+  documentos salían sin una sola nota aunque las tuvieran todas.
+- **La sección de notas del documento se pinta siempre, aunque salga vacía.**
+  Escondiéndola, un PDF que PDFBox no puede abrir —cifrado con contraseña, o
+  roto— se veía exactamente igual que uno que no trae notas. Ahora lo dice, y
+  `notasIncrustadasIlegibles` distingue las dos cosas.
 - **El encuadre se vuelve a acotar cuando cambia el zoom o el tamaño del
   hueco.** El tope derecho es cero pase lo que pase, pero el izquierdo sale del
   zoom, y acotando sólo al arrastrar bajar el zoom con el botón, con el doble
@@ -656,6 +669,16 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   tirón. Al cambiar `zoomRaster` hay que **recolocar el scroll**: la lista mide
   en píxeles de rasterizado y el alto de cada página cambia con el ancho, así
   que sin recolocarlo la página salta al soltar los dedos.
+- **La recolocación va después de remedir, nunca antes.** `scrollToItem` fuerza
+  una medida en el acto y esa medida todavía usa las alturas viejas: si el
+  desplazamiento nuevo se sale de la página —y se sale en cuanto se amplía desde
+  más abajo de `1/factor` de ella—, la lista lo resuelve pasando a la siguiente y
+  guardando el resto; al componerse luego con el ancho nuevo, ese resto se
+  reinterpreta en píxeles más grandes y el documento acaba **una página entera
+  más abajo**. Se espera a que `layoutInfo` dé el alto nuevo y entonces se
+  recoloca. El síntoma era un salto al soltar los dedos por debajo del techo de
+  rasterizado y ninguno por encima: pasado el techo el ancho ya no crece, no hay
+  remedida y no había nada que recolocar.
 - **El mapa de bits de una página se recuerda por página, nunca por ancho.** Con
   el ancho en la clave, cada cambio de zoom lo ponía a nulo y la página se
   quedaba en blanco hasta terminar de repintarse. El anterior tiene que seguir
@@ -689,6 +712,18 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   estantería de PDF sí se guarda, porque se lee sin red; el catálogo se consulta
   delante de las baldas, se edita poco y son fichas de texto. Guardarlo sería
   otra sincronización que mantener a cambio de casi nada.
+- **Las portadas del catálogo se guardan remuestreadas**, nunca a tamaño
+  completo: se pintan a 44 dp de ancho y una sola portada entera pasa de tres
+  megas, así que en la caché cabían tres o cuatro. Se decodifican con
+  `inSampleSize` a 256 px y en `RGB_565`, que es la mitad de bytes y en una uña
+  no se distingue; el techo de la caché sale de la memoria concedida, como el
+  del rasterizado del lector.
+- **«Ya pedida» y «ya guardada» son cosas distintas.** Marcar una portada como
+  pedida y no borrar la marca al caerse de la caché la dejaba en blanco para
+  siempre: al bajar por el catálogo las de arriba desaparecían y no volvían. El
+  conjunto de en curso se vacía al terminar la descarga y sólo se da por perdida
+  la que el servidor no ha sabido dar —y hasta eso se reintenta al recargar la
+  lista, porque no hay forma de distinguir eso de que se cayera la red—.
 - **Los campos de texto opcionales se envían vacíos, nunca nulos.** «Opcional»
   en Zod significa que puede faltar, no que pueda valer `null`: un nulo
   explícito devuelve un 400 sin explicación. La cadena vacía sí la entiende. Los

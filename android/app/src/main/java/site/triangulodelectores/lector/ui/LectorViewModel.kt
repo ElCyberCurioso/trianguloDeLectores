@@ -55,6 +55,15 @@ data class EstadoLector(
     val notasIncrustadas: List<NotaIncrustada> = emptyList(),
     val notasIncrustadasLeidas: Boolean = false,
     val leyendoNotasIncrustadas: Boolean = false,
+    /**
+     * El documento no se ha dejado abrir para leer sus notas.
+     *
+     * Pasa con un PDF cifrado con contraseña o con uno roto, y hay que
+     * distinguirlo de «no trae ninguna»: sin decirlo, un documento lleno de
+     * comentarios que PDFBox no puede abrir se ve exactamente igual que uno
+     * limpio, y no hay forma de saber cuál de las dos cosas es.
+     */
+    val notasIncrustadasIlegibles: Boolean = false,
 )
 
 /**
@@ -235,12 +244,14 @@ class LectorViewModel(
         _estado.update { it.copy(leyendoNotasIncrustadas = true) }
 
         viewModelScope.launch {
-            val notas = capaDeTexto()?.notas().orEmpty()
+            val capa = capaDeTexto()
+            val notas = capa?.notas().orEmpty()
             _estado.update {
                 it.copy(
                     notasIncrustadas = notas,
                     notasIncrustadasLeidas = true,
                     leyendoNotasIncrustadas = false,
+                    notasIncrustadasIlegibles = capa == null,
                 )
             }
         }

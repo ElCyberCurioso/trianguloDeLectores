@@ -133,87 +133,103 @@ fun PanelAnotaciones(
     /** Las que trae el propio PDF. Se leen; no se editan ni se borran. */
     notasIncrustadas: List<NotaIncrustada>,
     leyendoNotasIncrustadas: Boolean,
+    /** Ya se ha mirado dentro del PDF, con o sin resultado. */
+    notasIncrustadasLeidas: Boolean,
+    /** No se ha podido abrir el documento para mirarlo: cifrado o roto. */
+    notasIncrustadasIlegibles: Boolean,
     alCerrar: () -> Unit,
     alIrA: (Int) -> Unit,
     alBorrar: (String) -> Unit,
 ) {
-    val vacio = anotaciones.isEmpty() && marcadores.isEmpty() &&
-        notasIncrustadas.isEmpty() && !leyendoNotasIncrustadas
-
     AlertDialog(
         onDismissRequest = alCerrar,
         title = { Text("Notas y subrayados", style = MaterialTheme.typography.titleMedium) },
         text = {
-            if (vacio) {
-                Text(
-                    "Todavía no hay nada. Pulsa «Subrayar» y arrastra sobre el texto de la página, " +
-                        "o «Nota» para escribir algo en la página que estás leyendo.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            } else {
-                LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                    if (marcadores.isNotEmpty()) {
-                        item {
-                            Text(
-                                "Páginas marcadas",
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
-                        item {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                marcadores.sorted().forEach { pagina ->
-                                    Text(
-                                        "$pagina",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .clickable { alIrA(pagina) }
-                                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                                    )
-                                }
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (anotaciones.isEmpty() && marcadores.isEmpty()) {
+                    item {
+                        Text(
+                            "Todavía no hay nada tuyo. Pulsa «Subrayar» y arrastra sobre el texto " +
+                                "de la página, o «Nota» para escribir algo en la página que estás leyendo.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                }
+                if (marcadores.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Páginas marcadas",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    item {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            marcadores.sorted().forEach { pagina ->
+                                Text(
+                                    "$pagina",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clickable { alIrA(pagina) }
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                                )
                             }
                         }
-                        item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
                     }
+                    item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
+                }
 
-                    items(anotaciones, key = { it.id }) { anotacion ->
-                        FilaAnotacion(anotacion, { alIrA(anotacion.pagina) }, { alBorrar(anotacion.id) })
-                        ReglaFina()
-                    }
+                items(anotaciones, key = { it.id }) { anotacion ->
+                    FilaAnotacion(anotacion, { alIrA(anotacion.pagina) }, { alBorrar(anotacion.id) })
+                    ReglaFina()
+                }
 
-                    /*
-                     * Lo que venía escrito en el PDF, aparte y al final.
-                     *
-                     * Van en su propia sección porque no son lo mismo: éstas
-                     * las escribió quien hizo el documento o quien lo anotó
-                     * antes, no se pueden tocar y no viajan al servidor.
-                     * Mezclarlas con las propias en una sola lista sería
-                     * prometer que se pueden borrar.
-                     */
-                    if (leyendoNotasIncrustadas || notasIncrustadas.isNotEmpty()) {
-                        item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
-                        item {
-                            Text(
-                                "Notas del propio documento",
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
+                /*
+                 * Lo que venía escrito en el PDF, aparte y al final.
+                 *
+                 * Van en su propia sección porque no son lo mismo: éstas
+                 * las escribió quien hizo el documento o quien lo anotó
+                 * antes, no se pueden tocar y no viajan al servidor.
+                 * Mezclarlas con las propias en una sola lista sería
+                 * prometer que se pueden borrar.
+                 */
+                item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
+                item {
+                    Text(
+                        "Notas del propio documento",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+                /*
+                 * La sección se pinta siempre, aunque salga vacía.
+                 *
+                 * Antes se escondía cuando no había nada, y entonces un
+                 * documento que no se deja abrir -- cifrado, o roto -- se
+                 * veía igual que uno que no trae notas: sin una línea que
+                 * lo diga, no hay forma de saber cuál de las dos cosas es.
+                 */
+                if (!notasIncrustadasLeidas || notasIncrustadas.isEmpty()) {
+                    item {
+                        Text(
+                            when {
+                                leyendoNotasIncrustadas || !notasIncrustadasLeidas ->
+                                    "Leyendo el documento…"
+                                notasIncrustadasIlegibles ->
+                                    "No se ha podido abrir el documento para leer sus notas. " +
+                                        "Suele pasar con los PDF protegidos con contraseña."
+                                else -> "Este documento no trae notas dentro."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    if (leyendoNotasIncrustadas) {
-                        item {
-                            Text(
-                                "Leyendo el documento…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    items(notasIncrustadas) { nota ->
-                        FilaNotaIncrustada(nota) { alIrA(nota.pagina) }
-                        ReglaFina()
-                    }
+                }
+                items(notasIncrustadas) { nota ->
+                    FilaNotaIncrustada(nota) { alIrA(nota.pagina) }
+                    ReglaFina()
                 }
             }
         },

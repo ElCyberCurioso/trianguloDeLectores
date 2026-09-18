@@ -63,6 +63,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import site.triangulodelectores.lector.data.local.Anotacion
 import site.triangulodelectores.lector.data.local.ColorAnotacion
 import site.triangulodelectores.lector.data.local.Rect
@@ -159,6 +161,17 @@ fun LectorScreen(
      * rasterizado, y al cambiar el ancho cambia el alto de cada página en la
      * misma proporción: el desplazamiento que tenía guardado pasaría a caer en
      * otro sitio y la página daría un salto justo al soltar los dedos.
+     *
+     * **La recolocación va después de remedir, y ése era el fallo.**
+     * `scrollToItem` fuerza una medida en el acto, y esa medida todavía usa las
+     * alturas viejas: si el desplazamiento nuevo se sale de la página -- y se
+     * sale en cuanto se amplía desde más abajo de `1/factor` de ella -- la
+     * lista lo resuelve pasando a la página siguiente y guardando el resto.
+     * Cuando acto seguido se compone con el ancho nuevo, ese resto se
+     * reinterpreta en píxeles más grandes y el documento acaba una página
+     * entera más abajo. Por eso el salto aparecía al pasar de 100 % y otra vez
+     * al pasar de 200 %, y no por encima: ahí el techo de rasterizado ya no
+     * deja crecer el ancho, no hay remedida y no había nada que recolocar.
      */
     LaunchedEffect(estado.zoom) {
         delay(180)
@@ -166,13 +179,28 @@ fun LectorScreen(
 
         val anterior = anchoRasterDe(anchoViewport, zoomRaster)
         val nuevo = anchoRasterDe(anchoViewport, estado.zoom)
+        if (nuevo == anterior) {
+            zoomRaster = estado.zoom
+            return@LaunchedEffect
+        }
+
         val indice = lista.firstVisibleItemIndex
-        val dentro = lista.firstVisibleItemScrollOffset
+        val destino = (lista.firstVisibleItemScrollOffset.toFloat() * nuevo / anterior).toInt()
+        val altoAntes = lista.layoutInfo.visibleItemsInfo.firstOrNull { it.index == indice }?.size
 
         zoomRaster = estado.zoom
-        if (nuevo != anterior) {
-            lista.scrollToItem(indice, (dentro.toFloat() * nuevo / anterior).toInt())
+
+        // Esperar a que la lista esté medida con el ancho nuevo. El tope está
+        // para no quedarse colgado si la página deja de estar visible por lo
+        // que sea: más vale recolocar de más que no recolocar nunca.
+        if (altoAntes != null) {
+            withTimeoutOrNull(1_000) {
+                snapshotFlow { lista.layoutInfo.visibleItemsInfo.firstOrNull { it.index == indice }?.size }
+                    .first { it != null && it != altoAntes }
+            }
         }
+
+        lista.scrollToItem(indice, destino)
     }
     var notaEnCurso by remember { mutableStateOf(false) }
 
@@ -383,6 +411,8 @@ fun LectorScreen(
             marcadores = estado.marcadores.map { it.pagina },
             notasIncrustadas = estado.notasIncrustadas,
             leyendoNotasIncrustadas = estado.leyendoNotasIncrustadas,
+            notasIncrustadasLeidas = estado.notasIncrustadasLeidas,
+            notasIncrustadasIlegibles = estado.notasIncrustadasIlegibles,
             alCerrar = { panelAnotaciones = false },
             alIrA = { pagina ->
                 panelAnotaciones = false

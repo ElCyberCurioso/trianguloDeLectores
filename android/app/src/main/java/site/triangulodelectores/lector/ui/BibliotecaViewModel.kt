@@ -72,12 +72,31 @@ class BibliotecaViewModel(private val contenedor: Contenedor) : ViewModel() {
     private val _estado = MutableStateFlow(EstadoBiblioteca())
     val estado: StateFlow<EstadoBiblioteca> = _estado.asStateFlow()
 
-    /** Portadas ya descargadas. Se piden con el token, como todo lo demás. */
-    private val portadas = object : LruCache<String, Bitmap>(12 * 1024) {
+    /**
+     * Portadas ya descargadas. Se piden con el token, como todo lo demás.
+     *
+     * El techo sale de la memoria concedida, igual que el del rasterizado del
+     * lector, y las miniaturas se guardan **remuestreadas**: a tamaño completo
+     * una sola portada pasa de tres megas y en la caché cabían tres o cuatro,
+     * así que al bajar por el catálogo las de arriba se caían enseguida.
+     */
+    private val portadas = object : LruCache<String, Bitmap>(TECHO_PORTADAS_KB) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
 
-    private val pedidas = mutableSetOf<String>()
+    /** Lo que se está descargando ahora mismo. Se vacía al terminar. */
+    private val enCurso = mutableSetOf<String>()
+
+    /**
+     * Lo que se pidió y no había. Esto sí es para siempre.
+     *
+     * Es la mitad que falta del arreglo: marcar como «ya pedida» una portada
+     * que luego se cae de la caché la dejaba en blanco para siempre, porque
+     * nadie volvía a pedirla. Sólo se descarta definitivamente lo que el
+     * servidor no ha sabido dar.
+     */
+    private val sinPortada = mutableSetOf<String>()
+
     private val _revision = MutableStateFlow(0)
 
     /** Sube cada vez que llega una portada, para que la lista se repinte. */
@@ -94,6 +113,10 @@ class BibliotecaViewModel(private val contenedor: Contenedor) : ViewModel() {
             _estado.update { it.copy(pedirEmparejar = true) }
             return
         }
+        // Las que se dieron por perdidas vuelven a intentarse. No se puede
+        // distinguir «el servidor no la tiene» de «se cayó la red al pedirla»,
+        // así que recargar la lista es la salida para la segunda.
+        sinPortada.clear()
         viewModelScope.launch {
             _estado.update { it.copy(cargando = true) }
             val actual = _estado.value
@@ -198,18 +221,20 @@ class BibliotecaViewModel(private val contenedor: Contenedor) : ViewModel() {
     fun portada(libro: LibroDto): Bitmap? {
         val ruta = libro.coverUrl ?: return null
         portadas[ruta]?.let { return it }
+        if (ruta in sinPortada) return null
 
-        if (pedidas.add(ruta)) {
+        if (enCurso.add(ruta)) {
             viewModelScope.launch {
                 val mapa = withContext(Dispatchers.IO) {
-                    contenedor.api.portada(ruta)?.let { bytes ->
-                        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
-                    }
+                    contenedor.api.portada(ruta)?.let(::miniatura)
                 }
                 if (mapa != null) {
                     portadas.put(ruta, mapa)
                     _revision.update { it + 1 }
+                } else {
+                    sinPortada += ruta
                 }
+                enCurso -= ruta
             }
         }
         return null
@@ -222,4 +247,50 @@ class BibliotecaViewModel(private val contenedor: Contenedor) : ViewModel() {
         is FalloApi.Credencial -> "Hay que volver a emparejar este teléfono."
         else -> fallo.message ?: "No se ha podido completar la operación."
     }
+}
+
+/**
+ * Cuánta memoria se deja para las miniaturas del catálogo, en kilobytes.
+ *
+ * Un octavo del montón, con suelo: el mismo criterio que el techo de
+ * rasterizado del lector y por la misma razón, que va de 96 MB en un teléfono
+ * modesto a 512 en uno grande y un número fijo o se queda corto o lo tira.
+ */
+private val TECHO_PORTADAS_KB: Int by lazy {
+    ((Runtime.getRuntime().maxMemory() / 1024).toInt() / 8).coerceIn(12 * 1024, 64 * 1024)
+}
+
+/**
+ * Ancho al que se guarda una portada del catálogo, en píxeles.
+ *
+ * Se pinta a 44 dp de ancho, que en la pantalla más densa no llega a 200 px:
+ * guardarla a tamaño completo es gastar tres megas para enseñar una uña.
+ */
+private const val ANCHO_PORTADA = 256
+
+/**
+ * La portada, remuestreada al vuelo.
+ *
+ * `inSampleSize` decodifica ya reducido y nunca llega a construir el mapa de
+ * bits grande, que es lo que importa: hacerlo con `createScaledBitmap` exigiría
+ * tener antes en memoria el original entero. `RGB_565` va sin canal alfa y
+ * ocupa la mitad; una portada es una foto opaca y a este tamaño no se nota.
+ */
+private fun miniatura(bytes: ByteArray): Bitmap? {
+    val medida = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, medida)
+
+    val opciones = BitmapFactory.Options().apply {
+        inSampleSize = muestreo(medida.outWidth, ANCHO_PORTADA)
+        inPreferredConfig = Bitmap.Config.RGB_565
+    }
+    return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opciones) }.getOrNull()
+}
+
+/** La mayor potencia de dos que deja el ancho por encima del objetivo. */
+private fun muestreo(ancho: Int, objetivo: Int): Int {
+    if (ancho <= 0) return 1
+    var paso = 1
+    while (ancho / (paso * 2) >= objetivo) paso *= 2
+    return paso
 }

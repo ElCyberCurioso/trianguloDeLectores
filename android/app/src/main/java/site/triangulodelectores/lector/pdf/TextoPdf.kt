@@ -261,7 +261,15 @@ private class ExtractorDePalabras : PDFTextStripper() {
     }
 }
 
-/** Los subtipos que sí son algo que leer, con su nombre en castellano. */
+/**
+ * Nombre en castellano de los subtipos que se saben nombrar.
+ *
+ * **No es una lista blanca.** Lo que no está aquí no se descarta: se nombra
+ * «Anotación» y se lee igual. La lista cerrada estaba antes y era el fallo --
+ * un `Polygon`, una `Line` o un `Redact` con su comentario dentro
+ * desaparecían sin decir nada, y el documento parecía no traer notas. Lo que se
+ * descarta es sólo lo que de verdad no es una nota, y va en [NO_SON_NOTAS].
+ */
 private val TIPOS_LEGIBLES = mapOf(
     "Text" to "Nota",
     "FreeText" to "Texto",
@@ -271,20 +279,36 @@ private val TIPOS_LEGIBLES = mapOf(
     "StrikeOut" to "Tachado",
     "Square" to "Recuadro",
     "Circle" to "Círculo",
+    "Line" to "Línea",
+    "Polygon" to "Polígono",
+    "PolyLine" to "Línea",
     "Ink" to "Trazo",
     "Caret" to "Inserción",
     "Stamp" to "Sello",
     "FileAttachment" to "Adjunto",
+    "Sound" to "Sonido",
+    "Redact" to "Tachadura",
 )
+
+/**
+ * Lo que lleva texto pero no es una nota.
+ *
+ * El `Popup` no es una anotación sino la ventanita de otra, y repetiría su
+ * texto. El `Link` y el `Widget` son un enlace y un campo de formulario.
+ */
+private val NO_SON_NOTAS = setOf("Popup", "Link", "Widget")
 
 /**
  * Lee las anotaciones que el PDF trae dentro.
  *
- * Se descarta lo que no es una nota: los enlaces, los campos de formulario y
- * los `Popup`, que no son una anotación sino la ventanita de otra y repetirían
- * su texto. Y se descarta lo que no tiene nada escrito: un subrayado sin
- * comentario no es algo que leer, y llenar la lista con ellos taparía las notas
- * que sí dicen algo.
+ * Se descarta lo que no es una nota ([NO_SON_NOTAS]) y lo que no tiene nada
+ * escrito: un subrayado sin comentario no es algo que leer, y llenar la lista
+ * con ellos taparía las notas que sí dicen algo.
+ *
+ * El texto puede venir por dos sitios. `Contents` es el llano y es el normal;
+ * `RC` es el mismo comentario en XHTML y lo escriben unos cuantos anotadores
+ * **dejando `Contents` vacío**. Mirando sólo el primero, esos documentos salían
+ * sin una sola nota aunque las tuvieran todas.
  */
 private fun leerNotas(documento: PDDocument): List<NotaIncrustada> {
     val notas = mutableListOf<NotaIncrustada>()
@@ -294,14 +318,18 @@ private fun leerNotas(documento: PDDocument): List<NotaIncrustada> {
         val anotaciones: List<PDAnnotation> = runCatching { pagina.annotations }.getOrDefault(emptyList())
 
         anotaciones.forEach { anotacion ->
-            val tipo = TIPOS_LEGIBLES[anotacion.subtype] ?: return@forEach
-            val texto = anotacion.contents?.trim().orEmpty()
-            if (texto.isEmpty()) return@forEach
+            val subtipo = anotacion.subtype.orEmpty()
+            if (subtipo in NO_SON_NOTAS) return@forEach
+
+            val marcado = anotacion as? PDAnnotationMarkup
+            val texto = anotacion.contents?.trim()?.takeIf { it.isNotEmpty() }
+                ?: marcado?.richContents?.let(::textoDeRico)?.takeIf { it.isNotEmpty() }
+                ?: return@forEach
 
             notas += NotaIncrustada(
                 pagina = indice + 1,
-                tipo = tipo,
-                autor = (anotacion as? PDAnnotationMarkup)?.titlePopup?.trim()?.takeIf { it.isNotEmpty() },
+                tipo = TIPOS_LEGIBLES[subtipo] ?: "Anotación",
+                autor = marcado?.titlePopup?.trim()?.takeIf { it.isNotEmpty() },
                 texto = texto,
                 rect = rectDe(anotacion, pagina),
             )
@@ -310,6 +338,23 @@ private fun leerNotas(documento: PDDocument): List<NotaIncrustada> {
 
     return notas
 }
+
+/**
+ * El texto de un comentario escrito en XHTML (`RC`).
+ *
+ * No hace falta un analizador: lo que llega es un párrafo con algo de formato y
+ * lo único que interesa es lo que pone. Se quitan las etiquetas, se traducen
+ * las cuatro entidades que salen y se juntan los espacios.
+ */
+private fun textoDeRico(rico: String): String = rico
+    .replace(Regex("<[^>]*>"), " ")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+    .replace("&quot;", "\"")
+    .replace("&apos;", "'")
+    .replace("&amp;", "&")
+    .replace(Regex("\\s+"), " ")
+    .trim()
 
 /**
  * Pasa el rectángulo de una anotación al mismo 0..1 con origen arriba a la
