@@ -662,35 +662,34 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   montón para una sola página. Por encima de unos tres aumentos la página se
   estira en vez de repintarse: se ve más blanda, y es el precio de llegar a ocho
   aumentos sin reventar el proceso.
+- **La lista del lector se dispone al ancho del hueco y nunca más; quien amplía
+  es la GPU.** Es la regla de la que cuelga todo el zoom, y se tardó tres
+  intentos en dar con ella. Lo que se ve ocupa `anchoLista * zoom` empezando en
+  `desplazamientoX`, que es exactamente el intervalo que acota `margenX()`: la
+  cuenta del encuadre es correcta **por construcción**. En cuanto la lista se
+  mide con otra anchura aparece un desfase constante entre lo que se dibuja y lo
+  que el encuadre cree que se dibuja, y entonces sobra documento por un lado y
+  falta por el otro: con `width(anchoRaster)` el `Box` recortaba la anchura en
+  silencio y al soltar los dedos se veía sólo el borde derecho; con
+  `requiredWidth(anchoRaster)` la lista sí crecía, pero pasaba a medir más que
+  su `Box` —`BoxMeasurePolicy` devuelve `max(minWidth, hijo)`— y el ancho del
+  hueco dejaba de ser el ancho del hueco.
 - **El zoom que se ve y el zoom al que se pinta son dos cosas distintas.**
   `estado.zoom` sigue al dedo y lo aplica la GPU con `graphicsLayer`;
-  `zoomRaster` es la escala de los mapas de bits y sólo se mueve cuando el gesto
-  para, 180 ms después. Rasterizar en cada paso del pellizco era lo que daba el
-  tirón. Al cambiar `zoomRaster` hay que **recolocar el scroll**: la lista mide
-  en píxeles de rasterizado y el alto de cada página cambia con el ancho, así
-  que sin recolocarlo la página salta al soltar los dedos.
-- **La lista del lector se dimensiona con `requiredWidth`, nunca con `width`.**
-  Estar ampliado es, literalmente, ser más ancho que el hueco, y `width` es sólo
-  una preferencia: las restricciones que baja el `Box` la recortaban al ancho de
-  la pantalla sin decir nada. Con el recorte, `anchoRaster * escala` dejaba de
-  valer `anchoViewport * zoom`, así que al soltar los dedos —con la escala otra
-  vez en uno— el documento volvía al ancho del hueco mientras `desplazamientoX`
-  seguía apuntando a donde estaba ampliado: **se veía sólo el borde derecho**.
-  Pasaba entre el 100 % y el techo de rasterizado, que es donde el ancho de
-  pintado todavía crece; por encima del techo la escala vuelve a subir con el
-  zoom y por eso allí no se notaba. `requiredHeight` va por lo mismo: el alto
-  sin escalar pasa del hueco en cuanto la escala baja de uno. Esto **ningún test
-  unitario lo ve**: es una restricción de medida, y hace falta el aparato.
-- **La recolocación va después de remedir, nunca antes.** `scrollToItem` fuerza
-  una medida en el acto y esa medida todavía usa las alturas viejas: si el
-  desplazamiento nuevo se sale de la página —y se sale en cuanto se amplía desde
-  más abajo de `1/factor` de ella—, la lista lo resuelve pasando a la siguiente y
-  guardando el resto; al componerse luego con el ancho nuevo, ese resto se
-  reinterpreta en píxeles más grandes y el documento acaba **una página entera
-  más abajo**. Se espera a que `layoutInfo` dé el alto nuevo y entonces se
-  recoloca. El síntoma era un salto al soltar los dedos por debajo del techo de
-  rasterizado y ninguno por encima: pasado el techo el ancho ya no crece, no hay
-  remedida y no había nada que recolocar.
+  `zoomRaster` **no dimensiona nada**, sólo dice a cuántos píxeles se rasteriza
+  cada página, o sea lo nítida que se ve, y se mueve 180 ms después de que el
+  gesto pare. Rasterizar en cada paso del pellizco era lo que daba el tirón.
+- **Ampliar no vuelve a medir nada, y por eso no hay scroll que recolocar.** El
+  alto de cada página sale del ancho de la lista, que no se mueve con el zoom.
+  Mientras el alto sí dependía del rasterizado hubo que recolocar el scroll a
+  cada cambio, y eso trajo su propio fallo: `scrollToItem` fuerza una medida en
+  el acto con las alturas viejas, el desplazamiento se salía de la página, la
+  lista pasaba a la siguiente guardando el resto y ese resto se reinterpretaba
+  luego en píxeles más grandes. Nada de eso existe ya; si algún día el alto
+  vuelve a depender del zoom, vuelve el problema entero.
+- **Nada de esto lo ve un test unitario.** Son restricciones de medida de
+  Compose: hace falta el aparato, y en esta máquina no lo hay. Los tres intentos
+  fallidos compilaron, pasaron R8 y se firmaron igual de bien que el bueno.
 - **El mapa de bits de una página se recuerda por página, nunca por ancho.** Con
   el ancho en la clave, cada cambio de zoom lo ponía a nulo y la página se
   quedaba en blanco hasta terminar de repintarse. El anterior tiene que seguir

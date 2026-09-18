@@ -22,9 +22,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -64,8 +63,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 import site.triangulodelectores.lector.data.local.Anotacion
 import site.triangulodelectores.lector.data.local.ColorAnotacion
 import site.triangulodelectores.lector.data.local.Rect
@@ -107,12 +104,12 @@ fun LectorScreen(
      * Zoom visual y zoom rasterizado son cosas distintas, y separarlos es lo
      * que hace que el gesto vaya suelto.
      *
-     * `estado.zoom` es lo que se ve y cambia con cada píxel del pellizco;
-     * `zoomRaster` es la escala a la que están pintados los mapas de bits, y
-     * sólo se mueve cuando el gesto para. Entre uno y otro hay un factor que
-     * aplica la GPU con `graphicsLayer`, así que durante el pellizco no se
-     * repinta ni una página: antes se rasterizaba todo lo visible en cada paso
-     * de zoom, que es de donde salían el tirón y el parpadeo.
+     * `estado.zoom` es lo que se ve: lo aplica la GPU sobre una lista que se
+     * dispone siempre al ancho del hueco, y cambia con cada píxel del pellizco.
+     * `zoomRaster` no cambia el tamaño de nada: sólo dice a cuántos píxeles se
+     * pinta el mapa de bits de cada página, o sea lo nítida que se ve, y se
+     * mueve cuando el gesto para. Antes se rasterizaba todo lo visible en cada
+     * paso del pellizco, que es de donde salían el tirón y el parpadeo.
      */
     var zoomRaster by remember { mutableStateOf(1f) }
 
@@ -158,50 +155,15 @@ fun LectorScreen(
      * El `delay` se cancela solo con cada cambio, así que durante el pellizco no
      * llega a dispararse: al soltar se rasteriza una vez, ya en su escala.
      *
-     * Y hay que **recolocar el scroll**. La lista mide en píxeles de
-     * rasterizado, y al cambiar el ancho cambia el alto de cada página en la
-     * misma proporción: el desplazamiento que tenía guardado pasaría a caer en
-     * otro sitio y la página daría un salto justo al soltar los dedos.
-     *
-     * **La recolocación va después de remedir, y ése era el fallo.**
-     * `scrollToItem` fuerza una medida en el acto, y esa medida todavía usa las
-     * alturas viejas: si el desplazamiento nuevo se sale de la página -- y se
-     * sale en cuanto se amplía desde más abajo de `1/factor` de ella -- la
-     * lista lo resuelve pasando a la página siguiente y guardando el resto.
-     * Cuando acto seguido se compone con el ancho nuevo, ese resto se
-     * reinterpreta en píxeles más grandes y el documento acaba una página
-     * entera más abajo. Por eso el salto aparecía al pasar de 100 % y otra vez
-     * al pasar de 200 %, y no por encima: ahí el techo de rasterizado ya no
-     * deja crecer el ancho, no hay remedida y no había nada que recolocar.
+     * **Y no hay nada más que hacer aquí.** La lista se mide siempre al ancho
+     * del hueco, así que `zoomRaster` no cambia el alto de ninguna página: sólo
+     * cambia la resolución del mapa de bits que se mete en el mismo sitio. Sin
+     * remedida no hay scroll que recolocar, que es de donde salían los dos
+     * intentos anteriores de arreglar el salto.
      */
     LaunchedEffect(estado.zoom) {
         delay(180)
-        if (anchoViewport <= 0 || zoomRaster == estado.zoom) return@LaunchedEffect
-
-        val anterior = anchoRasterDe(anchoViewport, zoomRaster)
-        val nuevo = anchoRasterDe(anchoViewport, estado.zoom)
-        if (nuevo == anterior) {
-            zoomRaster = estado.zoom
-            return@LaunchedEffect
-        }
-
-        val indice = lista.firstVisibleItemIndex
-        val destino = (lista.firstVisibleItemScrollOffset.toFloat() * nuevo / anterior).toInt()
-        val altoAntes = lista.layoutInfo.visibleItemsInfo.firstOrNull { it.index == indice }?.size
-
-        zoomRaster = estado.zoom
-
-        // Esperar a que la lista esté medida con el ancho nuevo. El tope está
-        // para no quedarse colgado si la página deja de estar visible por lo
-        // que sea: más vale recolocar de más que no recolocar nunca.
-        if (altoAntes != null) {
-            withTimeoutOrNull(1_000) {
-                snapshotFlow { lista.layoutInfo.visibleItemsInfo.firstOrNull { it.index == indice }?.size }
-                    .first { it != null && it != altoAntes }
-            }
-        }
-
-        lista.scrollToItem(indice, destino)
+        if (anchoViewport > 0) zoomRaster = estado.zoom
     }
     var notaEnCurso by remember { mutableStateOf(false) }
 
@@ -280,7 +242,13 @@ fun LectorScreen(
                     val pdf = modelo.pdf
                     if (pdf != null) {
                         /*
-                         * Ancho al que se pinta, con techo.
+                         * Ancho al que se **pinta** el mapa de bits, con techo.
+                         *
+                         * Ojo: esto ya no mide nada. La lista se dispone
+                         * siempre al ancho del hueco y quien amplía es la GPU;
+                         * lo único que decide este número es la resolución a la
+                         * que se rasteriza cada página, o sea lo nítida que se
+                         * ve al ampliarla.
                          *
                          * A 4x sin techo una página A4 son unos 4300 px de
                          * ancho y más de cien megas de mapa de bits, que es una
@@ -288,15 +256,6 @@ fun LectorScreen(
                          * se sigue ampliando, pero estirando lo ya pintado.
                          */
                         val anchoRaster = anchoRasterDe(anchoViewport, zoomRaster)
-
-                        // Lo que le queda por hacer a la GPU: la diferencia
-                        // entre lo que se ve y lo que está pintado. Vale 1
-                        // cuando el zoom está quieto.
-                        val escala = if (anchoViewport > 0) {
-                            (anchoViewport * estado.zoom) / anchoRaster
-                        } else {
-                            1f
-                        }
 
                         Box(
                             Modifier
@@ -348,11 +307,14 @@ fun LectorScreen(
                                                 ).coerceIn(-margenX(), 0f)
 
                                             // Vertical: lo mismo, pero el eje lo
-                                            // lleva la lista, que mide en píxeles
-                                            // de rasterizado: de ahí la escala.
-                                            if (escala > 0f) {
+                                            // lleva la lista, que mide **sin
+                                            // ampliar**: de ahí la división por
+                                            // el zoom que había antes de este
+                                            // paso, que es el que traduce sus
+                                            // píxeles a los de la pantalla.
+                                            if (anterior > 0f) {
                                                 lista.dispatchRawDelta(
-                                                    centroide.y * (1f - 1f / real) / escala,
+                                                    centroide.y * (1f - 1f / real) / anterior,
                                                 )
                                             }
                                         }
@@ -361,19 +323,24 @@ fun LectorScreen(
                                         desplazamientoX =
                                             (desplazamientoX + dx).coerceIn(-margenX(), 0f)
                                         // La lista se desplaza en sus propios
-                                        // píxeles, que son los de rasterizado:
-                                        // hay que deshacer la escala visual o
+                                        // píxeles, que son los del hueco sin
+                                        // ampliar: hay que deshacer el zoom o
                                         // el dedo y el papel no van juntos.
-                                        if (dy != 0f && escala > 0f) {
-                                            lista.dispatchRawDelta(-dy / escala)
+                                        if (dy != 0f && estado.zoom > 0f) {
+                                            lista.dispatchRawDelta(-dy / estado.zoom)
                                         }
                                     },
                                 ),
                         ) {
                             PaginasDelDocumento(
+                                anchoLista = anchoViewport,
+                                altoLista = if (estado.zoom > 0f) {
+                                    (altoViewport / estado.zoom).toInt()
+                                } else {
+                                    altoViewport
+                                },
+                                zoom = estado.zoom,
                                 anchoRaster = anchoRaster,
-                                altoRaster = if (escala > 0f) (altoViewport / escala).toInt() else altoViewport,
-                                escala = escala,
                                 // Acotado también aquí: el efecto que recoloca
                                 // el encuadre corre después de componer, y ese
                                 // fotograma se vería descolocado.
@@ -523,12 +490,18 @@ private fun Modifier.gestosDeLectura(
 
 @Composable
 private fun PaginasDelDocumento(
-    /** Ancho al que se pintan las páginas, en píxeles. */
+    /**
+     * Ancho al que se **dispone** la lista: el del hueco, siempre, pase lo que
+     * pase con el zoom. Ampliar no es medir más ancho, es que lo ya medido lo
+     * agrande la GPU.
+     */
+    anchoLista: Int,
+    /** Alto sin ampliar, para que al aplicarle el zoom llene el hueco justo. */
+    altoLista: Int,
+    /** El zoom que aplica la GPU sobre lo dispuesto. */
+    zoom: Float,
+    /** Ancho al que se pintan los mapas de bits. Sólo decide la nitidez. */
     anchoRaster: Int,
-    /** Alto de la lista sin escalar, para que al escalarla llene el hueco. */
-    altoRaster: Int,
-    /** Lo que la GPU pone encima de lo ya pintado. Uno con el zoom quieto. */
-    escala: Float,
     desplazamientoX: Float,
     pdf: DocumentoPdf,
     documentoId: String,
@@ -544,42 +517,41 @@ private fun PaginasDelDocumento(
     alDobleToque: () -> Unit,
 ) {
     val densidad = LocalDensity.current
-    if (anchoRaster <= 1 || altoRaster <= 0) return
+    if (anchoLista <= 1 || altoLista <= 0 || anchoRaster <= 1) return
 
-    val anchoDp = with(densidad) { anchoRaster.toDp() }
-    val altoDp = with(densidad) { altoRaster.toDp() }
+    val anchoDp = with(densidad) { anchoLista.toDp() }
+    val altoDp = with(densidad) { altoLista.toDp() }
 
     LazyColumn(
         state = estadoLista,
         modifier = Modifier
             /*
-             * **`requiredWidth`, nunca `width`.**
+             * **La lista se dispone al ancho del hueco y nunca más.**
              *
-             * La lista tiene que poder ser más ancha que el hueco: ésa es la
-             * definición misma de estar ampliado. `width` es una preferencia y
-             * las restricciones que baja el `Box` la recortan sin decir nada, y
-             * entonces `anchoRaster * escala` deja de valer `anchoViewport *
-             * zoom`: al soltar los dedos, con la escala otra vez en uno, el
-             * documento volvía a la anchura del hueco mientras el encuadre
-             * seguía apuntando a donde estaba ampliado, y se veía sólo su borde
-             * derecho. `requiredHeight` va por lo mismo: el alto sin escalar
-             * pasa del hueco en cuanto la escala baja de uno.
+             * Quien amplía es la GPU, con `scaleX`. Esto es lo que hace que la
+             * cuenta del encuadre sea exacta por construcción: lo que se ve
+             * ocupa `anchoLista * zoom` empezando en `desplazamientoX`, que es
+             * literalmente el intervalo que acota `margenX()`. Cualquier otra
+             * anchura mete un desfase entre lo que se dibuja y lo que el
+             * encuadre cree que se dibuja, y entonces sobra documento por un
+             * lado y falta por el otro.
              *
-             * El `Box` de fuera recorta lo que sobresale (`clipToBounds`) y
-             * alinea arriba a la izquierda, que es donde tiene que empezar.
+             * Y como el alto de cada página sale de este ancho, que no se
+             * mueve, ampliar **no vuelve a medir nada**: no hay saltos de
+             * página ni scroll que recolocar.
              */
-            .requiredWidth(anchoDp)
-            .requiredHeight(altoDp)
+            .width(anchoDp)
+            .height(altoDp)
             /*
              * El zoom y el encuadre son una transformación de la GPU, no una
              * remedida: nada se vuelve a pintar por moverlos. El origen va en
-             * la esquina superior izquierda para que la anchura escalada salga
-             * exactamente `anchoRaster * escala` y el encuadre se pueda acotar
-             * con una cuenta y no a ojo.
+             * la esquina superior izquierda para que la anchura ampliada salga
+             * exactamente `anchoLista * zoom` y el encuadre se pueda acotar con
+             * una cuenta y no a ojo.
              */
             .graphicsLayer {
-                scaleX = escala
-                scaleY = escala
+                scaleX = zoom
+                scaleY = zoom
                 translationX = desplazamientoX
                 transformOrigin = TransformOrigin(0f, 0f)
             },
