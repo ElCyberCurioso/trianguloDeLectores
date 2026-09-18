@@ -1,6 +1,7 @@
 package site.triangulodelectores.lector.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -165,6 +166,71 @@ fun LectorScreen(
         delay(180)
         if (anchoViewport > 0) zoomRaster = estado.zoom
     }
+    /*
+     * La barra se quita de en medio al bajar y vuelve al subir.
+     *
+     * En horizontal se come un tercio de la pantalla y deja el documento en una
+     * rendija. En vertical estorba menos, pero el criterio es el mismo: tenerlo
+     * distinto según cómo se sujete el teléfono sería una cosa más que explicar,
+     * y al leer se baja mucho más de lo que se toca un control.
+     *
+     * Se mira **el sitio de la lista**, no un `nestedScroll`: con zoom, el
+     * desplazamiento vertical lo mete el detector de gestos con
+     * `dispatchRawDelta`, que no pasa por la cadena de scroll anidado y ahí no
+     * se vería nada. El par (página, desplazamiento dentro de ella) sí crece y
+     * decrece siempre, y con eso se sabe hacia dónde se va sin necesidad de
+     * saber cuánto mide cada página.
+     */
+    var barraVisible by remember { mutableStateOf(true) }
+    val umbralPantalla = with(LocalDensity.current) { 32.dp.toPx() }
+    LaunchedEffect(lista) {
+        var previo = lista.firstVisibleItemIndex to lista.firstVisibleItemScrollOffset
+        var recorrido = 0f
+        snapshotFlow { lista.firstVisibleItemIndex to lista.firstVisibleItemScrollOffset }
+            .collect { actual ->
+                /*
+                 * El umbral es de pantalla, no de la lista.
+                 *
+                 * La lista mide sin ampliar, así que un umbral fijo en sus
+                 * píxeles obligaría a arrastrar ocho veces más al octavo
+                 * aumento para lo mismo. Dividiendo por el zoom, el dedo
+                 * recorre siempre lo mismo.
+                 */
+                val umbral = (umbralPantalla / zoomPedido.coerceAtLeast(0.01f)).coerceAtLeast(1f)
+                val avance = when {
+                    actual.first > previo.first -> umbral
+                    actual.first < previo.first -> -umbral
+                    else -> (actual.second - previo.second).toFloat()
+                }
+                previo = actual
+
+                // Al cambiar de sentido se empieza a contar de nuevo: si no, un
+                // arrastre largo hacia abajo dejaría crédito acumulado y la
+                // barra tardaría en volver aunque se subiera del tirón.
+                recorrido = if (recorrido > 0f && avance < 0f || recorrido < 0f && avance > 0f) {
+                    avance
+                } else {
+                    recorrido + avance
+                }
+
+                if (recorrido >= umbral) barraVisible = false
+                if (recorrido <= -umbral) barraVisible = true
+
+                // Arriba del todo la barra está siempre. Es donde se llega al
+                // abrir el libro, y sin esto podría abrirse sin barra y sin
+                // manera evidente de volver.
+                if (actual.first == 0 && actual.second == 0) barraVisible = true
+            }
+    }
+
+    /*
+     * Con el modo subrayado puesto, la barra no se esconde: el interruptor para
+     * salir de él está ahí dentro, y esconderlo deja atrapado a quien lo haya
+     * encendido sin querer.
+     */
+    val mostrarBarra = barraVisible || estado.modoSubrayado ||
+        estado.cargando || estado.error != null
+
     var notaEnCurso by remember { mutableStateOf(false) }
 
     val salir = {
@@ -211,20 +277,22 @@ fun LectorScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            BarraLector(
-                titulo = estado.documento?.titulo ?: "",
-                pagina = estado.paginaVisible,
-                paginas = estado.paginas,
-                marcada = estado.marcadores.any { it.pagina == estado.paginaVisible },
-                modoSubrayado = estado.modoSubrayado,
-                zoom = estado.zoom,
-                alVolver = salir,
-                alMarcar = { modelo.alternarMarcador(estado.paginaVisible) },
-                alSubrayar = modelo::alternarModoSubrayado,
-                alAnotar = { notaEnCurso = true },
-                alZoom = modelo::cambiarZoom,
-                alVerAnotaciones = { panelAnotaciones = true },
-            )
+            AnimatedVisibility(visible = mostrarBarra) {
+                BarraLector(
+                    titulo = estado.documento?.titulo ?: "",
+                    pagina = estado.paginaVisible,
+                    paginas = estado.paginas,
+                    marcada = estado.marcadores.any { it.pagina == estado.paginaVisible },
+                    modoSubrayado = estado.modoSubrayado,
+                    zoom = estado.zoom,
+                    alVolver = salir,
+                    alMarcar = { modelo.alternarMarcador(estado.paginaVisible) },
+                    alSubrayar = modelo::alternarModoSubrayado,
+                    alAnotar = { notaEnCurso = true },
+                    alZoom = modelo::cambiarZoom,
+                    alVerAnotaciones = { panelAnotaciones = true },
+                )
+            }
 
             when {
                 estado.cargando -> Aviso("Abriendo el documento…", Modifier.padding(16.dp))

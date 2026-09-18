@@ -687,6 +687,23 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   lista pasaba a la siguiente guardando el resto y ese resto se reinterpretaba
   luego en píxeles más grandes. Nada de eso existe ya; si algún día el alto
   vuelve a depender del zoom, vuelve el problema entero.
+- **La barra del lector se esconde al bajar y vuelve al subir.** En horizontal
+  se comía un tercio de la pantalla y dejaba el documento en una rendija. El
+  criterio es el mismo en las dos orientaciones: al leer se baja mucho más de lo
+  que se toca un control, y tener dos comportamientos según cómo se sujete el
+  teléfono sería una cosa más que explicar.
+- **El sentido del desplazamiento sale del sitio de la lista, no de un
+  `nestedScroll`.** Con zoom, el movimiento vertical lo mete el detector de
+  gestos con `dispatchRawDelta`, que **no pasa por la cadena de scroll
+  anidado**: un `NestedScrollConnection` no vería nada en cuanto se amplía. El
+  par (página, desplazamiento dentro de ella) sí crece y decrece siempre, y con
+  eso se sabe hacia dónde se va sin saber cuánto mide cada página. El umbral se
+  divide por el zoom, porque la lista mide sin ampliar y si no haría falta
+  arrastrar ocho veces más al octavo aumento.
+- **Con el modo subrayado puesto, la barra no se esconde**, y arriba del todo
+  tampoco: el interruptor para salir del modo está en la barra, y el principio
+  del documento es donde se llega al abrir el libro. Esconderla en esos dos
+  sitios deja sin salida.
 - **Nada de esto lo ve un test unitario.** Son restricciones de medida de
   Compose: hace falta el aparato, y en esta máquina no lo hay. Los tres intentos
   fallidos compilaron, pasaron R8 y se firmaron igual de bien que el bueno.
