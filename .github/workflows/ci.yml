@@ -3,12 +3,17 @@
 # principio, así que este workflow **no se ejecutó nunca**: producción se
 # desplegaba a mano y nadie veía que el CI no hacía nada.
 #
-# Necesita cuatro secretos en el repositorio; sin ellos los jobs de despliegue
-# fallan y el de calidad pasa igual:
+# Necesita cuatro secretos en el repositorio. **Sin ellos no se despliega, pero
+# tampoco falla**: los jobs que los necesitan se saltan y el job `secretos` deja
+# dicho en el resumen cuáles faltan. Antes fallaban, y un semáforo que está
+# siempre en rojo deja de significar nada.
 #   CLOUDFLARE_API_TOKEN   token con permiso de editar Workers, D1 y R2
 #   CLOUDFLARE_ACCOUNT_ID  identificador de la cuenta
 #   E2E_ADMIN_EMAIL        cuenta de pruebas contra staging
 #   E2E_ADMIN_PASSWORD
+#
+# Se ponen en Settings -> Secrets and variables -> Actions -> New repository
+# secret. En cuanto estén los dos de Cloudflare, el despliegue se enciende solo.
 name: CI/CD
 
 on:
@@ -30,6 +35,49 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  # -------------------------------------------------------------- credencial --
+  # Un secreto no se puede leer desde un `if:` de job, así que hay que mirarlo
+  # en un paso y sacarlo por `outputs`. Sólo se publica si está o no está:
+  # nunca su valor.
+  secretos:
+    name: ¿Hay credenciales para desplegar?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cloudflare: ${{ steps.mirar.outputs.cloudflare }}
+      e2e: ${{ steps.mirar.outputs.e2e }}
+    steps:
+      - id: mirar
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CUENTA: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CORREO: ${{ secrets.E2E_ADMIN_EMAIL }}
+          CLAVE: ${{ secrets.E2E_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${TOKEN:-}" ] && [ -n "${CUENTA:-}" ]; then
+            echo "cloudflare=si" >> "$GITHUB_OUTPUT"
+            echo "Credenciales de Cloudflare presentes: se desplegará." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "cloudflare=no" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Sin desplegar::Faltan CLOUDFLARE_API_TOKEN y/o CLOUDFLARE_ACCOUNT_ID; los despliegues se saltan."
+            {
+              echo "### No se despliega"
+              echo
+              echo "Faltan \`CLOUDFLARE_API_TOKEN\` y/o \`CLOUDFLARE_ACCOUNT_ID\`."
+              echo "Se ponen en Settings -> Secrets and variables -> Actions."
+              echo "Mientras tanto hay que desplegar a mano con \`npx wrangler deploy --env production\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -n "${CORREO:-}" ] && [ -n "${CLAVE:-}" ]; then
+            echo "e2e=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "e2e=no" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Sin E2E::Faltan E2E_ADMIN_EMAIL y/o E2E_ADMIN_PASSWORD; las pruebas E2E se saltan."
+          fi
+
   # --------------------------------------------------------------- calidad --
   quality:
     name: Lint · Typecheck · Tests
@@ -75,8 +123,11 @@ jobs:
   # ---------------------------------------------------------------- staging --
   deploy-staging:
     name: Desplegar en staging
-    needs: quality
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [quality, secretos]
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      github.event_name == 'push' &&
+      needs.secretos.outputs.cloudflare == 'si'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -110,7 +161,8 @@ jobs:
   # -------------------------------------------------------------------- e2e --
   e2e:
     name: E2E contra staging
-    needs: deploy-staging
+    needs: [deploy-staging, secretos]
+    if: needs.secretos.outputs.e2e == 'si'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -141,8 +193,18 @@ jobs:
   # ------------------------------------------------------------- producción --
   deploy-production:
     name: Desplegar en producción
-    needs: e2e
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    needs: [quality, secretos, deploy-staging, e2e]
+    # Un E2E **saltado** por falta de cuenta de pruebas no bloquea; uno que
+    # falla, sí. Si no, poner sólo los dos secretos de Cloudflare dejaría
+    # producción sin desplegar nunca y sin decir por qué.
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/master' &&
+      github.event_name == 'push' &&
+      needs.secretos.outputs.cloudflare == 'si' &&
+      needs.quality.result == 'success' &&
+      needs['deploy-staging'].result == 'success' &&
+      (needs.e2e.result == 'success' || needs.e2e.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Requiere aprobación manual si el entorno de GitHub tiene revisores.

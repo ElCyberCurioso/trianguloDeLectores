@@ -700,6 +700,23 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   eso se sabe hacia dónde se va sin saber cuánto mide cada página. El umbral se
   divide por el zoom, porque la lista mide sin ampliar y si no haría falta
   arrastrar ocho veces más al octavo aumento.
+- **Con zoom, el lanzamiento hay que ponerlo a mano.** Al consumir el gesto, la
+  lista deja de verlo y con él se pierde su inercia: el documento se paraba en
+  seco al levantar el dedo y recorrer un libro ampliado era repetir el arrastre.
+  Se apunta la velocidad con un `VelocityTracker` **sobre un solo dedo y
+  siguiéndolo por identificador** —si el que quedaba se levanta y queda otro,
+  sus posiciones no son continuación de las del primero— y al soltar se anima
+  con `rememberSplineBasedDecay`, el mismo decaimiento que usa cualquier lista
+  de Compose: así el documento frena como frena el resto del teléfono. Después
+  de un pellizco no se lanza nada, porque con dos dedos lo que se mide es el
+  centroide y eso no es la velocidad de ninguno.
+- **Los dos ejes se lanzan juntos y cada uno mide en lo suyo.** El vertical lo
+  lleva la lista, que mide sin ampliar, así que la velocidad de pantalla se
+  divide por el zoom; el horizontal es encuadre en píxeles de pantalla y va tal
+  cual. Los dos paran en cuanto dejan de avanzar —final del documento, borde del
+  encuadre—, o se gastarían fotogramas para no mover nada. Lanzar en diagonal y
+  que se pare sólo la mitad se nota enseguida.
+- **Tocar para en seco lo que siguiera rodando**, como en cualquier lista.
 - **Con el modo subrayado puesto, la barra no se esconde**, y arriba del todo
   tampoco: el interruptor para salir del modo está en la barra, y el principio
   del documento es donde se llega al abrir el libro. Esconderla en esos dos
@@ -888,8 +905,22 @@ que cuestan media hora cada vez que se olvidan.
   que tocar los dos workflows.
 - **Sin secretos en GitHub, el CI compila pero no despliega.** Hacen falta
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `E2E_ADMIN_EMAIL` y
-  `E2E_ADMIN_PASSWORD`. El job de calidad pasa sin ellos; los de despliegue y
-  E2E, no.
+  `E2E_ADMIN_PASSWORD`. **Ahora los jobs que los necesitan se saltan en vez de
+  fallar**: un secreto no se puede leer desde un `if:` de job, así que el job
+  `secretos` lo mira en un paso y publica por `outputs` si está o no está —nunca
+  su valor—, y los demás cuelgan de eso. Fallar era peor que no hacer nada: el
+  semáforo llevaba en rojo desde siempre y había dejado de significar algo. El
+  resumen del run dice cuáles faltan.
+- **Un E2E saltado no bloquea producción; uno que falla, sí.** Si no, poner sólo
+  los dos secretos de Cloudflare dejaría producción sin desplegar nunca y sin
+  decir por qué.
+- **`npm audit` se mira sobre lo que se empaqueta, no sobre el árbol entero.**
+  `--omit=dev` deja las tres dependencias de runtime, y eso es lo bloqueante. El
+  resto es herramienta —wrangler, `@cloudflare/vitest-pool-workers`— y sus
+  avisos son de `undici` y `ws`, que ni se despliegan ni escuchan nada aquí;
+  arreglarlos pide un salto de versión mayor de la propia herramienta. Se siguen
+  mirando, pero informando (`continue-on-error`). Auditarlo todo junto y en
+  bloqueante es la forma segura de que un aviso de verdad pase desapercibido.
 - **Que algo esté commiteado no quiere decir que esté desplegado.** Lo que corre
   en producción se comprueba con `npx wrangler deployments list --env
   production`, nunca leyendo el historial de git.

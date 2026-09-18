@@ -28,7 +28,19 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
 
-      - name: npm audit (vulnerabilidades altas o críticas)
+      # Lo que se audita de verdad es **lo que se empaqueta**, que son tres
+      # dependencias: hono, zod y drizzle-orm. Esto tiene que estar limpio.
+      - name: npm audit de lo que va dentro del Worker
+        run: npm audit --omit=dev --audit-level=high
+
+      # El resto del árbol es herramienta —wrangler, vitest-pool-workers— y no
+      # llega al Worker: sus avisos son de `undici` y `ws`, que ni se despliegan
+      # ni escuchan nada aquí, y arreglarlos pide un salto de versión mayor de
+      # la propia herramienta. Auditarlo todo junto y en bloqueante dejó el
+      # semáforo en rojo permanente, que es la forma segura de que un aviso de
+      # verdad pase desapercibido. Se sigue mirando, pero informando.
+      - name: npm audit de las herramientas (informativo)
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Escaneo de secretos del repositorio
