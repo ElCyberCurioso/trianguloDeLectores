@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -130,6 +131,24 @@ fun LectorScreen(
     var desplazamientoX by remember { mutableStateOf(0f) }
 
     /*
+     * El mismo encuadre, en **fracción del documento**, para que sobreviva al
+     * giro.
+     *
+     * Los píxeles no sirven de una orientación a otra: el documento ampliado
+     * mide `anchoViewport * zoom` y las dos cosas cambian al girar, así que un
+     * desplazamiento guardado en vertical cae en otro sitio en horizontal. Lo
+     * que sí se conserva es qué parte del documento queda oculta por la
+     * izquierda, que va de 0 a `(zoom - 1) / zoom` **independientemente del
+     * ancho de la pantalla**: por eso al reponerla nunca hay que recortar nada.
+     *
+     * Va en `rememberSaveable` porque es lo único de aquí que el modelo no
+     * sabe: el zoom vive en el modelo y sobrevive solo, pero el encuadre es de
+     * la pantalla.
+     */
+    var fraccionEncuadre by rememberSaveable { mutableStateOf(0f) }
+    var encuadreRepuesto by remember { mutableStateOf(false) }
+
+    /*
      * El zoom que ya se ha **pedido**, que no siempre es el que se ve.
      *
      * `estado.zoom` llega por `collectAsState` y no cambia hasta la siguiente
@@ -159,7 +178,33 @@ fun LectorScreen(
      * porque ese tope es cero pase lo que pase.
      */
     LaunchedEffect(estado.zoom, anchoViewport) {
+        /*
+         * Y aquí mismo se repone el encuadre después de girar, que es cuando
+         * se conoce el ancho nuevo. Una sola vez por composición: a partir de
+         * ahí manda el dedo, y volver a calcularlo pisaría lo que se arrastre.
+         */
+        if (anchoViewport > 0 && !encuadreRepuesto) {
+            desplazamientoX = -fraccionEncuadre * anchoViewport * estado.zoom
+            encuadreRepuesto = true
+        }
         desplazamientoX = desplazamientoX.coerceIn(-margenX(), 0f)
+    }
+
+    /*
+     * Apuntar la fracción cada vez que el encuadre se mueve.
+     *
+     * No se puede derivar al guardar el estado: `rememberSaveable` guarda lo
+     * que hay, no una cuenta. Y no se apunta hasta haber repuesto, o el cero
+     * con el que nace la composición nueva borraría lo que se venía de
+     * guardar antes de que el hueco llegue a medirse.
+     */
+    LaunchedEffect(Unit) {
+        snapshotFlow { Triple(desplazamientoX, anchoViewport, estado.zoom) }
+            .collect { (x, ancho, zoom) ->
+                if (!encuadreRepuesto) return@collect
+                val documento = ancho * zoom
+                if (documento > 0f) fraccionEncuadre = (-x / documento).coerceIn(0f, 1f)
+            }
     }
 
     /*

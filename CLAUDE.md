@@ -734,6 +734,15 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   el libro cada vez que se giraba el teléfono. El efecto que lo hacía decía en
   un comentario «sólo la primera vez», pero no tenía guardián: lo único que lo
   sujetaba era que la composición no se rehiciera.
+- **El encuadre horizontal se guarda en fracción del documento, no en
+  píxeles.** El documento ampliado mide `anchoViewport * zoom` y las dos cosas
+  cambian al girar. Lo que se conserva es qué parte queda oculta por la
+  izquierda, que va de 0 a `(zoom - 1) / zoom` **independientemente del ancho de
+  la pantalla**: por eso al reponerla nunca hay que recortar nada. Va en
+  `rememberSaveable` porque es lo único de la pantalla que el modelo no sabe —el
+  zoom sí vive en el modelo—, y **no se apunta hasta haberla repuesto**: la
+  composición nueva nace con el desplazamiento y el ancho a cero, y ese cero
+  borraría lo guardado antes de que el hueco llegue a medirse.
 - **La posición se guarda en milésimas de página, no en píxeles, y por eso
   sobrevive al giro.** El alto de una página sale del ancho del hueco, y el de
   horizontal no es el de vertical. Convertirlas exige el alto ya medido, así
@@ -898,6 +907,20 @@ que cuestan media hora cada vez que se olvidan.
   `Unhandled Rejection: fetch failed / ECONNRESET` al cerrar workerd. Ha pasado
   dos veces en corridas completas y en ninguna se reprodujo al repetir. Antes de
   dar por roto algo, vuelve a correr `npx vitest run --project integration`.
+- **No confundas eso con los timeouts, que eran otra cosa y ya están
+  arreglados.** El proyecto de integración llevaba los 5 s por omisión de
+  Vitest, pensados para un test en proceso, y aquí cada petición cruza workerd:
+  los que encadenan diez o quince —el limitador por IP, el bloqueo de cuenta,
+  el umbral de reportes— tardan hasta 3,9 s en una máquina descansada. Con el
+  portátil a dos tercios de velocidad se pasaban del tope y el preflight salía
+  rojo sin nada roto: catorce fallos compilando la release de Android al lado,
+  tres con la máquina a medias, ninguno en limpio. El tope está ahora en 20 s
+  **en `vitest.integration.config.ts`**, no test a test ni en los unitarios.
+  Si vuelves a ver `Test timed out in 20000ms`, eso ya no es la carga.
+- **Antes de dar por intermitente un fallo, guarda el log.** La diferencia entre
+  un `ECONNRESET` al cerrar y un timeout por carga no se ve en el resumen, y sin
+  el log no hay forma de distinguirlos después. Vuelcan a fichero y se miran:
+  `npx vitest run --project integration > /tmp/…/integracion.log 2>&1`.
 
 ### Del entorno
 

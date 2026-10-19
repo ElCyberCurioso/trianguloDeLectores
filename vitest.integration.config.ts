@@ -14,6 +14,26 @@ export default defineWorkersConfig(async () => {
       name: 'integration',
       include: ['tests/integration/**/*.test.ts'],
       setupFiles: ['./tests/integration/setup.ts'],
+      /*
+       * Los 5 s por omisión de Vitest son para un test en proceso, y aquí cada
+       * petición cruza workerd de verdad. Varios tests encadenan diez o quince
+       * para comprobar justo lo que hace falta encadenarlas: que el limitador
+       * corta, que la cuenta se bloquea, que el umbral de reportes salta.
+       *
+       * En una máquina descansada el más lento tarda 3,9 s. Eso deja un margen
+       * del 23 %: basta con que la máquina vaya a dos tercios de velocidad
+       * —compilando la release de Android al lado, por ejemplo— para que se
+       * pase del tope y el preflight se ponga rojo sin que nada esté roto.
+       * Pasó tres veces seguidas y cada repetición en limpio salió verde, así
+       * que lo que medía el semáforo era la carga del portátil.
+       *
+       * Va en el proyecto, no test a test: el coste es del runtime y lo pagan
+       * todos, y un número por test habría que volver a elegirlo cada vez que
+       * cambie la máquina. Los tests unitarios siguen con los 5 s, que ahí sí
+       * son de sobra.
+       */
+      testTimeout: 20_000,
+      hookTimeout: 20_000,
       poolOptions: {
         workers: {
           singleWorker: true,
