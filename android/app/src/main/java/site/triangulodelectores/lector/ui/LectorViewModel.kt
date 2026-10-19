@@ -46,6 +46,15 @@ data class EstadoLector(
     val anotaciones: List<Anotacion> = emptyList(),
     val marcadores: List<Marcador> = emptyList(),
     val paginaVisible: Int = 1,
+    /**
+     * Fracción de la página visible arriba, en milésimas.
+     *
+     * Va en el estado y no en un campo privado porque la pantalla la necesita
+     * para recolocarse: al girar el teléfono, Android rehace la actividad y la
+     * composición empieza de cero, pero este modelo sobrevive. Es la única
+     * memoria de por dónde iba la lectura en ese momento.
+     */
+    val scrollVisible: Int = 0,
     val modoSubrayado: Boolean = false,
     val colorActivo: ColorAnotacion = ColorAnotacion.YELLOW,
     val zoom: Float = 1f,
@@ -120,9 +129,6 @@ class LectorViewModel(
     suspend fun palabrasDe(indice: Int): List<Palabra> =
         capaDeTexto()?.palabras(indice).orEmpty()
 
-    /** Última fracción de página vista. Se conserva para no perderla al salir. */
-    private var ultimoScroll = 0
-
     init {
         abrir()
     }
@@ -143,11 +149,20 @@ class LectorViewModel(
                 .onSuccess { doc ->
                     pdf = doc
                     contenedor.biblioteca.anotarPaginas(documento, doc.paginas)
+                    val progreso = contenedor.biblioteca.progreso(documentoId)
                     _estado.update {
                         it.copy(
                             documento = documento,
                             paginas = doc.paginas,
-                            progresoInicial = contenedor.biblioteca.progreso(documentoId),
+                            progresoInicial = progreso,
+                            // La posición viva **arranca** donde se dejó la
+                            // lectura. Sin sembrarla, la pantalla tendría que
+                            // mirar `progresoInicial` para colocarse, y ése no
+                            // se mueve en toda la sesión: cada vez que la
+                            // composición se rehace —girar el teléfono la
+                            // rehace entera— devolvería al punto de apertura.
+                            paginaVisible = progreso?.pagina ?: it.paginaVisible,
+                            scrollVisible = progreso?.scrollMilesimas ?: it.scrollVisible,
                             anotaciones = contenedor.biblioteca.anotaciones(documentoId),
                             marcadores = contenedor.biblioteca.marcadores(documentoId),
                             cargando = false,
@@ -169,8 +184,7 @@ class LectorViewModel(
     /** Llamado al desplazarse. Actualiza la página visible y difiere el guardado. */
     fun posicion(pagina: Int, scrollMilesimas: Int) {
         if (pagina < 1) return
-        _estado.update { it.copy(paginaVisible = pagina) }
-        ultimoScroll = scrollMilesimas
+        _estado.update { it.copy(paginaVisible = pagina, scrollVisible = scrollMilesimas) }
 
         guardadoDiferido?.cancel()
         guardadoDiferido = viewModelScope.launch {
@@ -307,7 +321,11 @@ class LectorViewModel(
         val posicion = _estado.value
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                contenedor.biblioteca.guardarProgreso(documentoId, posicion.paginaVisible, ultimoScroll)
+                contenedor.biblioteca.guardarProgreso(
+                    documentoId,
+                    posicion.paginaVisible,
+                    posicion.scrollVisible,
+                )
                 if (posicion.documento?.origen == Origen.REMOTO && contenedor.credenciales.emparejado) {
                     runCatching { contenedor.sincronizador.sincronizar() }
                 }

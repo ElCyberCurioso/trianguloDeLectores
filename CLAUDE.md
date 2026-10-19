@@ -721,6 +721,24 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   tampoco: el interruptor para salir del modo está en la barra, y el principio
   del documento es donde se llega al abrir el libro. Esconderla en esos dos
   sitios deja sin salida.
+- **Girar el teléfono rehace la composición, pero no el modelo.** `MainActivity`
+  no declara `configChanges`, así que Android recrea la actividad: la
+  composición se tira y nace una `LazyListState` nueva y vacía. El
+  `LectorViewModel` sobrevive, porque cuelga de la entrada de navegación. Por
+  eso la pantalla se recoloca **en cada nacimiento de la composición**, con un
+  guardián `remember` pelado y nunca un `rememberSaveable`: tiene que volver a
+  false al girar, que es justo cuando hay que recolocarse.
+- **Para recolocarse se mira la posición viva del modelo, nunca
+  `progresoInicial`.** Ése se lee una sola vez al abrir el documento y no se
+  mueve en toda la sesión; restaurar con él devolvía a la página donde se abrió
+  el libro cada vez que se giraba el teléfono. El efecto que lo hacía decía en
+  un comentario «sólo la primera vez», pero no tenía guardián: lo único que lo
+  sujetaba era que la composición no se rehiciera.
+- **La posición se guarda en milésimas de página, no en píxeles, y por eso
+  sobrevive al giro.** El alto de una página sale del ancho del hueco, y el de
+  horizontal no es el de vertical. Convertirlas exige el alto ya medido, así
+  que se espera a la primera medida y se va en dos pasos: al borde de la
+  página, que no depende de ninguna escala, y la fracción después.
 - **Nada de esto lo ve un test unitario.** Son restricciones de medida de
   Compose: hace falta el aparato, y en esta máquina no lo hay. Los tres intentos
   fallidos compilaron, pasaron R8 y se firmaron igual de bien que el bueno.

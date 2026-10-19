@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -72,6 +73,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import site.triangulodelectores.lector.data.local.Anotacion
@@ -261,12 +263,46 @@ fun LectorScreen(
     }
     BackHandler(onBack = salir)
 
-    // Volver a donde se dejó. Sólo la primera vez que se conoce el progreso:
-    // después, cualquier salto lo manda quien lee.
-    LaunchedEffect(estado.progresoInicial, estado.paginas) {
-        val progreso = estado.progresoInicial ?: return@LaunchedEffect
-        if (estado.paginas == 0) return@LaunchedEffect
-        lista.scrollToItem((progreso.pagina - 1).coerceIn(0, estado.paginas - 1))
+    /*
+     * Volver a donde se estaba, **cada vez que la composición nace**.
+     *
+     * Girar el teléfono rehace la actividad entera: la composición se tira y se
+     * construye de cero, con una lista nueva y vacía. El modelo, en cambio,
+     * sobrevive —cuelga de la entrada de navegación—, así que es él quien sabe
+     * por dónde iba la lectura. De ahí que el guardián sea un `remember` pelado
+     * y no un `rememberSaveable`: tiene que volver a false al girar, que es
+     * justo cuando hay que recolocarse.
+     *
+     * Y el destino es la posición **viva** del modelo, nunca `progresoInicial`.
+     * Ése se lee una sola vez al abrir el documento y no se mueve en toda la
+     * sesión: restaurar con él era lo que devolvía a la página donde se abrió
+     * el libro cada vez que se giraba el teléfono.
+     */
+    var restaurado by remember { mutableStateOf(false) }
+    LaunchedEffect(estado.paginas) {
+        if (restaurado || estado.paginas == 0) return@LaunchedEffect
+
+        val pagina = (estado.paginaVisible - 1).coerceIn(0, estado.paginas - 1)
+        val milesimas = estado.scrollVisible.coerceIn(0, 1000)
+
+        /*
+         * Hay que esperar a que la lista esté medida.
+         *
+         * La posición se guarda en milésimas de página y no en píxeles, que es
+         * lo que la hace sobrevivir al giro: el alto de una página sale del
+         * ancho del hueco, y el de horizontal no es el de vertical. Pero para
+         * convertirlas hace falta ese alto, y antes de la primera medida no
+         * existe.
+         */
+        snapshotFlow { lista.layoutInfo.totalItemsCount }.first { it > 0 }
+
+        // Al borde de la página primero, que es un sitio que no depende de
+        // ninguna escala, y la fracción después con el alto ya medido.
+        lista.scrollToItem(pagina, 0)
+        val alto = lista.layoutInfo.visibleItemsInfo.firstOrNull { it.index == pagina }?.size ?: 0
+        if (alto > 0 && milesimas > 0) lista.scrollBy(alto * milesimas / 1000f)
+
+        restaurado = true
     }
 
     // Página visible -> progreso. Se mira la lista, no cada gesto: es la propia
