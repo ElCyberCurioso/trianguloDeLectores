@@ -109,8 +109,12 @@
       },
       "version_metadata": { "binding": "CF_VERSION" },
       "observability": { "enabled": true, "head_sampling_rate": 1 },
-      // Mantenimiento diario: purga de sesiones caducadas y retención de auditoría.
-      "triggers": { "crons": ["0 4 * * *"] }
+      // Sin cron en staging, a peticion: la cuenta comparte el limite de
+      // Workers del plan Free con otros proyectos y aqui el mantenimiento no
+      // hace falta, porque staging se siembra y se tira. La lista **vacia** es
+      // lo que borra los horarios al desplegar; quitar la clave los dejaria
+      // puestos tal cual estaban. Produccion conserva el suyo.
+      "triggers": { "crons": [] }
     },
     "production": {
       "name": "triangulo-de-lectores-production",
