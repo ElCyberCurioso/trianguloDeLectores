@@ -1,6 +1,7 @@
 package site.triangulodelectores.lector.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -158,5 +159,53 @@ class EncuadreTest {
         assertEquals(2160, anchoRasterDe(1080, 2f, 4096))
         assertEquals(4096, anchoRasterDe(1080, 8f, 4096))
         assertTrue(anchoRasterDe(0, 1f, 4096) >= 1)
+    }
+
+    // Mosaicos: hueco de 1000 × 2000 px, página de 1000 × 1400 sin ampliar.
+
+    @Test
+    fun `solo hay mosaico cuando la pagina se estira`() {
+        assertFalse(seEstira(1000, 3f, 4096))
+        assertTrue(seEstira(1000, 5f, 4096))
+    }
+
+    @Test
+    fun `a zoom cuatro y sin encuadre se ve la esquina de arriba a la izquierda`() {
+        // A cuatro aumentos la lista mide 2000 / 4 = 500 de alto visible.
+        val region = regionVisible(0, 1400, 1000, 500, 0f, 4f)!!
+        assertEquals(Region(0f, 0f, 250f, 500f), region)
+    }
+
+    @Test
+    fun `el encuadre corre la region hacia la derecha`() {
+        // Encuadre de -2000 px de pantalla: 500 px de lista ocultos a la izquierda.
+        val region = regionVisible(0, 1400, 1000, 500, -2000f, 4f)!!
+        assertEquals(500f, region.izquierda, delta)
+        assertEquals(750f, region.derecha, delta)
+    }
+
+    @Test
+    fun `una pagina que empieza mas arriba se ve desde dentro`() {
+        // La página empieza 1000 px por encima del hueco: se ve de 1000 a 1400.
+        val region = regionVisible(-1000, 1400, 1000, 500, 0f, 4f)!!
+        assertEquals(1000f, region.arriba, delta)
+        assertEquals(1400f, region.abajo, delta)
+    }
+
+    @Test
+    fun `una pagina que no asoma no tiene region`() {
+        assertNull(regionVisible(600, 1400, 1000, 500, 0f, 4f))
+        assertNull(regionVisible(-1400, 1400, 1000, 500, 0f, 4f))
+    }
+
+    @Test
+    fun `el trozo en pixeles nunca pasa del tamano de la pantalla y cubre el borde`() {
+        val region = regionVisible(-333, 1400, 1000, 500, -1234f, 4f)!!
+        val px = regionEnPixeles(region, 4f)
+        // Redondeado hacia fuera: como mucho un píxel más por lado.
+        assertTrue(px.ancho in 1000..1002)
+        assertTrue(px.alto in 2000..2002)
+        assertTrue(px.izquierda <= region.izquierda * 4f)
+        assertTrue(px.derecha >= region.derecha * 4f)
     }
 }

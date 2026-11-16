@@ -142,3 +142,61 @@ internal fun destinoDeFraccion(fraccion: Float, paginas: Int, visibles: Float): 
 /** Ancho al que conviene pintar para un zoom dado, con el [techo] aplicado. */
 internal fun anchoRasterDe(anchoViewport: Int, zoom: Float, techo: Int): Int =
     minOf((anchoViewport * zoom).toInt(), techo).coerceAtLeast(1)
+
+/**
+ * Si al zoom [zoom] la página ya se estira en vez de pintarse: el ancho ampliado
+ * pasa del techo de rasterizado. Es cuando hacen falta los mosaicos.
+ */
+internal fun seEstira(anchoHueco: Int, zoom: Float, techo: Int): Boolean =
+    anchoHueco * zoom > techo + 0.5f
+
+/** Un trozo de página, en sus coordenadas sin ampliar: los píxeles de la lista. */
+internal data class Region(val izquierda: Float, val arriba: Float, val derecha: Float, val abajo: Float)
+
+/** El mismo trozo en píxeles del pintado ampliado, redondeado hacia fuera. */
+internal data class RegionPx(val izquierda: Int, val arriba: Int, val derecha: Int, val abajo: Int) {
+    val ancho: Int get() = derecha - izquierda
+    val alto: Int get() = abajo - arriba
+}
+
+/**
+ * Qué parte de una página se ve, en coordenadas de la página sin ampliar.
+ *
+ * La lista mide sin ampliar y la GPU amplía desde la esquina, así que lo que
+ * se ve del hueco, pasado a la lista, va de `-desplazamientoX / zoom` a
+ * `(anchoHueco - desplazamientoX) / zoom` en horizontal y de 0 a
+ * [altoVisibleLista] en vertical. Cortado con la página —que empieza en
+ * [offsetPagina] y ocupa todo el ancho—, eso es el trozo. Nula si la página no
+ * asoma.
+ */
+internal fun regionVisible(
+    offsetPagina: Int,
+    altoPagina: Int,
+    anchoHueco: Int,
+    altoVisibleLista: Int,
+    desplazamientoX: Float,
+    zoom: Float,
+): Region? {
+    if (altoPagina <= 0 || anchoHueco <= 0 || zoom <= 0f) return null
+    val ancho = anchoHueco.toFloat()
+    val arriba = maxOf(0f, -offsetPagina.toFloat())
+    val abajo = minOf(altoPagina.toFloat(), (altoVisibleLista - offsetPagina).toFloat())
+    // `0f - x` y no `-x`: con el encuadre a cero, `-0f / zoom` da un cero
+    // negativo, que dibuja igual pero no es igual a cero para quien compare.
+    val izquierda = ((0f - desplazamientoX) / zoom).coerceIn(0f, ancho)
+    val derecha = ((anchoHueco - desplazamientoX) / zoom).coerceIn(0f, ancho)
+    if (abajo <= arriba || derecha <= izquierda) return null
+    return Region(izquierda, arriba, derecha, abajo)
+}
+
+/**
+ * El trozo en píxeles del pintado a [zoom], **redondeado hacia fuera**: hacia
+ * dentro dejaría una línea de un píxel ampliado sin cubrir en el borde, y a
+ * ocho aumentos eso son ocho píxeles de pantalla de página borrosa.
+ */
+internal fun regionEnPixeles(region: Region, zoom: Float): RegionPx = RegionPx(
+    izquierda = kotlin.math.floor(region.izquierda * zoom).toInt(),
+    arriba = kotlin.math.floor(region.arriba * zoom).toInt(),
+    derecha = kotlin.math.ceil(region.derecha * zoom).toInt(),
+    abajo = kotlin.math.ceil(region.abajo * zoom).toInt(),
+)

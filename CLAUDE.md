@@ -633,10 +633,28 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   con techo de entradas y de nivel y mirando cada entrada por identidad: un
   índice es una lista enlazada de un fichero de fuera y puede dar la vuelta
   sobre sí mismo.
+- **Los enlaces del PDF se leen con el primer toque simple**, que es cuando se
+  abre la capa de texto si no estaba abierta: tocar es un gesto que se hace a
+  propósito, y desplazarse no cuenta. En modo subrayado el toque sigue marcando
+  una palabra y no sigue enlaces.
+- **Los internos se resuelven de las tres maneras** —destino directo, acción «ir
+  a» y destino con nombre— y lo que no se sabe resolver se descarta: un toque
+  que no hace nada es mejor que uno que lleva a otra página. La altura del
+  destino sólo se usa con la página sin girar.
+- **Seguir un enlace interno apunta de dónde se venía**: aparece «Volver a la p.
+  N» y el botón atrás hace lo mismo. Una nota al pie es ir y volver.
+- **Los externos pasan por `urlSegura` —sólo `http`, `https` y `mailto`, lista
+  blanca— y se confirman con la dirección entera a la vista.** Un PDF es un
+  fichero de fuera: un `intent:` abriría otra aplicación con parámetros
+  elegidos por quien hizo el documento. Otras acciones de PDF —lanzar, enviar
+  formularios, JavaScript— no se siguen.
+- **La zona de un enlace se agranda un 1,5 % para tocarla** y, si dos se
+  solapan, gana la que contiene el punto o la más pequeña (`enlaceEn`, con
+  tests): una llamada de nota es un superíndice más pequeño que una yema.
 - **La capa de texto se abre tarde y nunca al abrir el libro.** Analizar un
   escaneado de cincuenta megas cuesta segundos y memoria, y quien sólo va a leer
-  no tiene por qué pagarlos: se abre al entrar en modo subrayado, al buscar o al
-  pedir las notas o el índice del documento. Y se carga con `setupTempFileOnly`, a disco y no al
+  no tiene por qué pagarlos: se abre al entrar en modo subrayado, al buscar, al
+  pedir las notas o el índice del documento, o con el primer toque simple. Y se carga con `setupTempFileOnly`, a disco y no al
   montón, o el sistema mata el proceso a media lectura.
 - **Una página sin texto no es un fallo.** Un escaneado sin OCR es una imagen:
   `palabras()` devuelve la lista vacía y el arrastre vuelve a marcar la zona,
@@ -686,9 +704,19 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
 - **El techo de rasterizado sale de la memoria concedida, no de una constante.**
   `Runtime.maxMemory()` va de 96 MB a 512 según el teléfono; un número fijo o se
   queda corto en el bueno o tira el malo. Se reserva como mucho un octavo del
-  montón para una sola página. Por encima de unos tres aumentos la página se
-  estira en vez de repintarse: se ve más blanda, y es el precio de llegar a ocho
-  aumentos sin reventar el proceso.
+  montón para una sola página. Por encima de unos tres aumentos la página entera
+  se estira en vez de repintarse, y encima va el mosaico.
+- **El mosaico pinta sólo el trozo visible de cada página, a la resolución de
+  la pantalla**, cuando la página se estira (`seEstira`). Ese trozo nunca pasa
+  del tamaño de la pantalla, así que la memoria no crece con el zoom. Se pide
+  cuando zoom, encuadre y lista llevan 200 ms quietos —pintar mientras se mueve
+  es lo que daba el tirón—, y se coloca en coordenadas de la página: viaja con
+  ella y nunca se ve descolocado, sólo algo más blando hasta el siguiente. La
+  región se redondea **hacia fuera** (`regionEnPixeles`), o quedaría un borde de
+  un píxel ampliado sin cubrir. Geometría en `Encuadre.kt`, con tests.
+- **La página siguiente se pinta antes de que asome**, cuando la lista lleva
+  400 ms quieta y si la caché no la tiene ya a ese ancho. Sólo la siguiente: al
+  leer se baja.
 - **La lista del lector se dispone al ancho del hueco y nunca más; quien amplía
   es la GPU.** Es la regla de la que cuelga todo el zoom, y se tardó tres
   intentos en dar con ella. Lo que se ve ocupa `anchoLista * zoom` empezando en
@@ -912,6 +940,23 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   en Zod significa que puede faltar, no que pueda valer `null`: un nulo
   explícito devuelve un 400 sin explicación. La cadena vacía sí la entiende. Los
   numéricos sí admiten nulo, que es como se dice «sin año».
+- **Un PDF con contraseña se abre sin dejar copia descifrada a la vista.** En
+  Android 15 o más, `PdfRenderer` acepta la contraseña (`LoadParams`) y no hay
+  copia. En los anteriores, PdfBox descifra a la caché privada y **el fichero se
+  borra en cuanto el renderer tiene su descriptor**: sigue legible para él —es
+  Linux— pero no queda ruta que lleve a él. Si el proceso muere en ese
+  instante, `borrarDescifrados()` limpia al arrancar. No lo cambies por una
+  copia que se borre al cerrar: eso deja el libro en claro en disco todo el rato
+  que se lee.
+- **La contraseña vive sólo en la memoria del modelo**, mientras el documento
+  está abierto: la capa de texto la necesita después, cuando se abre. No se
+  guarda, no se sincroniza y no va a ningún log; la siguiente vez se pide.
+  `DocumentoProtegido` y `ContrasenaIncorrecta` son excepciones distintas para
+  que el diálogo diga «incorrecta» sólo cuando se escribió alguna.
+- **Al salir de un documento que no llegó a abrirse no se guarda el progreso.**
+  La posición viva es la de partida, la página 1, y guardarla pisaba por dónde
+  se iba: entrar en un libro protegido o desaparecido y volver lo dejaba al
+  principio.
 - **El token se cifra con el Keystore de Android** (AES/GCM) y
   `allowBackup="false"`. La copia de seguridad de Google no puede llevarse una
   credencial de este teléfono a otro.

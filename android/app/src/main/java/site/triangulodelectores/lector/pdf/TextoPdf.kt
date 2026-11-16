@@ -7,7 +7,16 @@ import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode
+import com.tom_roush.pdfbox.pdmodel.interactive.action.PDActionGoTo
+import com.tom_roush.pdfbox.pdmodel.interactive.action.PDActionURI
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotation
+import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDNamedDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitRectangleDestination
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationMarkup
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import com.tom_roush.pdfbox.text.TextPosition
@@ -126,6 +135,12 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
     }
     private var notasLeidas: List<NotaIncrustada>? = null
     private var indiceLeido: List<EntradaIndice>? = null
+
+    /** Los enlaces de las páginas ya miradas. Pocos por página, pero con techo igual. */
+    private val enlacesPorPagina = object : LinkedHashMap<Int, List<Enlace>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, List<Enlace>>) =
+            size > PAGINAS_DE_TEXTO_EN_MEMORIA
+    }
     private var cerrado = false
 
     /**
@@ -164,6 +179,20 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
         }
     }
 
+    /**
+     * Los enlaces de una página, internos y externos. Los externos llegan ya
+     * filtrados por [urlSegura]: lo que no es web ni correo ni siquiera se
+     * ofrece.
+     */
+    suspend fun enlaces(indice: Int): List<Enlace> = withContext(Dispatchers.IO) {
+        cerrojo.withLock {
+            if (cerrado) return@withLock emptyList()
+            enlacesPorPagina.getOrPut(indice) {
+                runCatching { leerEnlaces(documento, indice) }.getOrDefault(emptyList())
+            }
+        }
+    }
+
     /** El índice del documento. Se lee una vez; vacío si no trae. */
     suspend fun indice(): List<EntradaIndice> = withContext(Dispatchers.IO) {
         cerrojo.withLock {
@@ -183,11 +212,11 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
         /**
          * Abre el documento para leerlo, no para pintarlo.
          *
-         * Devuelve `null` si no se puede: cifrado con contraseña, roto, o sin
+         * Devuelve `null` si no se puede: cifrado sin la contraseña, roto, o sin
          * fichero al que llegar. No es un error que deba parar nada -- el lector
          * sigue funcionando sin capa de texto, sólo con menos.
          */
-        fun abrir(contexto: Context, documento: Documento): TextoPdf? = runCatching {
+        fun abrir(contexto: Context, documento: Documento, contrasena: String? = null): TextoPdf? = runCatching {
             // Las tablas de fuentes y los CMap de PDFBox viven en los `assets`.
             // Sin esto lanza al primer glifo que no sea de una fuente estándar.
             PDFBoxResourceLoader.init(contexto.applicationContext)
@@ -197,14 +226,14 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
             // Mismo criterio que al pintar: si hay fichero nuestro, se abre ése.
             val propio = documento.rutaFichero?.let(::File)
             val abierto = if (propio != null && propio.exists()) {
-                PDDocument.load(propio, ajuste)
+                PDDocument.load(propio, contrasena.orEmpty(), ajuste)
             } else if (documento.origen == Origen.REMOTO) {
                 return@runCatching null
             } else {
                 val uri = Uri.parse(documento.uri ?: return@runCatching null)
                 contexto.contentResolver.openInputStream(uri).use { entrada ->
                     entrada ?: return@runCatching null
-                    PDDocument.load(entrada, ajuste)
+                    PDDocument.load(entrada, contrasena.orEmpty(), ajuste)
                 }
             }
             TextoPdf(abierto)
@@ -481,4 +510,72 @@ private fun rectDe(anotacion: PDAnnotation, pagina: PDPage): Rect? {
 }
 
 /** Cuatro números que van juntos y no merecen una clase con nombre. */
+/**
+ * Los enlaces de una página.
+ *
+ * Un enlace interno puede venir de tres maneras y las tres se aceptan: un
+ * destino directo en el propio enlace, una acción «ir a» con el destino
+ * dentro, o un destino con nombre que hay que buscar en el catálogo. Lo que no
+ * se sabe resolver se descarta en silencio: un toque que no hace nada es mejor
+ * que uno que lleva a la página equivocada.
+ */
+private fun leerEnlaces(documento: PDDocument, indice: Int): List<Enlace> {
+    val pagina = documento.getPage(indice)
+    val anotaciones: List<PDAnnotation> = runCatching { pagina.annotations }.getOrDefault(emptyList())
+
+    return anotaciones.filterIsInstance<PDAnnotationLink>().mapNotNull { enlace ->
+        runCatching {
+            val rect = rectDe(enlace, pagina) ?: return@runCatching null
+            if (rect.w <= 0f || rect.h <= 0f) return@runCatching null
+
+            when (val accion = enlace.action) {
+                is PDActionURI -> accion.uri?.let(::urlSegura)?.let { EnlaceExterno(rect, it) }
+                is PDActionGoTo -> enlaceInterno(documento, rect, accion.destination)
+                null -> enlaceInterno(documento, rect, enlace.destination)
+                // Otras acciones —lanzar un programa, enviar un formulario,
+                // JavaScript— no se siguen. A propósito.
+                else -> null
+            }
+        }.getOrNull()
+    }
+}
+
+private fun enlaceInterno(documento: PDDocument, rect: Rect, destino: PDDestination?): EnlaceInterno? {
+    val pagina = when (destino) {
+        is PDPageDestination -> destino
+        is PDNamedDestination -> documento.documentCatalog.findNamedDestinationPage(destino)
+        else -> null
+    } ?: return null
+
+    val indice = pagina.page?.let { documento.pages.indexOf(it) }?.takeIf { it >= 0 }
+        ?: pagina.retrievePageNumber().takeIf { it >= 0 }
+        ?: return null
+    if (indice >= documento.numberOfPages) return null
+
+    return EnlaceInterno(rect, indice + 1, alturaDe(documento.getPage(indice), pagina))
+}
+
+/**
+ * Dónde cae el destino en su página, de 0 arriba a 1 abajo, si el destino lo
+ * dice.
+ *
+ * El PDF mide desde abajo y en puntos, y sólo tres clases de destino llevan
+ * altura. Con la página girada se renuncia a ella y se va al principio de la
+ * página: hacer bien la cuenta en los cuatro giros para el caso raro no
+ * compensa equivocarse en el normal.
+ */
+private fun alturaDe(pagina: PDPage, destino: PDPageDestination): Float? {
+    val arriba = when (destino) {
+        is PDPageXYZDestination -> destino.top
+        is PDPageFitWidthDestination -> destino.top
+        is PDPageFitRectangleDestination -> destino.top
+        else -> -1
+    }
+    if (arriba < 0) return null
+    if (((pagina.rotation % 360) + 360) % 360 != 0) return null
+    val caja = pagina.cropBox
+    if (caja.height <= 0f) return null
+    return ((caja.upperRightY - arriba) / caja.height).coerceIn(0f, 1f)
+}
+
 private data class Cuatro(val a: Float, val b: Float, val c: Float, val d: Float)

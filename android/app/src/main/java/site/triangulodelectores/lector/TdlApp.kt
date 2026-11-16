@@ -10,6 +10,7 @@ import site.triangulodelectores.lector.data.local.BaseDatos
 import site.triangulodelectores.lector.data.local.Credenciales
 import site.triangulodelectores.lector.data.remote.Api
 import site.triangulodelectores.lector.pdf.CachePaginas
+import site.triangulodelectores.lector.pdf.DocumentoPdf
 import site.triangulodelectores.lector.sync.TrabajoSincronizacion
 
 /**
@@ -44,6 +45,9 @@ class TdlApp : Application() {
     override fun onCreate() {
         super.onCreate()
         contenedor = Contenedor(this)
+        // Restos de un PDF protegido descifrado, si el proceso murió en el
+        // instante entre guardar la copia y borrarla. Normalmente no hay nada.
+        DocumentoPdf.borrarDescifrados(this)
         if (contenedor.credenciales.emparejado) {
             TrabajoSincronizacion.programar(this, contenedor.ajustes.soloWifi)
         }

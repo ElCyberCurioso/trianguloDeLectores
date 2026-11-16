@@ -1,8 +1,16 @@
 package site.triangulodelectores.lector.pdf
 
+import java.util.UUID
+import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.io.MemoryUsageSetting
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import android.os.Build
+import android.graphics.pdf.LoadParams
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -134,6 +142,41 @@ class DocumentoPdf private constructor(
     }
 
     /**
+     * Pinta sólo un trozo de una página, como si la página entera midiera
+     * [anchoTotalPx] de ancho.
+     *
+     * Es lo que deja la página nítida pasado el techo de rasterizado: a ocho
+     * aumentos la página entera serían decenas de miles de píxeles, pero el
+     * trozo que se ve nunca pasa del tamaño de la pantalla. La matriz lleva la
+     * página, que `PdfRenderer` mide en puntos, al ancho pedido, y la corre
+     * para que la esquina del trozo caiga en el origen del mapa de bits; lo que
+     * queda fuera, el renderer lo recorta solo.
+     */
+    suspend fun pintarTrozo(
+        indice: Int,
+        anchoTotalPx: Int,
+        izquierda: Int,
+        arriba: Int,
+        ancho: Int,
+        alto: Int,
+    ): Bitmap = withContext(Dispatchers.IO) {
+        cerrojo.withLock {
+            if (cerrado) throw CancellationException("Documento cerrado")
+            renderer.openPage(indice).use { pagina ->
+                val bitmap = Bitmap.createBitmap(ancho.coerceAtLeast(1), alto.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                val escala = anchoTotalPx.toFloat() / pagina.width.coerceAtLeast(1)
+                val matriz = Matrix().apply {
+                    postScale(escala, escala)
+                    postTranslate(-izquierda.toFloat(), -arriba.toFloat())
+                }
+                pagina.render(bitmap, null, matriz, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                bitmap
+            }
+        }
+    }
+
+    /**
      * Cierra **esperando a que termine la página en curso**.
      *
      * Bloquea el hilo que llama, que es el principal al salir del lector, como
@@ -163,8 +206,16 @@ class DocumentoPdf private constructor(
          * (Drive, algunos gestores de archivos) devuelven uno que no lo es. En
          * ese caso se copia a la caché y se abre la copia. Es lo único que
          * permite abrir esos ficheros, y sólo se paga cuando hace falta.
+         *
+         * Sin [contrasena], un documento protegido lanza [DocumentoProtegido];
+         * con una que no vale, [ContrasenaIncorrecta]. Quien llama distingue las
+         * dos cosas: la primera pide la contraseña, la segunda la vuelve a pedir.
          */
-        fun abrir(contexto: Context, documento: Documento): DocumentoPdf {
+        fun abrir(contexto: Context, documento: Documento, contrasena: String? = null): DocumentoPdf {
+            if (contrasena != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                return abrirDescifrando(contexto, documento, contrasena)
+            }
+
             /*
              * Si hay un fichero nuestro, se abre ése y no se mira la URI.
              *
@@ -175,31 +226,27 @@ class DocumentoPdf private constructor(
             val propio = documento.rutaFichero?.let(::File)
             if (propio != null && propio.exists()) {
                 val descriptor = ParcelFileDescriptor.open(propio, ParcelFileDescriptor.MODE_READ_ONLY)
-                return DocumentoPdf(descriptor, PdfRenderer(descriptor), null)
+                return conDescriptor(descriptor, contrasena, null)
             }
 
-            if (documento.origen == Origen.REMOTO) {
-                if (documento.rutaFichero == null) {
-                    throw IllegalStateException("Este libro todavía no se ha descargado")
-                }
-                throw IllegalStateException("La copia descargada ya no está")
-            }
-
+            comprobarRemoto(documento)
             val uri = Uri.parse(documento.uri ?: throw IllegalStateException("El documento no tiene fichero"))
 
             // Si `PdfRenderer` rechaza el descriptor hay que cerrarlo antes de
             // probar con la copia: dejarlo abierto filtra un descriptor por
-            // cada intento, y el sistema los cuenta.
-            val directo = runCatching {
+            // cada intento, y el sistema los cuenta. Un documento protegido no
+            // se reintenta con la copia: la copia estaría igual de protegida.
+            val directo = try {
                 val descriptor = contexto.contentResolver.openFileDescriptor(uri, "r")
                     ?: throw IllegalStateException("No se ha podido abrir el documento")
-                try {
-                    DocumentoPdf(descriptor, PdfRenderer(descriptor), null)
-                } catch (e: Throwable) {
-                    descriptor.close()
-                    throw e
-                }
-            }.getOrNull()
+                conDescriptor(descriptor, contrasena, null)
+            } catch (e: DocumentoProtegido) {
+                throw e
+            } catch (e: ContrasenaIncorrecta) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
             if (directo != null) return directo
 
             val copia = File(contexto.cacheDir, "abierto-${documento.id}.pdf")
@@ -207,8 +254,107 @@ class DocumentoPdf private constructor(
                 requireNotNull(entrada) { "No se ha podido leer el documento" }
                 copia.outputStream().use { salida -> entrada.copyTo(salida) }
             }
-            val descriptor = ParcelFileDescriptor.open(copia, ParcelFileDescriptor.MODE_READ_ONLY)
-            return DocumentoPdf(descriptor, PdfRenderer(descriptor), copia)
+            return try {
+                conDescriptor(ParcelFileDescriptor.open(copia, ParcelFileDescriptor.MODE_READ_ONLY), contrasena, copia)
+            } catch (e: Throwable) {
+                // Antes la copia se quedaba en la caché si el renderer la
+                // rechazaba —un PDF protegido, uno roto— y se iba acumulando.
+                copia.delete()
+                throw e
+            }
+        }
+
+        /**
+         * Crea el renderer sobre un descriptor ya abierto, cerrándolo si falla.
+         *
+         * `PdfRenderer` responde con `SecurityException` tanto a «hace falta
+         * contraseña» como a «ésa no es»; lo que lo distingue es si se le dio una.
+         */
+        private fun conDescriptor(descriptor: ParcelFileDescriptor, contrasena: String?, temporal: File?): DocumentoPdf {
+            try {
+                val renderer = if (contrasena != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                    PdfRenderer(descriptor, LoadParams.Builder().setPassword(contrasena).build())
+                } else {
+                    PdfRenderer(descriptor)
+                }
+                return DocumentoPdf(descriptor, renderer, temporal)
+            } catch (e: SecurityException) {
+                descriptor.close()
+                throw if (contrasena == null) DocumentoProtegido() else ContrasenaIncorrecta()
+            } catch (e: Throwable) {
+                descriptor.close()
+                throw e
+            }
+        }
+
+        private fun comprobarRemoto(documento: Documento) {
+            if (documento.origen != Origen.REMOTO) return
+            if (documento.rutaFichero == null) throw IllegalStateException("Este libro todavía no se ha descargado")
+            throw IllegalStateException("La copia descargada ya no está")
+        }
+
+        /**
+         * Abre un documento protegido en un Android anterior al 15, que no sabe
+         * dar la contraseña a `PdfRenderer`.
+         *
+         * PdfBox lo descifra a un fichero de la caché privada de la aplicación,
+         * y **en cuanto el renderer tiene su descriptor, el fichero se borra**.
+         * Un fichero borrado sigue legible para quien ya lo tenía abierto —es
+         * Linux—, así que se lee igual, pero no queda ninguna ruta que lleve a
+         * él: ni otra aplicación, ni una copia de seguridad, ni quien mire la
+         * caché después. La ventana es lo que tarda en abrirse el descriptor.
+         * Si el proceso muere justo ahí, [borrarDescifrados] limpia al arrancar.
+         *
+         * La caché queda fuera de la copia de seguridad del sistema, y la
+         * aplicación además lleva `allowBackup="false"`.
+         */
+        private fun abrirDescifrando(contexto: Context, documento: Documento, contrasena: String): DocumentoPdf {
+            PDFBoxResourceLoader.init(contexto.applicationContext)
+            borrarDescifrados(contexto)
+            val ajuste = MemoryUsageSetting.setupTempFileOnly().setTempDir(contexto.cacheDir)
+            val destino = File(contexto.cacheDir, "$PREFIJO_DESCIFRADO${UUID.randomUUID()}.pdf")
+
+            try {
+                val cargado = try {
+                    cargarConPdfBox(contexto, documento, contrasena, ajuste)
+                } catch (e: InvalidPasswordException) {
+                    throw ContrasenaIncorrecta()
+                }
+                cargado.use { pdf ->
+                    pdf.isAllSecurityToBeRemoved = true
+                    pdf.save(destino)
+                }
+                val descriptor = ParcelFileDescriptor.open(destino, ParcelFileDescriptor.MODE_READ_ONLY)
+                destino.delete()
+                return conDescriptor(descriptor, null, null)
+            } finally {
+                destino.delete()
+            }
+        }
+
+        private fun cargarConPdfBox(
+            contexto: Context,
+            documento: Documento,
+            contrasena: String,
+            ajuste: MemoryUsageSetting,
+        ): PDDocument {
+            val propio = documento.rutaFichero?.let(::File)
+            if (propio != null && propio.exists()) return PDDocument.load(propio, contrasena, ajuste)
+            comprobarRemoto(documento)
+            val uri = Uri.parse(documento.uri ?: throw IllegalStateException("El documento no tiene fichero"))
+            return contexto.contentResolver.openInputStream(uri).use { entrada ->
+                requireNotNull(entrada) { "No se ha podido leer el documento" }
+                PDDocument.load(entrada, contrasena, ajuste)
+            }
+        }
+
+        /**
+         * Borra las copias descifradas que hayan quedado de una sesión anterior.
+         * Normalmente no hay ninguna —se borran al abrirse—; esto es para el
+         * proceso que murió entre guardar y borrar.
+         */
+        fun borrarDescifrados(contexto: Context) {
+            contexto.cacheDir.listFiles { f -> f.name.startsWith(PREFIJO_DESCIFRADO) }?.forEach { it.delete() }
         }
     }
 }
@@ -246,3 +392,11 @@ class CachePaginas {
 
     private fun clave(documentoId: String, pagina: Int) = "$documentoId:$pagina"
 }
+
+private const val PREFIJO_DESCIFRADO = "descifrado-"
+
+/** El documento pide contraseña y no se le ha dado ninguna. */
+class DocumentoProtegido : Exception("Este documento está protegido con contraseña")
+
+/** Se le ha dado una contraseña y no es la suya. */
+class ContrasenaIncorrecta : Exception("La contraseña no es correcta")

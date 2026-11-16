@@ -1,5 +1,7 @@
 package site.triangulodelectores.lector.ui
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.foundation.layout.padding
@@ -120,6 +122,8 @@ internal fun PaginasDelDocumento(
     resultados: List<Coincidencia>,
     resultadoActual: Coincidencia?,
     papel: Papel,
+    /** Trozos nítidos por índice de página, sólo cuando se estira. */
+    mosaico: Map<Int, Trozo>,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
     palabrasDe: suspend (Int) -> List<Palabra>,
@@ -127,6 +131,8 @@ internal fun PaginasDelDocumento(
     alSubrayarTexto: (Int, List<Rect>, String) -> Unit,
     /** Índice de la página y punto tocado, en sus coordenadas sin ampliar. */
     alDobleToque: (Int, Offset) -> Unit,
+    /** Un toque simple fuera del modo subrayado: índice y punto en 0..1 de la página. */
+    alTocarPagina: (Int, Float, Float) -> Unit = { _, _, _ -> },
 ) {
     val densidad = LocalDensity.current
     if (anchoLista <= 1 || altoLista <= 0 || anchoRaster <= 1) return
@@ -196,12 +202,14 @@ internal fun PaginasDelDocumento(
                 resultados = resultadosPorPagina[indice + 1].orEmpty(),
                 resultadoActual = resultadoActual?.takeIf { it.pagina == indice + 1 },
                 papel = papel,
+                trozo = mosaico[indice],
                 modoSubrayado = modoSubrayado,
                 colorActivo = colorActivo,
                 palabrasDe = palabrasDe,
                 alSubrayar = { rect -> alSubrayar(indice + 1, rect) },
                 alSubrayarTexto = { rects, cita -> alSubrayarTexto(indice + 1, rects, cita) },
                 alDobleToque = { punto -> alDobleToque(indice, punto) },
+                alTocar = { x, y -> alTocarPagina(indice, x, y) },
             )
         }
     }
@@ -219,13 +227,19 @@ private fun PaginaPdf(
     resultados: List<Coincidencia>,
     resultadoActual: Coincidencia?,
     papel: Papel,
+    /** El trozo nítido de esta página, si la página se está estirando. */
+    trozo: Trozo?,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
     palabrasDe: suspend (Int) -> List<Palabra>,
     alSubrayar: (Rect) -> Unit,
     alSubrayarTexto: (List<Rect>, String) -> Unit,
     alDobleToque: (Offset) -> Unit,
+    alTocar: (Float, Float) -> Unit = { _, _ -> },
 ) {
+    // El detector no se rehace al cambiar la lambda, sólo al cambiar sus
+    // claves: sin esto seguiría llamando a la de la primera composición.
+    val tocar by rememberUpdatedState(alTocar)
     // Si ya se midió, de entrada: así el hueco nace con su altura y no salta
     // al llegar la medida, que es lo que pasaba al volver a una página vista.
     var proporcion by remember(indice) { mutableStateOf(pdf.proporcionConocida(indice) ?: 1.414f) }
@@ -400,6 +414,14 @@ private fun PaginaPdf(
                                 )?.let { alSubrayarTexto(it.rects, it.cita) }
                             }
                         }
+                    } else if (!modoSubrayado) {
+                        // Fuera del modo subrayado, un toque es para seguir un
+                        // enlace. Quien decide si lo había es el modelo.
+                        { punto ->
+                            val ancho = size.width.toFloat()
+                            val alto = size.height.toFloat()
+                            if (ancho > 0f && alto > 0f) tocar(punto.x / ancho, punto.y / alto)
+                        }
                     } else {
                         null
                     },
@@ -433,6 +455,24 @@ private fun PaginaPdf(
 
         // Subrayados guardados y el que se está dibujando ahora mismo.
         Canvas(Modifier.fillMaxSize()) {
+            /*
+             * El trozo nítido, encima de la página estirada y debajo de todo lo
+             * demás. Se coloca en coordenadas de la página, así que viaja con
+             * ella al desplazarse y al cambiar el zoom: mientras no se pide uno
+             * nuevo, se ve algo más blando, pero nunca descolocado. La escala
+             * deshace la del pintado —un píxel del trozo es uno de pantalla al
+             * zoom al que se pidió— y el origen sale de los píxeles enteros, no
+             * de la región: así borde e imagen coinciden exactamente.
+             */
+            trozo?.let { t ->
+                withTransform({
+                    translate(t.region.izquierda / t.zoom, t.region.arriba / t.zoom)
+                    scale(1f / t.zoom, 1f / t.zoom, pivot = Offset.Zero)
+                }) {
+                    drawImage(t.imagen, colorFilter = filtroDe(papel))
+                }
+            }
+
             anotaciones.filter { it.tipo == TipoAnotacion.HIGHLIGHT }.forEach { anotacion ->
                 anotacion.rects.forEach { r ->
                     drawRect(
@@ -534,6 +574,12 @@ private fun PaginaPdf(
  * con el tema oscuro. Los de la marca: tinta y el rojo.
  */
 private val TINTA_RESULTADO = Color(0xFF201E1D)
+
+/**
+ * Un trozo de página pintado a la resolución de la pantalla. [region] está en
+ * píxeles del pintado a [zoom], que es el zoom al que se pidió.
+ */
+internal class Trozo(val region: RegionPx, val zoom: Float, val imagen: ImageBitmap)
 
 /*
  * El papel, como filtro de color sobre la página ya pintada.

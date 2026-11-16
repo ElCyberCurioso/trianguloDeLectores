@@ -1,5 +1,6 @@
 package site.triangulodelectores.lector.ui
 
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalContext
@@ -1100,5 +1101,73 @@ internal fun DialogoNota(
         },
         confirmButton = { TextButton(onClick = { alGuardar(texto) }) { Text("Guardar") } },
         dismissButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } },
+    )
+}
+
+/**
+ * La contraseña de un documento protegido.
+ *
+ * Campo de contraseña de verdad —con los puntos y el teclado que no aprende lo
+ * que se escribe—, y la contraseña no sale de aquí más que hacia el modelo,
+ * que la tiene en memoria mientras el documento está abierto. Cancelar vuelve
+ * a la estantería: sin la contraseña no hay nada que enseñar.
+ */
+@Composable
+fun DialogoContrasena(incorrecta: Boolean, abriendo: Boolean, alAbrir: (String) -> Unit, alCancelar: () -> Unit) {
+    var texto by remember { mutableStateOf("") }
+    val foco = remember { FocusRequester() }
+    LaunchedEffect(Unit) { foco.requestFocus() }
+    val abrir = { if (texto.isNotEmpty() && !abriendo) alAbrir(texto) }
+
+    AlertDialog(
+        onDismissRequest = alCancelar,
+        title = { Text("Documento protegido", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                Text(
+                    "Este PDF pide una contraseña para abrirse.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(12.dp),
+                ) {
+                    BasicTextField(
+                        value = texto,
+                        onValueChange = { texto = it },
+                        singleLine = true,
+                        enabled = !abriendo,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done,
+                            autoCorrectEnabled = false,
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { abrir() }),
+                        textStyle = TextStyle(
+                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(foco)
+                            .semantics { contentDescription = "Contraseña del documento" },
+                    )
+                }
+                if (incorrecta || abriendo) {
+                    Text(
+                        if (abriendo) "Abriendo…" else "Esa contraseña no es la de este documento.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (abriendo) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = abrir, enabled = texto.isNotEmpty() && !abriendo) { Text("Abrir") } },
+        dismissButton = { TextButton(onClick = alCancelar) { Text("Volver") } },
     )
 }

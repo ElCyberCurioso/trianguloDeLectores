@@ -23,7 +23,11 @@ import site.triangulodelectores.lector.data.local.Origen
 import site.triangulodelectores.lector.data.local.Progreso
 import site.triangulodelectores.lector.data.local.Rect
 import site.triangulodelectores.lector.pdf.Coincidencia
+import site.triangulodelectores.lector.pdf.ContrasenaIncorrecta
 import site.triangulodelectores.lector.pdf.DocumentoPdf
+import site.triangulodelectores.lector.pdf.DocumentoProtegido
+import site.triangulodelectores.lector.pdf.Enlace
+import site.triangulodelectores.lector.pdf.enlaceEn
 import site.triangulodelectores.lector.pdf.EntradaIndice
 import site.triangulodelectores.lector.pdf.buscarEnPagina
 import site.triangulodelectores.lector.pdf.normalizarBusqueda
@@ -128,6 +132,14 @@ data class EstadoLector(
      * de cualquier cosa de antes.
      */
     val ultimoSubrayado: String? = null,
+    /**
+     * A dónde volver después de seguir un enlace interno: página y milésimas.
+     * Una nota al pie es ir y volver, y sin vuelta no sirve.
+     */
+    val volverA: Pair<Int, Int>? = null,
+    /** El documento pide contraseña y todavía no se ha dado la buena. */
+    val protegido: Boolean = false,
+    val contrasenaIncorrecta: Boolean = false,
     /** Nula cuando no se está buscando. Con ella, la barra es la de búsqueda. */
     val busqueda: EstadoBusqueda? = null,
     val indice: List<EntradaIndice> = emptyList(),
@@ -165,6 +177,9 @@ class LectorViewModel(
         private set
 
     private var guardadoDiferido: Job? = null
+
+    /** Sólo en memoria y sólo mientras el documento está abierto. Ver [desbloquear]. */
+    private var contrasena: String? = null
     private var busquedaEnCurso: Job? = null
 
     /**
@@ -184,7 +199,7 @@ class LectorViewModel(
             textoIntentado = true
             val documento = _estado.value.documento
             if (documento != null) {
-                texto = withContext(Dispatchers.IO) { TextoPdf.abrir(contenedor.contexto, documento) }
+                texto = withContext(Dispatchers.IO) { TextoPdf.abrir(contenedor.contexto, documento, contrasena) }
             }
         }
         texto
@@ -216,45 +231,91 @@ class LectorViewModel(
             }
 
             abierto
+                .onSuccess { doc -> alAbrir(doc, documento) }
+                .onFailure { fallo -> alFallar(documento, fallo) }
+        }
+    }
+
+    /** El documento ya está abierto: se monta todo lo demás. */
+    private fun alAbrir(doc: DocumentoPdf, documento: Documento) {
+        pdf = doc
+        /*
+         * Las proporciones de todas las páginas, de fondo. Va por
+         * delante de la lectura sin estorbarla —suelta el cerrojo
+         * entre página y página—, y cuando se salta lejos con la
+         * barra de posición el hueco ya tiene su altura.
+         */
+        viewModelScope.launch { runCatching { doc.medirTodas() } }
+        contenedor.biblioteca.anotarPaginas(documento, doc.paginas)
+        val progreso = contenedor.biblioteca.progreso(documentoId)
+        _estado.update {
+            it.copy(
+                documento = documento,
+                paginas = doc.paginas,
+                progresoInicial = progreso,
+                // La posición viva **arranca** donde se dejó la
+                // lectura. Sin sembrarla, la pantalla tendría que
+                // mirar `progresoInicial` para colocarse, y ése no
+                // se mueve en toda la sesión: cada vez que la
+                // composición se rehace —girar el teléfono la
+                // rehace entera— devolvería al punto de apertura.
+                paginaVisible = progreso?.pagina ?: it.paginaVisible,
+                scrollVisible = progreso?.scrollMilesimas ?: it.scrollVisible,
+                anotaciones = contenedor.biblioteca.anotaciones(documentoId),
+                marcadores = contenedor.biblioteca.marcadores(documentoId),
+                cargando = false,
+            )
+        }
+    }
+
+    /**
+     * No se ha podido abrir. Si es por la contraseña no es un error: se pide.
+     * Las dos cosas se distinguen para que el diálogo diga «es incorrecta» sólo
+     * cuando se ha escrito alguna.
+     */
+    private fun alFallar(documento: Documento, fallo: Throwable) {
+        _estado.update {
+            when (fallo) {
+                is DocumentoProtegido -> it.copy(documento = documento, cargando = false, protegido = true)
+                is ContrasenaIncorrecta -> it.copy(
+                    documento = documento,
+                    cargando = false,
+                    protegido = true,
+                    contrasenaIncorrecta = true,
+                )
+                else -> it.copy(
+                    documento = documento,
+                    cargando = false,
+                    protegido = false,
+                    error = fallo.message ?: "No se ha podido abrir el documento",
+                )
+            }
+        }
+    }
+
+    /**
+     * Abre el documento protegido con la contraseña que se ha escrito.
+     *
+     * La contraseña se queda en memoria mientras el documento está abierto —la
+     * capa de texto la vuelve a necesitar cuando se abre, más tarde— y en
+     * ningún sitio más: no se guarda, no se sincroniza y no se escribe en
+     * ningún log. Al cerrar el lector se olvida, y la siguiente vez se pide.
+     */
+    fun desbloquear(contrasena: String) {
+        val documento = _estado.value.documento ?: return
+        if (contrasena.isEmpty() || pdf != null) return
+        _estado.update { it.copy(cargando = true, contrasenaIncorrecta = false) }
+        viewModelScope.launch {
+            val abierto = withContext(Dispatchers.IO) {
+                runCatching { DocumentoPdf.abrir(contenedor.contexto, documento, contrasena) }
+            }
+            abierto
                 .onSuccess { doc ->
-                    pdf = doc
-                    /*
-                     * Las proporciones de todas las páginas, de fondo. Va por
-                     * delante de la lectura sin estorbarla —suelta el cerrojo
-                     * entre página y página—, y cuando se salta lejos con la
-                     * barra de posición el hueco ya tiene su altura.
-                     */
-                    viewModelScope.launch { runCatching { doc.medirTodas() } }
-                    contenedor.biblioteca.anotarPaginas(documento, doc.paginas)
-                    val progreso = contenedor.biblioteca.progreso(documentoId)
-                    _estado.update {
-                        it.copy(
-                            documento = documento,
-                            paginas = doc.paginas,
-                            progresoInicial = progreso,
-                            // La posición viva **arranca** donde se dejó la
-                            // lectura. Sin sembrarla, la pantalla tendría que
-                            // mirar `progresoInicial` para colocarse, y ése no
-                            // se mueve en toda la sesión: cada vez que la
-                            // composición se rehace —girar el teléfono la
-                            // rehace entera— devolvería al punto de apertura.
-                            paginaVisible = progreso?.pagina ?: it.paginaVisible,
-                            scrollVisible = progreso?.scrollMilesimas ?: it.scrollVisible,
-                            anotaciones = contenedor.biblioteca.anotaciones(documentoId),
-                            marcadores = contenedor.biblioteca.marcadores(documentoId),
-                            cargando = false,
-                        )
-                    }
+                    this@LectorViewModel.contrasena = contrasena
+                    alAbrir(doc, documento)
+                    _estado.update { it.copy(protegido = false) }
                 }
-                .onFailure { fallo ->
-                    _estado.update {
-                        it.copy(
-                            documento = documento,
-                            cargando = false,
-                            error = fallo.message ?: "No se ha podido abrir el documento",
-                        )
-                    }
-                }
+                .onFailure { fallo -> alFallar(documento, fallo) }
         }
     }
 
@@ -289,6 +350,23 @@ class LectorViewModel(
     }
 
     fun olvidarDeshacer() = _estado.update { it.copy(ultimoSubrayado = null) }
+
+    /**
+     * El enlace bajo un toque, en coordenadas 0..1 de la página.
+     *
+     * La primera vez abre la capa de texto, que es la que sabe de enlaces:
+     * tocar la página es un gesto que se hace a propósito, y leer sin tocar
+     * sigue sin pagar nada.
+     */
+    suspend fun buscarEnlace(pagina: Int, x: Float, y: Float): Enlace? {
+        val capa = capaDeTexto() ?: return null
+        return enlaceEn(capa.enlaces(pagina - 1), x, y)
+    }
+
+    /** Apunta por dónde se iba antes de seguir un enlace. Sólo uno: el último. */
+    fun recordarRegreso() = _estado.update { it.copy(volverA = it.paginaVisible to it.scrollVisible) }
+
+    fun olvidarRegreso() = _estado.update { it.copy(volverA = null) }
 
     /**
      * Cambia el zoom. Sin redondear: el valor es continuo.
@@ -560,13 +638,22 @@ class LectorViewModel(
     fun alSalir() {
         guardadoDiferido?.cancel()
         val posicion = _estado.value
+        /*
+         * Sólo si el documento llegó a abrirse. Si no —protegido y sin la
+         * contraseña, o un fichero que ya no está—, la posición viva es la de
+         * partida, la página 1, y guardarla pisaba por dónde se iba de verdad:
+         * entrar en un libro que no abría y volver lo devolvía al principio.
+         */
+        val abierto = pdf != null
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                contenedor.biblioteca.guardarProgreso(
-                    documentoId,
-                    posicion.paginaVisible,
-                    posicion.scrollVisible,
-                )
+                if (abierto) {
+                    contenedor.biblioteca.guardarProgreso(
+                        documentoId,
+                        posicion.paginaVisible,
+                        posicion.scrollVisible,
+                    )
+                }
                 if (posicion.documento?.origen == Origen.REMOTO && contenedor.credenciales.emparejado) {
                     runCatching { contenedor.sincronizador.sincronizar() }
                 }
@@ -575,6 +662,7 @@ class LectorViewModel(
     }
 
     override fun onCleared() {
+        contrasena = null
         pdf?.close()
         pdf = null
         texto?.close()

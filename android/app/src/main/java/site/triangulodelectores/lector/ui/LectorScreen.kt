@@ -1,5 +1,20 @@
 package site.triangulodelectores.lector.ui
 
+import androidx.compose.material3.Text
+import site.triangulodelectores.lector.pdf.EnlaceInterno
+import site.triangulodelectores.lector.pdf.EnlaceExterno
+import site.triangulodelectores.lector.pdf.Enlace
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
+import android.content.Intent
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
@@ -299,6 +314,7 @@ fun LectorScreen(
      * bandera de la actividad.
      */
     val vista = LocalView.current
+    val contexto = LocalContext.current
     DisposableEffect(vista) {
         vista.keepScreenOn = true
         onDispose { vista.keepScreenOn = false }
@@ -406,6 +422,50 @@ fun LectorScreen(
         modelo.posicion(destino, 0)
     }
 
+    /**
+     * A una página y a una altura dentro de ella, de 0 a 1.
+     *
+     * La página de destino casi nunca está compuesta, así que su alto sale de
+     * la proporción ya medida, igual que al ir a un resultado de búsqueda.
+     * [margen] deja un poco de lo de arriba a la vista: un destino de nota al
+     * pie apunta al renglón de la nota, y pegado al borde no se ve que es ése.
+     */
+    fun irAAltura(pagina: Int, altura: Float, margen: Float = 0f) {
+        if (estado.paginas <= 0 || anchoViewport <= 0) return
+        val indice = (pagina - 1).coerceIn(0, estado.paginas - 1)
+        val altoPagina = anchoViewport * (modelo.pdf?.proporcionConocida(indice) ?: 1.414f)
+        val altoVisible = altoViewport / zoomPedido.coerceAtLeast(0.01f)
+        val dentro = (altura.coerceIn(0f, 1f) * altoPagina - altoVisible * margen).coerceAtLeast(0f)
+        lanzamiento?.cancel()
+        ambito.launch { lista.scrollToItem(indice, dentro.roundToInt()) }
+    }
+
+    /*
+     * Seguir un enlace.
+     *
+     * Antes de irse se apunta de dónde se venía, y aparece el botón de vuelta:
+     * una nota al pie se lee y se vuelve, y quien llega a la página 240 desde
+     * la 12 no tiene por qué acordarse de que venía de la 12. Los externos se
+     * confirman con la dirección a la vista: un PDF es un fichero de fuera y
+     * el texto de un enlace no tiene por qué decir a dónde lleva.
+     */
+    var enlaceExterno by remember { mutableStateOf<String?>(null) }
+    fun seguirEnlace(enlace: Enlace) {
+        when (enlace) {
+            is EnlaceInterno -> {
+                modelo.recordarRegreso()
+                irAAltura(enlace.pagina, enlace.altura ?: 0f, margen = if (enlace.altura != null) 0.1f else 0f)
+            }
+            is EnlaceExterno -> enlaceExterno = enlace.url
+        }
+    }
+
+    fun volver() {
+        val (pagina, milesimas) = estado.volverA ?: return
+        modelo.olvidarRegreso()
+        irAAltura(pagina, milesimas / 1000f)
+    }
+
     /*
      * A dónde pide ir la barra de posición, en fracción del documento.
      *
@@ -415,6 +475,84 @@ fun LectorScreen(
      * anterior termina, así que la lista nunca va detrás de una cola de sitios
      * por los que el dedo ya pasó.
      */
+    /*
+     * Los mosaicos: el trozo visible de cada página, nítido, cuando la página
+     * se estira.
+     *
+     * Pasado el techo de rasterizado la página entera ya no se repinta más
+     * grande, se estira, y a ocho aumentos se leía blanda. Lo que se ve, en
+     * cambio, nunca pasa del tamaño de la pantalla: eso es lo que se pinta.
+     *
+     * Se pide cuando el zoom, el encuadre y la lista se quedan quietos, no a
+     * cada fotograma: pintar mientras se mueve es lo que daba el tirón al
+     * principio. `collectLatest` deja a medias lo que el siguiente movimiento
+     * ya ha dejado viejo. Por debajo del techo no hay mosaico, que la página
+     * entera ya es nítida.
+     */
+    var mosaico by remember { mutableStateOf<Map<Int, Trozo>>(emptyMap()) }
+    LaunchedEffect(estado.paginas) {
+        val pdf = modelo.pdf ?: return@LaunchedEffect
+        snapshotFlow {
+            listOf(
+                estado.zoom, desplazamientoX, anchoViewport.toFloat(), altoViewport.toFloat(),
+                lista.firstVisibleItemIndex.toFloat(), lista.firstVisibleItemScrollOffset.toFloat(),
+            )
+        }
+            .distinctUntilChanged()
+            .debounce(ESPERA_MOSAICO_MS)
+            .collectLatest {
+                val zoom = estado.zoom
+                if (!seEstira(anchoViewport, zoom, TECHO_ANCHO_RASTER)) {
+                    mosaico = emptyMap()
+                    return@collectLatest
+                }
+                val info = lista.layoutInfo
+                val altoVisible = info.viewportEndOffset - info.viewportStartOffset
+                val anchoTotal = (anchoViewport * zoom).roundToInt()
+                val visibles = info.visibleItemsInfo
+                // Lo que ya no se ve se suelta en el acto: son mapas de bits
+                // del tamaño de la pantalla.
+                var nuevo = mosaico.filterKeys { k -> visibles.any { it.index == k } }
+                mosaico = nuevo
+                for (item in visibles) {
+                    val region = regionVisible(item.offset, item.size, anchoViewport, altoVisible, desplazamientoX, zoom)
+                        ?: continue
+                    val px = regionEnPixeles(region, zoom)
+                    val pintado = runCatching {
+                        pdf.pintarTrozo(item.index, anchoTotal, px.izquierda, px.arriba, px.ancho, px.alto)
+                    }.getOrNull() ?: continue
+                    nuevo = nuevo + (item.index to Trozo(px, zoom, pintado.asImageBitmap()))
+                    mosaico = nuevo
+                }
+            }
+    }
+
+    /*
+     * La página siguiente, pintada antes de que asome.
+     *
+     * Al leer se baja, así que es la que viene. Se pide cuando la lista lleva
+     * un rato quieta —no mientras se desplaza, que ahí lo que cuenta es lo que
+     * se ve— y sólo si la caché no la tiene ya a ese ancho. Cuando entra en la
+     * lista, la página encuentra su mapa de bits en la caché y no hay blanco.
+     */
+    LaunchedEffect(estado.paginas) {
+        val pdf = modelo.pdf ?: return@LaunchedEffect
+        val documentoId = estado.documento?.id ?: return@LaunchedEffect
+        snapshotFlow {
+            (lista.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to
+                anchoRasterDe(anchoViewport, zoomRaster, TECHO_ANCHO_RASTER)
+        }
+            .distinctUntilChanged()
+            .debounce(ESPERA_PRECARGA_MS)
+            .collectLatest { (ultima, ancho) ->
+                val siguiente = ultima + 1
+                if (ultima < 0 || siguiente >= estado.paginas || anchoViewport <= 0) return@collectLatest
+                if ((cache.obtener(documentoId, siguiente)?.width ?: 0) >= ancho) return@collectLatest
+                runCatching { pdf.pintar(siguiente, ancho) }.getOrNull()
+                    ?.let { cache.guardar(documentoId, siguiente, it) }
+            }
+    }
+
     var fraccionPedida by remember { mutableStateOf<Float?>(null) }
     LaunchedEffect(lista, estado.paginas) {
         snapshotFlow { fraccionPedida }.collect { fraccion ->
@@ -430,6 +568,10 @@ fun LectorScreen(
     // Declarado después, así que manda mientras se busca: «atrás» cierra la
     // búsqueda, no el libro. Salir del documento por querer quitar el teclado
     // sería lo último que se espera.
+    // Después de seguir un enlace, «atrás» vuelve de donde se venía. Va antes
+    // que el de la búsqueda: con las dos cosas abiertas, atrás cierra primero
+    // la búsqueda, que es lo que está encima.
+    BackHandler(enabled = estado.volverA != null) { volver() }
     BackHandler(enabled = estado.busqueda != null) { modelo.cerrarBusqueda() }
 
     /*
@@ -541,6 +683,7 @@ fun LectorScreen(
             when {
                 estado.cargando -> Aviso("Abriendo el documento…", Modifier.padding(16.dp))
                 estado.error != null -> Aviso(estado.error!!, Modifier.padding(16.dp), acento = true)
+                estado.protegido -> Aviso("Este documento está protegido con contraseña.", Modifier.padding(16.dp))
                 else -> {
                     if (estado.modoSubrayado) {
                         AvisoSubrayado(color = estado.colorActivo, alElegirColor = modelo::elegirColor)
@@ -658,11 +801,17 @@ fun LectorScreen(
                                     resultados = estado.busqueda?.resultados.orEmpty(),
                                     resultadoActual = estado.busqueda?.let { it.resultados.getOrNull(it.actual) },
                                     papel = estado.papel,
+                                    mosaico = mosaico,
                                     modoSubrayado = estado.modoSubrayado,
                                     colorActivo = estado.colorActivo,
                                     palabrasDe = modelo::palabrasDe,
                                     alSubrayar = modelo::subrayar,
                                     alSubrayarTexto = modelo::subrayarTexto,
+                                    alTocarPagina = { indice, x, y ->
+                                        ambito.launch {
+                                            modelo.buscarEnlace(indice + 1, x, y)?.let(::seguirEnlace)
+                                        }
+                                    },
                                     alDobleToque = { indice, punto ->
                                         /*
                                          * El punto llega en coordenadas de la
@@ -686,7 +835,36 @@ fun LectorScreen(
                             // En modo subrayado no hay barra: el borde derecho
                             // es donde acaban los renglones, y un tirador ahí
                             // se quedaría con el final de cada arrastre.
-                            SnackbarHost(avisos, Modifier.align(Alignment.BottomStart))
+                            val regreso = estado.volverA
+                            if (regreso != null) {
+                                /*
+                                 * El botón de vuelta, abajo a la izquierda y
+                                 * fuera del texto que se acaba de abrir. Se
+                                 * queda hasta que se usa o se sigue otro
+                                 * enlace: una nota puede tardar en leerse.
+                                 */
+                                Text(
+                                    "Volver a la p. ${regreso.first}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(16.dp)
+                                        .background(MaterialTheme.colorScheme.surface)
+                                        .border(1.dp, MaterialTheme.colorScheme.onSurface)
+                                        .heightIn(min = 44.dp)
+                                        .clickable(onClick = ::volver)
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                )
+                            }
+
+                            SnackbarHost(
+                                avisos,
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    // Por encima del botón de vuelta, si está.
+                                    .padding(bottom = if (regreso != null) 76.dp else 0.dp),
+                            )
 
                             if (restaurado && !estado.modoSubrayado) {
                                 BarraPosicion(
@@ -772,6 +950,36 @@ fun LectorScreen(
         )
     }
 
+    if (estado.protegido) {
+        DialogoContrasena(
+            incorrecta = estado.contrasenaIncorrecta,
+            abriendo = estado.cargando,
+            alAbrir = modelo::desbloquear,
+            alCancelar = salir,
+        )
+    }
+
+    enlaceExterno?.let { url ->
+        AlertDialog(
+            onDismissRequest = { enlaceExterno = null },
+            title = { Text("Abrir fuera del lector", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Text(
+                    url,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    enlaceExterno = null
+                    runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                }) { Text("Abrir") }
+            },
+            dismissButton = { TextButton(onClick = { enlaceExterno = null }) { Text("Cancelar") } },
+        )
+    }
+
     if (irAPagina) {
         DialogoIrAPagina(
             actual = estado.paginaVisible,
@@ -810,3 +1018,9 @@ fun LectorScreen(
 
 /** Lo que tarda el zoom de los botones y del doble toque. */
 private const val DURACION_ZOOM_MS = 220
+
+/** Lo que tiene que estar quieto el lector antes de pedir el trozo nítido. */
+private const val ESPERA_MOSAICO_MS = 200L
+
+/** Lo que tiene que estar quieta la lista antes de pintar la página siguiente. */
+private const val ESPERA_PRECARGA_MS = 400L
