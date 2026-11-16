@@ -130,5 +130,19 @@ class Ajustes(context: Context) {
         get() = prefs.getBoolean("solo_wifi", true)
         set(valor) = prefs.edit().putBoolean("solo_wifi", valor).apply()
 
+    /*
+     * Preferencias de lectura, en su propio fichero.
+     *
+     * Aparte de las demás porque `olvidar()` las borra al desemparejar, y el
+     * color del papel no es un dato de la cuenta: quien desempareja el teléfono
+     * no espera volver al blanco.
+     */
+    private val lectura = context.getSharedPreferences("lectura", Context.MODE_PRIVATE)
+
+    /** Nombre de `Papel`. Se guarda como texto para no depender del orden del enum. */
+    var papel: String?
+        get() = lectura.getString("papel", null)
+        set(valor) = lectura.edit().putString("papel", valor).apply()
+
     fun olvidar() = prefs.edit().clear().apply()
 }

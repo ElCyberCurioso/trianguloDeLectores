@@ -67,10 +67,9 @@ data class Anotacion(
     val pagina: Int,
     val rects: List<Rect>,
     /**
-     * Texto citado. En el lector web lo rellena la capa de texto de pdf.js.
-     * Aquí es siempre `null`: `PdfRenderer` pinta la página como imagen y no
-     * expone el texto, así que un subrayado del móvil marca una zona, no unas
-     * palabras. Se guarda igual y viaja al servidor con el mismo formato.
+     * Texto citado. En el lector web lo rellena la capa de texto de pdf.js y
+     * aquí la de PdfBox, con el mismo formato. Es nulo en los subrayados de
+     * una página escaneada sin texto, donde lo que se marca es una zona.
      */
     val cita: String?,
     val texto: String?,

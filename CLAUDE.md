@@ -714,6 +714,44 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   lista pasaba a la siguiente guardando el resto y ese resto se reinterpretaba
   luego en píxeles más grandes. Nada de eso existe ya; si algún día el alto
   vuelve a depender del zoom, vuelve el problema entero.
+- **La barra del lector va en una fila cuando el hueco pasa de 600 dp**
+  (`ANCHO_BARRA_EN_UNA_FILA_DP`): el teléfono en horizontal o una tableta. Con
+  dos filas se comía un tercio de la pantalla en horizontal, y lo que sobraba
+  ahí era ancho, no alto.
+- **El zoom de los botones y del doble toque se anima; el del pellizco no.**
+  Cada fotograma pasa por `ampliarEn` con el mismo centro, y como cada paso deja
+  quieto ese punto, la animación entera también. Cualquier toque la para, como
+  para la inercia.
+- **El panel de notas es una pantalla, no un diálogo**, con filtro por color
+  cuando hay más de uno. En un diálogo de 420 dp una docena de subrayados se
+  repasaba por una rendija.
+- **8 dp de fondo entre páginas, no 2**: con 2 se confundía con un filete del
+  propio documento. Y mientras una página se pinta lleva su número en gris,
+  arriba a la izquierda: un blanco a secas no dice si está llegando o está en
+  blanco de verdad.
+- **Lo leído, en la estantería, es una regla de 2 px en tinta sobre gris, nunca
+  en rojo**: una lectura a medias no reclama atención. La descarga en curso,
+  que sí, tiene la suya y la tapa.
+- **El papel —blanco, sepia, noche— es un filtro de color al dibujar, no al
+  rasterizar**: cambiarlo no repinta nada ni invalida la caché. Lo que va
+  encima —subrayados, resultados— no pasa por el filtro, o un subrayado
+  amarillo dejaría de serlo. Noche invierte y comprime (el negro sube a gris
+  claro, no a blanco), y también invierte las fotos: es el precio de que valga
+  para cualquier PDF. El fondo de la página va a juego con lo que el filtro hace
+  del blanco, para que no parpadee al llegar.
+- **El papel se guarda en preferencias propias (`lectura`)**, no con las de
+  sincronización: `Ajustes.olvidar()` borra ésas al desemparejar, y el color
+  del papel no es de la cuenta.
+- **El menú «Vista» es el porcentaje de zoom**: ajustar al ancho y papel. La
+  barra no tenía sitio, y es el número que dice cómo se está viendo la página.
+- **Deshacer un subrayado sólo vale para el último y mientras dura el aviso.**
+  Es un borrado lógico como cualquier otro, así que también se sincroniza bien.
+- **Exportar notas y compartir una cita es mandar texto con la hoja del
+  sistema**, no escribir un fichero: no hace falta permiso de almacenamiento y
+  quien lo recibe decide dónde va. Las notas salen en Markdown por página
+  (`notasEnMarkdown`, con tests) y exportan todo, sin el filtro de color.
+- **Las miniaturas tienen su propia caché**, pequeña y por número: en la de las
+  páginas, una miniatura de 180 px sustituiría a la página nítida.
 - **La barra del lector se esconde al bajar y vuelve al subir.** En horizontal
   se comía un tercio de la pantalla y dejaba el documento en una rendija. El
   criterio es el mismo en las dos orientaciones: al leer se baja mucho más de lo
@@ -796,9 +834,21 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   porque está en la base de datos, el zoom no lo estaba.
 - **La pantalla no se apaga en el lector** (`keepScreenOn` en la vista, no
   bandera de ventana: se quita sola al salir).
-- **Nada de esto lo ve un test unitario.** Son restricciones de medida de
-  Compose: hace falta el aparato, y en esta máquina no lo hay. Los tres intentos
-  fallidos compilaron, pasaron R8 y se firmaron igual de bien que el bueno.
+- **Las cuentas del lector viven en `ui/Encuadre.kt`, sin Compose y con tests**
+  (`EncuadreTest`): margen y acotado del encuadre, fracción que sobrevive al
+  giro, zoom anclado a un punto, posición en páginas y su inversa, ancho de
+  rasterizado. Si una cuenta de éstas hace falta en la pantalla, se llama, no se
+  vuelve a escribir en línea: escritas dentro de los `remember` no había forma
+  de probarlas, y fueron justo las que se rompieron.
+- **Lo que sigue sin verlo ningún test son las restricciones de medida de
+  Compose**: que la lista mida lo que se cree que mide, que un gesto llegue a
+  quien debe. Hace falta el aparato, y en esta máquina no lo hay. Los tres
+  intentos fallidos del zoom compilaron, pasaron R8 y se firmaron igual de bien
+  que el bueno.
+- **El lector va en cuatro ficheros más las cuentas**: `LectorScreen.kt` (estado
+  y montaje), `LectorPaginas.kt` (lista, pintado y lo que se dibuja encima),
+  `LectorGestos.kt` (detector de gestos e inercia) y `LectorPiezas.kt` (barras y
+  diálogos). Estaba todo en uno de casi mil quinientas líneas.
 - **El mapa de bits de una página se recuerda por página, nunca por ancho.** Con
   el ancho en la clave, cada cambio de zoom lo ponía a nulo y la página se
   quedaba en blanco hasta terminar de repintarse. El anterior tiene que seguir

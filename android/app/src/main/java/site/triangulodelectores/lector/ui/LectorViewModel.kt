@@ -55,6 +55,12 @@ private const val CLAVE_ZOOM = "zoom"
  */
 const val MAX_RESULTADOS = 500
 
+/**
+ * El color del papel. El documento se pinta igual; lo cambia un filtro de
+ * color al dibujarlo, así que cambiar de papel no repinta nada.
+ */
+enum class Papel { BLANCO, SEPIA, NOCHE }
+
 /** Por debajo de esto se encuentra media página de cada página. */
 const val MINIMO_BUSQUEDA = 2
 
@@ -115,6 +121,13 @@ data class EstadoLector(
      * limpio, y no hay forma de saber cuál de las dos cosas es.
      */
     val notasIncrustadasIlegibles: Boolean = false,
+    val papel: Papel = Papel.BLANCO,
+    /**
+     * El último subrayado hecho, para poder deshacerlo. Se vacía al deshacer o
+     * cuando el aviso desaparece: deshacer es de lo que se acaba de hacer, no
+     * de cualquier cosa de antes.
+     */
+    val ultimoSubrayado: String? = null,
     /** Nula cuando no se está buscando. Con ella, la barra es la de búsqueda. */
     val busqueda: EstadoBusqueda? = null,
     val indice: List<EntradaIndice> = emptyList(),
@@ -140,7 +153,10 @@ class LectorViewModel(
 ) : ViewModel() {
 
     private val _estado = MutableStateFlow(
-        EstadoLector(zoom = (guardado.get<Float>(CLAVE_ZOOM) ?: 1f).coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)),
+        EstadoLector(
+            zoom = (guardado.get<Float>(CLAVE_ZOOM) ?: 1f).coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO),
+            papel = Papel.entries.firstOrNull { it.name == contenedor.ajustes.papel } ?: Papel.BLANCO,
+        ),
     )
     val estado: StateFlow<EstadoLector> = _estado.asStateFlow()
 
@@ -260,6 +276,20 @@ class LectorViewModel(
 
     fun elegirColor(color: ColorAnotacion) = _estado.update { it.copy(colorActivo = color) }
 
+    fun elegirPapel(papel: Papel) {
+        _estado.update { it.copy(papel = papel) }
+        contenedor.ajustes.papel = papel.name
+    }
+
+    /** Borra el subrayado que se acaba de hacer. Es un borrado lógico, como cualquier otro. */
+    fun deshacerSubrayado() {
+        val id = _estado.value.ultimoSubrayado ?: return
+        _estado.update { it.copy(ultimoSubrayado = null) }
+        borrarAnotacion(id)
+    }
+
+    fun olvidarDeshacer() = _estado.update { it.copy(ultimoSubrayado = null) }
+
     /**
      * Cambia el zoom. Sin redondear: el valor es continuo.
      *
@@ -296,7 +326,7 @@ class LectorViewModel(
 
     private fun guardarSubrayado(pagina: Int, rects: List<Rect>, cita: String?) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val creado = withContext(Dispatchers.IO) {
                 contenedor.biblioteca.crearSubrayado(
                     documentoId,
                     pagina,
@@ -306,6 +336,7 @@ class LectorViewModel(
                 )
             }
             recargarAnotaciones()
+            _estado.update { it.copy(ultimoSubrayado = creado.id) }
         }
     }
 

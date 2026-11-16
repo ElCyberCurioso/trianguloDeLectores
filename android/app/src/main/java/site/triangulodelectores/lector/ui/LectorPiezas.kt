@@ -1,5 +1,20 @@
 package site.triangulodelectores.lector.ui
 
+import kotlinx.coroutines.delay
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import android.content.Intent
+import android.content.Context
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -77,73 +92,137 @@ fun BarraLector(
     /** Tocar «Página N de M» abre el salto a una página concreta. */
     alIrAPagina: () -> Unit,
     alBuscar: () -> Unit,
+    /**
+     * Todo en una fila. Se pide cuando el hueco es ancho —el teléfono en
+     * horizontal, una tableta—: con dos filas la barra se comía un tercio de
+     * la pantalla en horizontal antes de esconderse, y lo que sobraba era
+     * ancho, no alto.
+     */
+    unaFila: Boolean = false,
+    papel: Papel = Papel.BLANCO,
+    alElegirPapel: (Papel) -> Unit = {},
 ) {
-    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ControlTexto("Volver", alVolver)
-            /*
-             * El título y la página son también el botón de «ir a página».
-             *
-             * Es donde se mira cuando se quiere saber dónde se está, y por
-             * tanto donde se toca cuando se quiere estar en otro sitio. Un
-             * control aparte para lo mismo sería uno más en una barra que ya
-             * no tiene sitio.
-             */
-            Column(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp)
-                    .clickable(enabled = paginas > 0, onClickLabel = "Ir a una página", onClick = alIrAPagina)
-                    .padding(horizontal = 8.dp),
-            ) {
-                Text(
-                    titulo,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                )
-                if (paginas > 0) {
-                    Text(
-                        "Página $pagina de $paginas",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            // Arriba y no con el resto: la fila de abajo ya no tiene sitio en
-            // vertical, y buscar es de las cosas que se hacen antes de leer.
-            ControlTexto("Buscar", alBuscar)
-            ControlTexto(if (marcada) "Marcada" else "Marcar", alMarcar, activo = marcada)
-        }
-
-        Row(
-            Modifier
-                .fillMaxWidth()
+    /*
+     * El título y la página son también el botón de «ir a página».
+     *
+     * Es donde se mira cuando se quiere saber dónde se está, y por tanto donde
+     * se toca cuando se quiere estar en otro sitio. Un control aparte para lo
+     * mismo sería uno más en una barra que ya no tiene sitio.
+     */
+    val encabezado: @Composable (Modifier) -> Unit = { modifier ->
+        Column(
+            modifier
+                .heightIn(min = 44.dp)
+                .clickable(enabled = paginas > 0, onClickLabel = "Ir a una página", onClick = alIrAPagina)
                 .padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ControlTexto("Subrayar", alSubrayar, activo = modoSubrayado)
-            ControlTexto("Nota", alAnotar)
-            ControlTexto("Notas", alVerAnotaciones)
-            Box(Modifier.weight(1f))
-            // Paso multiplicativo, no aditivo: de 1 a 8 en sumas de medio punto
-            // son catorce toques, y el salto que se percibe al ampliar no es el
-            // mismo al principio que al final.
-            ControlTexto("−", { alZoom(zoom / PASO_ZOOM) })
             Text(
-                "${(zoom * 100).toInt()} %",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                titulo,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            ControlTexto("+", { alZoom(zoom * PASO_ZOOM) })
+            if (paginas > 0) {
+                Text(
+                    "Página $pagina de $paginas",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+    val anotar: @Composable () -> Unit = {
+        ControlTexto("Subrayar", alSubrayar, activo = modoSubrayado)
+        ControlTexto("Nota", alAnotar)
+        ControlTexto("Notas", alVerAnotaciones)
+    }
+    val ampliar: @Composable () -> Unit = {
+        // Paso multiplicativo, no aditivo: de 1 a 8 en sumas de medio punto
+        // son catorce toques, y el salto que se percibe al ampliar no es el
+        // mismo al principio que al final.
+        ControlTexto("−", { alZoom(zoom / PASO_ZOOM) })
+        MenuVista(zoom = zoom, papel = papel, alZoom = alZoom, alElegirPapel = alElegirPapel)
+        ControlTexto("+", { alZoom(zoom * PASO_ZOOM) })
+    }
+    val marcar: @Composable () -> Unit = {
+        // Arriba y no con el resto: la fila de abajo ya no tiene sitio en
+        // vertical, y buscar es de las cosas que se hacen antes de leer.
+        ControlTexto("Buscar", alBuscar)
+        ControlTexto(if (marcada) "Marcada" else "Marcar", alMarcar, activo = marcada)
+    }
+
+    Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+        if (unaFila) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ControlTexto("Volver", alVolver)
+                encabezado(Modifier.weight(1f))
+                anotar()
+                ampliar()
+                marcar()
+            }
+        } else {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ControlTexto("Volver", alVolver)
+                encabezado(Modifier.weight(1f))
+                marcar()
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                anotar()
+                Box(Modifier.weight(1f))
+                ampliar()
+            }
         }
 
         ReglaGruesa()
+    }
+}
+
+/** Hueco a partir del cual la barra cabe en una sola fila. */
+const val ANCHO_BARRA_EN_UNA_FILA_DP = 600
+
+/**
+ * El aviso del modo subrayado, en una línea y con los colores al lado.
+ *
+ * Eran tres renglones de explicación y una fila de colores debajo, fijos encima
+ * del documento mientras se subraya: lo que se quería marcar quedaba más abajo
+ * de lo que se veía. Lo de las páginas escaneadas no hace falta decirlo —el
+ * arrastre marca la zona solo, y se ve—.
+ */
+@Composable
+fun AvisoSubrayado(color: ColorAnotacion, alElegirColor: (ColorAnotacion) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        ReglaGruesa(color = MaterialTheme.colorScheme.primary)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Arrastra sobre el texto o toca una palabra.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            SelectorColor(activo = color, alElegir = alElegirColor)
+        }
     }
 }
 
@@ -186,112 +265,230 @@ fun PanelAnotaciones(
     alIrA: (Int) -> Unit,
     alBorrar: (String) -> Unit,
     alEditar: (Anotacion) -> Unit,
+    tituloDocumento: String = "",
+    autorDocumento: String? = null,
 ) {
-    AlertDialog(
-        onDismissRequest = alCerrar,
-        title = { Text("Notas y subrayados", style = MaterialTheme.typography.titleMedium) },
-        text = {
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                if (anotaciones.isEmpty() && marcadores.isEmpty()) {
-                    item {
-                        Text(
-                            "Todavía no hay nada tuyo. Pulsa «Subrayar» y arrastra sobre el texto " +
-                                "de la página, o «Nota» para escribir algo en la página que estás leyendo.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
+    val contexto = LocalContext.current
+    val portapapeles = LocalClipboardManager.current
+
+    /*
+     * Filtro por color, sólo de lo propio: las notas del PDF no tienen color
+     * nuestro. Nulo es «todos». Sólo aparece si hay más de un color, que si no
+     * no hay nada que filtrar.
+     */
+    var filtro by remember { mutableStateOf<ColorAnotacion?>(null) }
+    val colores = remember(anotaciones) { anotaciones.map { it.color }.distinct() }
+    val visibles = remember(anotaciones, filtro) {
+        filtro?.let { elegido -> anotaciones.filter { it.color == elegido } } ?: anotaciones
+    }
+
+    /*
+     * A pantalla completa y no en un diálogo.
+     *
+     * Era un diálogo de 420 dp de alto con todo dentro: con una docena de
+     * subrayados se repasaban a través de una rendija. Es una pantalla de
+     * lectura —se recorre, se vuelve a la página, se corrige— y tiene que
+     * tener el sitio de una.
+     */
+    Dialog(onDismissRequest = alCerrar, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(
+            Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+        ) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ControlTexto("Cerrar", alCerrar)
+                    Text(
+                        "Notas y subrayados",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 8.dp),
+                    )
+                    /*
+                     * Exportar es mandar el texto a otra aplicación, no
+                     * escribir un fichero: con la hoja de compartir del
+                     * sistema se guarda en Drive, se pega en una nota o se
+                     * manda por correo, y no hace falta pedir permiso para
+                     * escribir en ningún sitio. Exporta todo, sin el filtro:
+                     * el filtro es para mirar, no para decidir qué se lleva.
+                     */
+                    if (anotaciones.isNotEmpty() || marcadores.isNotEmpty()) {
+                        ControlTexto("Exportar", {
+                            compartirTexto(
+                                contexto,
+                                notasEnMarkdown(tituloDocumento, autorDocumento, anotaciones, marcadores),
+                                asunto = "Notas de ${tituloDocumento.ifBlank { "un documento" }}",
+                            )
+                        })
                     }
                 }
-                if (marcadores.isNotEmpty()) {
+                ReglaGruesa()
+
+                if (colores.size > 1) {
+                    Row(
+                        Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ControlTexto("Todos", { filtro = null }, activo = filtro == null)
+                        ColorAnotacion.entries.filter { it in colores }.forEach { color ->
+                            Box(
+                                Modifier
+                                    .size(44.dp)
+                                    .background(colorDe(color))
+                                    .clickable { filtro = if (filtro == color) null else color }
+                                    .semantics {
+                                        contentDescription = "Sólo en ${nombreDe(color).lowercase()}"
+                                        selected = filtro == color
+                                    },
+                            ) {
+                                if (filtro == color) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .height(4.dp)
+                                            .background(Color.Black),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    ReglaFina()
+                }
+
+                LazyColumn(
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                ) {
+                    if (filtro != null && visibles.isEmpty()) {
+                        item {
+                            Text(
+                                "No hay nada en este color.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+                    if (anotaciones.isEmpty() && marcadores.isEmpty()) {
+                        item {
+                            Text(
+                                "Todavía no hay nada tuyo. Pulsa «Subrayar» y arrastra sobre el texto " +
+                                    "de la página, o «Nota» para escribir algo en la página que estás leyendo.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+                    if (marcadores.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Páginas marcadas",
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                        item {
+                            /*
+                             * En `FlowRow` y no en `Row`: con una docena de
+                             * páginas marcadas la fila se salía por la derecha y
+                             * las últimas no había forma de tocarlas.
+                             */
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                marcadores.sorted().forEach { pagina ->
+                                    Text(
+                                        "$pagina",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .clickable { alIrA(pagina) }
+                                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    )
+                                }
+                            }
+                        }
+                        item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
+                    }
+
+                    items(visibles, key = { it.id }) { anotacion ->
+                        val cita = anotacion.cita?.takeIf { it.isNotBlank() }
+                        FilaAnotacion(
+                            anotacion = anotacion,
+                            alIr = { alIrA(anotacion.pagina) },
+                            alBorrar = { alBorrar(anotacion.id) },
+                            alEditar = { alEditar(anotacion) },
+                            alCopiar = cita?.let { c ->
+                                {
+                                    portapapeles.setText(
+                                        AnnotatedString(citaParaCompartir(c, tituloDocumento, anotacion.pagina)),
+                                    )
+                                }
+                            },
+                            alCompartir = cita?.let { c ->
+                                { compartirTexto(contexto, citaParaCompartir(c, tituloDocumento, anotacion.pagina)) }
+                            },
+                        )
+                        ReglaFina()
+                    }
+
+                    /*
+                     * Lo que venía escrito en el PDF, aparte y al final.
+                     *
+                     * Van en su propia sección porque no son lo mismo: éstas
+                     * las escribió quien hizo el documento o quien lo anotó
+                     * antes, no se pueden tocar y no viajan al servidor.
+                     * Mezclarlas con las propias en una sola lista sería
+                     * prometer que se pueden borrar.
+                     */
+                    item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
                     item {
                         Text(
-                            "Páginas marcadas",
+                            "Notas del propio documento",
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
                     }
-                    item {
-                        /*
-                         * En `FlowRow` y no en `Row`: con una docena de
-                         * páginas marcadas la fila se salía por la derecha y
-                         * las últimas no había forma de tocarlas.
-                         */
-                        @OptIn(ExperimentalLayoutApi::class)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            marcadores.sorted().forEach { pagina ->
-                                Text(
-                                    "$pagina",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .clickable { alIrA(pagina) }
-                                        .padding(horizontal = 10.dp, vertical = 10.dp),
-                                )
-                            }
+                    /*
+                     * La sección se pinta siempre, aunque salga vacía.
+                     *
+                     * Antes se escondía cuando no había nada, y entonces un
+                     * documento que no se deja abrir -- cifrado, o roto -- se
+                     * veía igual que uno que no trae notas: sin una línea que
+                     * lo diga, no hay forma de saber cuál de las dos cosas es.
+                     */
+                    if (!notasIncrustadasLeidas || notasIncrustadas.isEmpty()) {
+                        item {
+                            Text(
+                                when {
+                                    leyendoNotasIncrustadas || !notasIncrustadasLeidas ->
+                                        "Leyendo el documento…"
+                                    notasIncrustadasIlegibles ->
+                                        "No se ha podido abrir el documento para leer sus notas. " +
+                                            "Suele pasar con los PDF protegidos con contraseña."
+                                    else -> "Este documento no trae notas dentro."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                    item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
-                }
-
-                items(anotaciones, key = { it.id }) { anotacion ->
-                    FilaAnotacion(
-                        anotacion = anotacion,
-                        alIr = { alIrA(anotacion.pagina) },
-                        alBorrar = { alBorrar(anotacion.id) },
-                        alEditar = { alEditar(anotacion) },
-                    )
-                    ReglaFina()
-                }
-
-                /*
-                 * Lo que venía escrito en el PDF, aparte y al final.
-                 *
-                 * Van en su propia sección porque no son lo mismo: éstas
-                 * las escribió quien hizo el documento o quien lo anotó
-                 * antes, no se pueden tocar y no viajan al servidor.
-                 * Mezclarlas con las propias en una sola lista sería
-                 * prometer que se pueden borrar.
-                 */
-                item { ReglaFina(Modifier.padding(vertical = 8.dp)) }
-                item {
-                    Text(
-                        "Notas del propio documento",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                /*
-                 * La sección se pinta siempre, aunque salga vacía.
-                 *
-                 * Antes se escondía cuando no había nada, y entonces un
-                 * documento que no se deja abrir -- cifrado, o roto -- se
-                 * veía igual que uno que no trae notas: sin una línea que
-                 * lo diga, no hay forma de saber cuál de las dos cosas es.
-                 */
-                if (!notasIncrustadasLeidas || notasIncrustadas.isEmpty()) {
-                    item {
-                        Text(
-                            when {
-                                leyendoNotasIncrustadas || !notasIncrustadasLeidas ->
-                                    "Leyendo el documento…"
-                                notasIncrustadasIlegibles ->
-                                    "No se ha podido abrir el documento para leer sus notas. " +
-                                        "Suele pasar con los PDF protegidos con contraseña."
-                                else -> "Este documento no trae notas dentro."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    items(notasIncrustadas) { nota ->
+                        FilaNotaIncrustada(nota) { alIrA(nota.pagina) }
+                        ReglaFina()
                     }
                 }
-                items(notasIncrustadas) { nota ->
-                    FilaNotaIncrustada(nota) { alIrA(nota.pagina) }
-                    ReglaFina()
-                }
             }
-        },
-        confirmButton = { TextButton(onClick = alCerrar) { Text("Cerrar") } },
-    )
+        }
+    }
 }
 
 @Composable
@@ -300,7 +497,20 @@ private fun FilaAnotacion(
     alIr: () -> Unit,
     alBorrar: () -> Unit,
     alEditar: () -> Unit,
+    /** Nulos cuando no hay cita que llevarse: un subrayado de una página escaneada. */
+    alCopiar: (() -> Unit)? = null,
+    alCompartir: (() -> Unit)? = null,
 ) {
+    // «Copiada» unos segundos después de copiar. Android 13 enseña su propio
+    // aviso, pero los anteriores no dicen nada y no se sabría si ha funcionado.
+    var copiada by remember(anotacion.id) { mutableStateOf(false) }
+    LaunchedEffect(copiada) {
+        if (copiada) {
+            delay(2000)
+            copiada = false
+        }
+    }
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -343,6 +553,31 @@ private fun FilaAnotacion(
                         .padding(horizontal = 10.dp, vertical = 12.dp),
                 )
             }
+            if (alCopiar != null) {
+                Text(
+                    if (copiada) "Copiada" else "Copiar",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable {
+                            alCopiar()
+                            copiada = true
+                        }
+                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                )
+            }
+            if (alCompartir != null) {
+                Text(
+                    "Compartir",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = alCompartir)
+                        .padding(horizontal = 10.dp, vertical = 12.dp),
+                )
+            }
             Text(
                 "Borrar",
                 style = MaterialTheme.typography.labelMedium,
@@ -352,6 +587,78 @@ private fun FilaAnotacion(
                     .clickable(onClick = alBorrar)
                     .padding(horizontal = 10.dp, vertical = 12.dp),
             )
+        }
+    }
+}
+
+/**
+ * Manda un texto a otra aplicación con la hoja de compartir del sistema.
+ *
+ * Si no hay ninguna que lo acepte —un teléfono pelado, un perfil de trabajo
+ * muy cerrado— no pasa nada: se queda donde estaba. Tirar la aplicación por
+ * no poder compartir sería peor que no compartir.
+ */
+private fun compartirTexto(contexto: Context, texto: String, asunto: String? = null) {
+    val envio = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, texto)
+        if (asunto != null) putExtra(Intent.EXTRA_SUBJECT, asunto)
+    }
+    runCatching { contexto.startActivity(Intent.createChooser(envio, null)) }
+}
+
+/**
+ * El porcentaje de zoom es también el menú «Vista».
+ *
+ * Es el número que dice cómo se está viendo la página, y por tanto donde se
+ * busca cómo cambiarlo. Ahí van volver al ancho de la pantalla —con el zoom a
+ * ocho aumentos, «−» son cinco toques— y el color del papel, que no tenía
+ * dónde ir en una barra sin sitio.
+ */
+@Composable
+private fun MenuVista(zoom: Float, papel: Papel, alZoom: (Float) -> Unit, alElegirPapel: (Papel) -> Unit) {
+    var abierto by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            "${(zoom * 100).toInt()} %",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .heightIn(min = 44.dp)
+                .clickable(onClickLabel = "Opciones de vista") { abierto = true }
+                .padding(horizontal = 6.dp, vertical = 14.dp),
+        )
+        DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
+            DropdownMenuItem(
+                text = { Text("Ajustar al ancho") },
+                enabled = zoom > ZOOM_MINIMO,
+                onClick = {
+                    abierto = false
+                    alZoom(ZOOM_MINIMO)
+                },
+            )
+            ReglaFina()
+            Papel.entries.forEach { opcion ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            when (opcion) {
+                                Papel.BLANCO -> "Papel blanco"
+                                Papel.SEPIA -> "Papel sepia"
+                                Papel.NOCHE -> "Papel de noche"
+                            },
+                            // El elegido en rojo: el acento marca lo activo,
+                            // como en el resto de la barra.
+                            color = if (opcion == papel) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                        )
+                    },
+                    onClick = {
+                        abierto = false
+                        alElegirPapel(opcion)
+                    },
+                    modifier = Modifier.semantics { selected = opcion == papel },
+                )
+            }
         }
     }
 }
@@ -459,6 +766,7 @@ fun DialogoIrAPagina(
     alPedirIndice: () -> Unit,
     alIr: (Int) -> Unit,
     alCancelar: () -> Unit,
+    alVerMiniaturas: () -> Unit = {},
 ) {
     LaunchedEffect(Unit) { alPedirIndice() }
 
@@ -507,6 +815,18 @@ fun DialogoIrAPagina(
                             MaterialTheme.colorScheme.primary
                         },
                         modifier = Modifier.padding(top = 8.dp),
+                    )
+                    // Las miniaturas, para cuando no se sabe el número y el
+                    // documento no trae índice: un escaneado, sobre todo.
+                    Text(
+                        "Ver todas las páginas",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .heightIn(min = 44.dp)
+                            .clickable(onClick = alVerMiniaturas)
+                            .padding(vertical = 12.dp),
                     )
                     ReglaFina(Modifier.padding(vertical = 12.dp))
                     Text(
@@ -740,5 +1060,45 @@ fun DialogoResultados(
             }
         },
         confirmButton = { TextButton(onClick = alCerrar) { Text("Cerrar") } },
+    )
+}
+
+@Composable
+internal fun DialogoNota(
+    titulo: String,
+    alGuardar: (String) -> Unit,
+    alCancelar: () -> Unit,
+    /** El texto con el que se abre: vacío para una nota nueva, el suyo al editar. */
+    inicial: String = "",
+) {
+    var texto by remember { mutableStateOf(inicial) }
+
+    AlertDialog(
+        onDismissRequest = alCancelar,
+        title = { Text(titulo, style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(12.dp),
+            ) {
+                BasicTextField(
+                    value = texto,
+                    onValueChange = { texto = it },
+                    // 16 sp mínimo en lo que se escribe: por debajo, el teclado
+                    // de iOS amplía la página y en Android se lee mal igual.
+                    textStyle = TextStyle(
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { alGuardar(texto) }) { Text("Guardar") } },
+        dismissButton = { TextButton(onClick = alCancelar) { Text("Cancelar") } },
     )
 }

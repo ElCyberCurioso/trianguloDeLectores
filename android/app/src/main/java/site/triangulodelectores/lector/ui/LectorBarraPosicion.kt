@@ -40,50 +40,17 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 /**
- * Por dónde va la lectura dentro del documento entero.
- *
- * [fraccion] va de 0 —el principio arriba— a 1 —el final abajo—. [visibles] es
- * cuántas páginas caben en el hueco, con decimales: hace falta para que el uno
- * sea de verdad el final. Lo que se puede recorrer no son todas las páginas,
- * son todas menos las que ya se ven al llegar abajo.
- */
-internal data class PosicionDocumento(val fraccion: Float, val visibles: Float)
-
-/**
- * La posición global, **medida en páginas y no en píxeles**.
- *
- * Una lista perezosa no sabe cuánto mide entera: sólo ha medido lo que tiene a
- * la vista, y las páginas de un PDF no tienen por qué ser todas igual de altas.
- * Sumar píxeles obligaría a inventarse el alto de las que no se han compuesto.
- * El par (página, fracción dentro de ella) sí se conoce siempre, y es además la
- * misma moneda en la que se guarda el progreso.
- *
- * Devuelve nulo cuando no hay nada que recorrer: lista sin medir todavía, o un
- * documento que cabe entero en la pantalla.
+ * La posición global de la lista, en páginas. La cuenta está en
+ * [posicionEnPaginas]; aquí sólo se lee lo que la lista ha dispuesto.
  */
 internal fun posicionDe(lista: LazyListState, paginas: Int): PosicionDocumento? {
     val info = lista.layoutInfo
-    val items = info.visibleItemsInfo
-    if (paginas <= 0 || items.isEmpty()) return null
-
-    val inicio = info.viewportStartOffset
-    val fin = info.viewportEndOffset
-
-    var visibles = 0f
-    for (item in items) {
-        if (item.size <= 0) continue
-        val arriba = maxOf(item.offset, inicio)
-        val abajo = minOf(item.offset + item.size, fin)
-        if (abajo > arriba) visibles += (abajo - arriba).toFloat() / item.size
-    }
-
-    val primero = items.first()
-    val avanzado = primero.index +
-        if (primero.size > 0) (inicio - primero.offset).toFloat() / primero.size else 0f
-
-    val recorrible = paginas - visibles
-    if (recorrible <= 0.001f) return null
-    return PosicionDocumento((avanzado / recorrible).coerceIn(0f, 1f), visibles)
+    return posicionEnPaginas(
+        info.visibleItemsInfo.map { PaginaMedida(it.index, it.offset, it.size) },
+        info.viewportStartOffset,
+        info.viewportEndOffset,
+        paginas,
+    )
 }
 
 /**
@@ -97,14 +64,13 @@ internal fun posicionDe(lista: LazyListState, paginas: Int): PosicionDocumento? 
  */
 internal suspend fun LazyListState.irAFraccion(fraccion: Float, paginas: Int) {
     val posicion = posicionDe(this, paginas) ?: return
-    val destino = fraccion.coerceIn(0f, 1f) * (paginas - posicion.visibles)
-    val indice = destino.toInt().coerceIn(0, paginas - 1)
+    val (indice, dentro) = destinoDeFraccion(fraccion, paginas, posicion.visibles)
 
     val items = layoutInfo.visibleItemsInfo
     val alto = items.firstOrNull { it.index == indice }?.size
         ?: items.map { it.size }.average().toInt()
 
-    scrollToItem(indice, ((destino - indice) * alto).roundToInt().coerceAtLeast(0))
+    scrollToItem(indice, (dentro * alto).roundToInt().coerceAtLeast(0))
 }
 
 /**

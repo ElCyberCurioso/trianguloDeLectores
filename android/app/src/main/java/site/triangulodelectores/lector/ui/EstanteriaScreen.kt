@@ -2,6 +2,7 @@ package site.triangulodelectores.lector.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -260,6 +261,33 @@ private fun FilaDocumento(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            /*
+             * Lo leído, en una regla de 2 px: tinta sobre gris, nunca rojo.
+             *
+             * El rojo es para lo que reclama atención, y una lectura a medias
+             * no la reclama. Es la misma regla de 2 px de la marca, y por eso no
+             * es una barra de progreso de Material con su pista redondeada. La
+             * descarga, que sí es algo en curso, tiene la suya y la tapa.
+             * Decorativa: «página 12 de 300» ya está escrito encima.
+             */
+            val paginas = documento.paginas
+            if (descarga == null && paginaActual != null && paginas != null && paginas > 0) {
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.outline),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth((paginaActual.toFloat() / paginas).coerceIn(0f, 1f))
+                            .height(2.dp)
+                            .background(MaterialTheme.colorScheme.onBackground),
+                    )
+                }
+            }
 
             if (descarga != null) {
                 Spacer(Modifier.height(8.dp))
