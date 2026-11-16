@@ -6,6 +6,7 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDPage
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotation
 import com.tom_roush.pdfbox.pdmodel.interactive.annotation.PDAnnotationMarkup
 import com.tom_roush.pdfbox.text.PDFTextStripper
@@ -67,6 +68,22 @@ data class NotaIncrustada(
 )
 
 /**
+ * Una entrada del índice del PDF —lo que los visores llaman marcadores o
+ * esquema—, con su nivel de anidamiento.
+ *
+ * [pagina] es nula cuando la entrada no lleva a ningún sitio: pasa con los
+ * títulos de parte que sólo agrupan, y con destinos que PDFBox no sabe
+ * resolver. Se enseñan igual, porque quitarlos dejaría los capítulos de esa
+ * parte colgando sin su título.
+ */
+data class EntradaIndice(
+    val titulo: String,
+    /** Desde uno, o nula si no lleva a ninguna página. */
+    val pagina: Int?,
+    val nivel: Int,
+)
+
+/**
  * La capa de texto del documento.
  *
  * `PdfRenderer` pinta la página y no dice qué pone en ella: eso es lo que
@@ -94,8 +111,21 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
     /** PDFBox no es seguro entre hilos: una página cada vez, como el pintado. */
     private val cerrojo = Mutex()
 
-    private val palabrasPorPagina = mutableMapOf<Int, List<Palabra>>()
+    /*
+     * Las palabras de las páginas ya leídas, **con techo**.
+     *
+     * Mientras sólo las pedía el subrayado, una por página tocada, no hacía
+     * falta. La búsqueda las pide todas: un libro de mil páginas a unas
+     * cuatrocientas palabras cada una son decenas de megas en objetos, en un
+     * montón que en un teléfono modesto no llega a cien. Se quedan las últimas
+     * usadas; buscar otra vez cuesta volver a extraer, no reventar el proceso.
+     */
+    private val palabrasPorPagina = object : LinkedHashMap<Int, List<Palabra>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, List<Palabra>>) =
+            size > PAGINAS_DE_TEXTO_EN_MEMORIA
+    }
     private var notasLeidas: List<NotaIncrustada>? = null
+    private var indiceLeido: List<EntradaIndice>? = null
     private var cerrado = false
 
     /**
@@ -131,6 +161,16 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
             notasLeidas ?: runCatching { leerNotas(documento) }
                 .getOrDefault(emptyList())
                 .also { notasLeidas = it }
+        }
+    }
+
+    /** El índice del documento. Se lee una vez; vacío si no trae. */
+    suspend fun indice(): List<EntradaIndice> = withContext(Dispatchers.IO) {
+        cerrojo.withLock {
+            if (cerrado) return@withLock emptyList()
+            indiceLeido ?: runCatching { leerIndice(documento) }
+                .getOrDefault(emptyList())
+                .also { indiceLeido = it }
         }
     }
 
@@ -180,6 +220,49 @@ class TextoPdf private constructor(private val documento: PDDocument) : Closeabl
  * un umbral en puntos partiría el titular en sílabas.
  */
 private const val HUECO_ENTRE_PALABRAS = 0.28f
+
+/** Páginas cuyas palabras se guardan a la vez. */
+private const val PAGINAS_DE_TEXTO_EN_MEMORIA = 120
+
+/*
+ * Topes del índice. Un PDF es un fichero de fuera y su índice es una lista
+ * enlazada que puede estar rota o dar la vuelta sobre sí misma; sin techo, un
+ * índice circular dejaba el recorrido dando vueltas para siempre.
+ */
+private const val MAX_ENTRADAS_INDICE = 3000
+private const val MAX_NIVEL_INDICE = 12
+
+/**
+ * Recorre el índice del PDF en orden y en profundidad.
+ *
+ * Cada entrada se mira una sola vez —por identidad del objeto, no por
+ * igualdad—: es lo que corta un índice que apunta a sí mismo. El destino se
+ * resuelve con `findDestinationPage`, que entiende tanto el destino directo
+ * como la acción «ir a» y los destinos con nombre; lo que no sabe resolver se
+ * queda sin página, no se tira.
+ */
+private fun leerIndice(documento: PDDocument): List<EntradaIndice> {
+    val raiz = documento.documentCatalog?.documentOutline ?: return emptyList()
+    val paginas = documento.pages
+    val entradas = mutableListOf<EntradaIndice>()
+    val vistas = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Any, Boolean>())
+
+    fun recorrer(nodo: PDOutlineNode, nivel: Int) {
+        if (nivel > MAX_NIVEL_INDICE) return
+        for (hijo in nodo.children()) {
+            if (entradas.size >= MAX_ENTRADAS_INDICE) return
+            if (!vistas.add(hijo.cosObject)) return
+            val pagina = runCatching {
+                hijo.findDestinationPage(documento)?.let { paginas.indexOf(it) }?.takeIf { it >= 0 }?.plus(1)
+            }.getOrNull()
+            val titulo = hijo.title?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+            entradas += EntradaIndice(titulo.ifEmpty { "Sin título" }, pagina, nivel)
+            recorrer(hijo, nivel + 1)
+        }
+    }
+    recorrer(raiz, 0)
+    return entradas
+}
 
 /**
  * Extrae las palabras con su sitio.

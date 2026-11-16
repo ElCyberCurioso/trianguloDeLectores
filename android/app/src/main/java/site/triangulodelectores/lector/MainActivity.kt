@@ -8,6 +8,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -133,7 +135,16 @@ private fun fabrica(contenedor: Contenedor) = object : ViewModelProvider.Factory
     }
 }
 
+/*
+ * El lector se crea con `CreationExtras` para recibir su `SavedStateHandle`.
+ *
+ * Girar el teléfono no lo necesita —el modelo sobrevive—, pero Android puede
+ * matar el proceso con la aplicación en segundo plano, y al volver el modelo
+ * nace de cero. La posición ya está en la base de datos; el zoom no, y sin esto
+ * se volvía al documento sin ampliar.
+ */
 private fun fabricaLector(contenedor: Contenedor, documentoId: String) = object : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = LectorViewModel(contenedor, documentoId) as T
+    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T =
+        LectorViewModel(contenedor, documentoId, extras.createSavedStateHandle()) as T
 }

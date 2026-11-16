@@ -42,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -66,6 +67,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.Velocity
@@ -82,6 +84,7 @@ import site.triangulodelectores.lector.data.local.ColorAnotacion
 import site.triangulodelectores.lector.data.local.Rect
 import site.triangulodelectores.lector.data.local.TipoAnotacion
 import site.triangulodelectores.lector.pdf.CachePaginas
+import site.triangulodelectores.lector.pdf.Coincidencia
 import site.triangulodelectores.lector.pdf.DocumentoPdf
 import site.triangulodelectores.lector.pdf.NotaIncrustada
 import site.triangulodelectores.lector.pdf.Palabra
@@ -93,14 +96,14 @@ import androidx.compose.foundation.Image
 /**
  * El lector de PDF.
  *
- * Páginas en vertical, una detrás de otra, como en el lector web. El zoom es
- * por botones y por doble toque, **no por pellizco**, y es una decisión, no una
- * carencia: el pellizco compite con el gesto de arrastrar, que aquí es lo que
- * dibuja un subrayado, y una aplicación en la que a veces subrayas y a veces
- * haces zoom sin saber por qué es peor que una con un botón de más. Además, así
- * cada página se **repinta** al ampliar en vez de estirar el mapa de bits: el
- * texto se sigue leyendo a 300 %.
+ * Páginas en vertical, una detrás de otra, como en el lector web. El zoom va
+ * por pellizco, doble toque y botones, y los tres se anclan a un punto
+ * (`ampliarEn`). El pellizco no choca con el subrayado porque el modo subrayado
+ * desactiva el detector de gestos entero: ahí arrastrar sólo marca.
  */
+// `debounce` sigue marcado como vista previa en kotlinx.coroutines y es lo que
+// evita una escritura del progreso por fotograma.
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun LectorScreen(
     modelo: LectorViewModel,
@@ -286,7 +289,7 @@ fun LectorScreen(
      * encendido sin querer.
      */
     val mostrarBarra = barraVisible || estado.modoSubrayado ||
-        estado.cargando || estado.error != null
+        estado.busqueda != null || estado.cargando || estado.error != null
 
     /*
      * El lanzamiento cuando hay zoom.
@@ -301,12 +304,134 @@ fun LectorScreen(
     var lanzamiento by remember { mutableStateOf<Job?>(null) }
 
     var notaEnCurso by remember { mutableStateOf(false) }
+    var notaEditada by remember { mutableStateOf<Anotacion?>(null) }
+    var irAPagina by remember { mutableStateOf(false) }
+    var verResultados by remember { mutableStateOf(false) }
+
+    /*
+     * La pantalla no se apaga mientras se lee.
+     *
+     * Leer es mirar sin tocar durante minutos, y el apagado del sistema está
+     * pensado para lo contrario. Va en la vista y no en la ventana: así se
+     * quita sola al salir del lector, sin tener que acordarse de devolver la
+     * bandera de la actividad.
+     */
+    val vista = LocalView.current
+    DisposableEffect(vista) {
+        vista.keepScreenOn = true
+        onDispose { vista.keepScreenOn = false }
+    }
+
+    /**
+     * Cambia el zoom dejando quieto el punto [centro] del hueco.
+     *
+     * Ampliar es acercarse a *algo*: entre los dedos en el pellizco, bajo el
+     * dedo en el doble toque, el centro de la pantalla con los botones. Antes
+     * sólo el pellizco se anclaba; el doble toque y los botones ampliaban desde
+     * la esquina superior izquierda y el sitio que se estaba leyendo se iba
+     * fuera de la vista.
+     *
+     * Se usa el factor **ya recortado** por el techo y el suelo del zoom: con el
+     * pedido, seguir pellizcando en el tope movería el documento sin ampliarlo.
+     */
+    fun ampliarEn(pedido: Float, centro: Offset) {
+        val anterior = zoomPedido
+        val nuevo = pedido.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+        val real = if (anterior > 0f) nuevo / anterior else 1f
+        if (real == 1f) return
+        zoomPedido = nuevo
+        modelo.cambiarZoom(nuevo)
+
+        // Horizontal: el punto bajo el centro no se mueve.
+        desplazamientoX = (centro.x - (centro.x - desplazamientoX) * real).coerceIn(-margenX(), 0f)
+
+        // Vertical: lo mismo, pero el eje lo lleva la lista, que mide **sin
+        // ampliar**: de ahí la división por el zoom que había antes de este
+        // paso, que es el que traduce sus píxeles a los de la pantalla.
+        if (anterior > 0f) lista.dispatchRawDelta(centro.y * (1f - 1f / real) / anterior)
+    }
+
+    /**
+     * Lleva la lista a una página y se lo dice al modelo.
+     *
+     * Las dos cosas: el modelo apunta por dónde va la lectura, pero no la lleva
+     * a ningún sitio. Con sólo el aviso, la barra decía la página nueva y el
+     * documento seguía donde estaba, que es lo que pasaba al tocar una nota en
+     * el panel.
+     */
+    /*
+     * Las páginas con algún resultado, sin repetir, para las marcas de la barra
+     * de posición. Con quinientos resultados en treinta páginas son treinta
+     * rayas, no quinientas una encima de otra.
+     */
+    val paginasConResultados = remember(estado.busqueda?.resultados) {
+        estado.busqueda?.resultados?.map { it.pagina }?.distinct().orEmpty()
+    }
+
+    /**
+     * Lleva a un resultado de la búsqueda **dejándolo a la vista**, no sólo en
+     * su página.
+     *
+     * Ir a la página bastaba para las notas, que señalan la página entera; un
+     * resultado es una palabra, y al zoom de leer una página no cabe en la
+     * pantalla: con el borde de arriba a la vista, lo encontrado podía quedar
+     * dos pantallas más abajo. Se coloca a un tercio del alto, que es donde se
+     * mira al leer, y con zoom también se encuadra en horizontal.
+     *
+     * La página casi nunca está compuesta todavía, así que su alto se saca de
+     * la proporción, que ya está medida para todas.
+     */
+    fun mostrarResultado(resultado: Coincidencia) {
+        if (estado.paginas <= 0 || anchoViewport <= 0) return
+        lanzamiento?.cancel()
+        val indice = (resultado.pagina - 1).coerceIn(0, estado.paginas - 1)
+        val primero = resultado.rects.firstOrNull()
+
+        val proporcionPagina = modelo.pdf?.proporcionConocida(indice) ?: 1.414f
+        val altoPagina = anchoViewport * proporcionPagina
+        val altoVisible = altoViewport / zoomPedido.coerceAtLeast(0.01f)
+        val dentro = primero?.let { (it.y * altoPagina - altoVisible / 3f).coerceAtLeast(0f) } ?: 0f
+
+        if (primero != null) {
+            val izquierda = primero.x * anchoViewport * zoomPedido
+            desplazamientoX = (anchoViewport / 3f - izquierda).coerceIn(-margenX(), 0f)
+        }
+        ambito.launch { lista.scrollToItem(indice, dentro.toInt()) }
+    }
+
+    fun irA(pagina: Int) {
+        if (estado.paginas <= 0) return
+        val destino = pagina.coerceIn(1, estado.paginas)
+        lanzamiento?.cancel()
+        ambito.launch { lista.scrollToItem(destino - 1) }
+        modelo.posicion(destino, 0)
+    }
+
+    /*
+     * A dónde pide ir la barra de posición, en fracción del documento.
+     *
+     * Es un estado y no una corrutina por evento: el dedo manda decenas de
+     * posiciones por segundo y cada salto tiene que esperar a que la lista se
+     * mida. `snapshotFlow` se queda sólo con la última pedida mientras el salto
+     * anterior termina, así que la lista nunca va detrás de una cola de sitios
+     * por los que el dedo ya pasó.
+     */
+    var fraccionPedida by remember { mutableStateOf<Float?>(null) }
+    LaunchedEffect(lista, estado.paginas) {
+        snapshotFlow { fraccionPedida }.collect { fraccion ->
+            if (fraccion != null) lista.irAFraccion(fraccion, estado.paginas)
+        }
+    }
 
     val salir = {
         modelo.alSalir()
         alVolver()
     }
     BackHandler(onBack = salir)
+    // Declarado después, así que manda mientras se busca: «atrás» cierra la
+    // búsqueda, no el libro. Salir del documento por querer quitar el teclado
+    // sería lo último que se espera.
+    BackHandler(enabled = estado.busqueda != null) { modelo.cerrarBusqueda() }
 
     /*
      * Volver a donde se estaba, **cada vez que la composición nace**.
@@ -381,7 +506,17 @@ fun LectorScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             AnimatedVisibility(visible = mostrarBarra) {
-                BarraLector(
+                val busqueda = estado.busqueda
+                if (busqueda != null) {
+                    BarraBusqueda(
+                        busqueda = busqueda,
+                        alBuscar = modelo::buscar,
+                        alCerrar = modelo::cerrarBusqueda,
+                        alAnterior = { modelo.anteriorResultado(estado.paginaVisible)?.let(::mostrarResultado) },
+                        alSiguiente = { modelo.siguienteResultado(estado.paginaVisible)?.let(::mostrarResultado) },
+                        alVerLista = { verResultados = true },
+                    )
+                } else BarraLector(
                     titulo = estado.documento?.titulo ?: "",
                     pagina = estado.paginaVisible,
                     paginas = estado.paginas,
@@ -392,8 +527,12 @@ fun LectorScreen(
                     alMarcar = { modelo.alternarMarcador(estado.paginaVisible) },
                     alSubrayar = modelo::alternarModoSubrayado,
                     alAnotar = { notaEnCurso = true },
-                    alZoom = modelo::cambiarZoom,
+                    alZoom = { pedido ->
+                        ampliarEn(pedido, Offset(anchoViewport / 2f, altoViewport / 2f))
+                    },
                     alVerAnotaciones = { panelAnotaciones = true },
+                    alIrAPagina = { irAPagina = true },
+                    alBuscar = modelo::empezarBusqueda,
                 )
             }
 
@@ -407,6 +546,11 @@ fun LectorScreen(
                                 "En una página escaneada, que no lleva texto, se marca la zona.",
                             Modifier.padding(horizontal = 16.dp),
                             acento = true,
+                        )
+                        SelectorColor(
+                            activo = estado.colorActivo,
+                            alElegir = modelo::elegirColor,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     }
 
@@ -428,132 +572,141 @@ fun LectorScreen(
                          */
                         val anchoRaster = anchoRasterDe(anchoViewport, zoomRaster)
 
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .clipToBounds()
-                                .background(MaterialTheme.colorScheme.background)
-                                // El ancho se mide aquí, fuera de cualquier
-                                // contenedor con scroll: dentro de uno, la
-                                // anchura máxima es infinita y un
-                                // `fillMaxWidth` se queda en cero.
-                                .onSizeChanged {
-                                    anchoViewport = it.width
-                                    altoViewport = it.height
-                                }
-                                .gestosDeLectura(
-                                    activo = !estado.modoSubrayado,
-                                    zoom = { estado.zoom },
-                                    alPellizcar = { factor, centroide ->
-                                        /*
-                                         * El zoom se ancla al punto medio entre
-                                         * los dedos.
-                                         *
-                                         * Ampliar es acercarse a *algo*, y ese
-                                         * algo es lo que hay entre los dedos:
-                                         * ese punto del documento tiene que
-                                         * quedarse quieto bajo ellos. Escalando
-                                         * desde la esquina, como estaba, el
-                                         * contenido se escapaba en diagonal y
-                                         * había que recolocarlo a mano después
-                                         * de cada pellizco.
-                                         *
-                                         * Se usa el factor **ya recortado** por
-                                         * el techo y el suelo del zoom: con el
-                                         * pedido, seguir pellizcando en el tope
-                                         * movería el documento sin ampliarlo.
-                                         */
-                                        val anterior = zoomPedido
-                                        val nuevo = (anterior * factor)
-                                            .coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
-                                        val real = if (anterior > 0f) nuevo / anterior else 1f
-                                        if (real != 1f) {
-                                            zoomPedido = nuevo
-                                            modelo.cambiarZoom(nuevo)
-
-                                            // Horizontal: el punto bajo el
-                                            // centroide no se mueve.
-                                            desplazamientoX = (
-                                                centroide.x - (centroide.x - desplazamientoX) * real
-                                                ).coerceIn(-margenX(), 0f)
-
-                                            // Vertical: lo mismo, pero el eje lo
-                                            // lleva la lista, que mide **sin
-                                            // ampliar**: de ahí la división por
-                                            // el zoom que había antes de este
-                                            // paso, que es el que traduce sus
-                                            // píxeles a los de la pantalla.
-                                            if (anterior > 0f) {
-                                                lista.dispatchRawDelta(
-                                                    centroide.y * (1f - 1f / real) / anterior,
+                        /*
+                         * El hueco del documento y, encima, la barra de
+                         * posición.
+                         *
+                         * La barra va **fuera** de la caja de los gestos y no
+                         * dentro: ese detector trabaja en la pasada `Initial`,
+                         * que baja de fuera adentro, y con zoom se queda el
+                         * arrastre de un dedo antes de que llegue a ningún
+                         * hijo. Como hermana, lo que cae sobre el tirador es
+                         * del tirador y lo demás sigue siendo del documento.
+                         */
+                        Box(Modifier.fillMaxSize()) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .clipToBounds()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    // El ancho se mide aquí, fuera de cualquier
+                                    // contenedor con scroll: dentro de uno, la
+                                    // anchura máxima es infinita y un
+                                    // `fillMaxWidth` se queda en cero.
+                                    .onSizeChanged {
+                                        anchoViewport = it.width
+                                        altoViewport = it.height
+                                    }
+                                    .gestosDeLectura(
+                                        activo = !estado.modoSubrayado,
+                                        zoom = { estado.zoom },
+                                        alPellizcar = { factor, centroide ->
+                                            // Se usa el factor **ya recortado**
+                                            // por el techo y el suelo: lo hace
+                                            // `ampliarEn`, igual que para los
+                                            // botones y el doble toque.
+                                            ampliarEn(zoomPedido * factor, centroide)
+                                        },
+                                        alArrastrar = { dx, dy ->
+                                            desplazamientoX =
+                                                (desplazamientoX + dx).coerceIn(-margenX(), 0f)
+                                            // La lista se desplaza en sus propios
+                                            // píxeles, que son los del hueco sin
+                                            // ampliar: hay que deshacer el zoom o
+                                            // el dedo y el papel no van juntos.
+                                            if (dy != 0f && estado.zoom > 0f) {
+                                                lista.dispatchRawDelta(-dy / estado.zoom)
+                                            }
+                                        },
+                                        // Tocar para en seco lo que siguiera
+                                        // rodando, como en cualquier lista.
+                                        alTocar = {
+                                            lanzamiento?.cancel()
+                                            lanzamiento = null
+                                        },
+                                        alSoltar = { velocidad ->
+                                            lanzamiento?.cancel()
+                                            lanzamiento = ambito.launch {
+                                                lanzar(
+                                                    velocidad = velocidad,
+                                                    zoom = zoomPedido,
+                                                    decaimiento = decaimiento,
+                                                    lista = lista,
+                                                    encuadre = { desplazamientoX },
+                                                    alEncuadrar = { x ->
+                                                        desplazamientoX =
+                                                            x.coerceIn(-margenX(), 0f)
+                                                    },
                                                 )
                                             }
-                                        }
+                                        },
+                                    ),
+                            ) {
+                                PaginasDelDocumento(
+                                    anchoLista = anchoViewport,
+                                    altoLista = if (estado.zoom > 0f) {
+                                        (altoViewport / estado.zoom).toInt()
+                                    } else {
+                                        altoViewport
                                     },
-                                    alArrastrar = { dx, dy ->
-                                        desplazamientoX =
-                                            (desplazamientoX + dx).coerceIn(-margenX(), 0f)
-                                        // La lista se desplaza en sus propios
-                                        // píxeles, que son los del hueco sin
-                                        // ampliar: hay que deshacer el zoom o
-                                        // el dedo y el papel no van juntos.
-                                        if (dy != 0f && estado.zoom > 0f) {
-                                            lista.dispatchRawDelta(-dy / estado.zoom)
-                                        }
+                                    zoom = estado.zoom,
+                                    anchoRaster = anchoRaster,
+                                    // Acotado también aquí: el efecto que recoloca
+                                    // el encuadre corre después de componer, y ese
+                                    // fotograma se vería descolocado.
+                                    desplazamientoX = desplazamientoX
+                                        .coerceIn(-(anchoViewport * (estado.zoom - 1f)).coerceAtLeast(0f), 0f),
+                                    pdf = pdf,
+                                    documentoId = estado.documento?.id ?: "",
+                                    cache = cache,
+                                    estadoLista = lista,
+                                    anotaciones = estado.anotaciones,
+                                    notasIncrustadas = estado.notasIncrustadas,
+                                    resultados = estado.busqueda?.resultados.orEmpty(),
+                                    resultadoActual = estado.busqueda?.let { it.resultados.getOrNull(it.actual) },
+                                    modoSubrayado = estado.modoSubrayado,
+                                    colorActivo = estado.colorActivo,
+                                    palabrasDe = modelo::palabrasDe,
+                                    alSubrayar = modelo::subrayar,
+                                    alSubrayarTexto = modelo::subrayarTexto,
+                                    alDobleToque = { indice, punto ->
+                                        /*
+                                         * El punto llega en coordenadas de la
+                                         * página y sin ampliar —la escala la
+                                         * aplica la GPU por encima—. Al hueco
+                                         * se pasa sumando dónde empieza la
+                                         * página en la lista y deshaciendo
+                                         * después escala y encuadre.
+                                         */
+                                        val inicio = lista.layoutInfo.visibleItemsInfo
+                                            .firstOrNull { it.index == indice }?.offset ?: 0
+                                        val centro = Offset(
+                                            desplazamientoX + punto.x * zoomPedido,
+                                            (inicio + punto.y) * zoomPedido,
+                                        )
+                                        ampliarEn(if (zoomPedido > 1.5f) 1f else 2f, centro)
                                     },
-                                    // Tocar para en seco lo que siguiera
-                                    // rodando, como en cualquier lista.
-                                    alTocar = {
+                                )
+                            }
+
+                            // En modo subrayado no hay barra: el borde derecho
+                            // es donde acaban los renglones, y un tirador ahí
+                            // se quedaría con el final de cada arrastre.
+                            if (restaurado && !estado.modoSubrayado) {
+                                BarraPosicion(
+                                    lista = lista,
+                                    paginas = estado.paginas,
+                                    altoPista = altoViewport,
+                                    marcadores = estado.marcadores.map { it.pagina },
+                                    paginasConResultados = paginasConResultados,
+                                    alEmpezar = {
                                         lanzamiento?.cancel()
                                         lanzamiento = null
                                     },
-                                    alSoltar = { velocidad ->
-                                        lanzamiento?.cancel()
-                                        lanzamiento = ambito.launch {
-                                            lanzar(
-                                                velocidad = velocidad,
-                                                zoom = zoomPedido,
-                                                decaimiento = decaimiento,
-                                                lista = lista,
-                                                encuadre = { desplazamientoX },
-                                                alEncuadrar = { x ->
-                                                    desplazamientoX =
-                                                        x.coerceIn(-margenX(), 0f)
-                                                },
-                                            )
-                                        }
-                                    },
-                                ),
-                        ) {
-                            PaginasDelDocumento(
-                                anchoLista = anchoViewport,
-                                altoLista = if (estado.zoom > 0f) {
-                                    (altoViewport / estado.zoom).toInt()
-                                } else {
-                                    altoViewport
-                                },
-                                zoom = estado.zoom,
-                                anchoRaster = anchoRaster,
-                                // Acotado también aquí: el efecto que recoloca
-                                // el encuadre corre después de componer, y ese
-                                // fotograma se vería descolocado.
-                                desplazamientoX = desplazamientoX
-                                    .coerceIn(-(anchoViewport * (estado.zoom - 1f)).coerceAtLeast(0f), 0f),
-                                pdf = pdf,
-                                documentoId = estado.documento?.id ?: "",
-                                cache = cache,
-                                estadoLista = lista,
-                                anotaciones = estado.anotaciones,
-                                notasIncrustadas = estado.notasIncrustadas,
-                                modoSubrayado = estado.modoSubrayado,
-                                colorActivo = estado.colorActivo,
-                                palabrasDe = modelo::palabrasDe,
-                                alSubrayar = modelo::subrayar,
-                                alSubrayarTexto = modelo::subrayarTexto,
-                                alDobleToque = {
-                                    modelo.cambiarZoom(if (estado.zoom > 1.5f) 1f else 2f)
-                                },
-                            )
+                                    alArrastrar = { fraccionPedida = it },
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                )
+                            }
                         }
                     }
                 }
@@ -577,20 +730,63 @@ fun LectorScreen(
             alCerrar = { panelAnotaciones = false },
             alIrA = { pagina ->
                 panelAnotaciones = false
-                modelo.posicion(pagina, 0)
+                irA(pagina)
             },
             alBorrar = modelo::borrarAnotacion,
+            // El panel se queda abierto debajo: se corrige una nota y se sigue
+            // repasando la lista desde donde se estaba.
+            alEditar = { notaEditada = it },
         )
     }
 
     if (notaEnCurso) {
         DialogoNota(
-            pagina = estado.paginaVisible,
+            titulo = "Nota en la página ${estado.paginaVisible}",
             alGuardar = { texto ->
                 modelo.anotar(estado.paginaVisible, texto)
                 notaEnCurso = false
             },
             alCancelar = { notaEnCurso = false },
+        )
+    }
+
+    notaEditada?.let { nota ->
+        DialogoNota(
+            titulo = "Nota de la página ${nota.pagina}",
+            inicial = nota.texto.orEmpty(),
+            alGuardar = { texto ->
+                modelo.editarNota(nota, texto)
+                notaEditada = null
+            },
+            alCancelar = { notaEditada = null },
+        )
+    }
+
+    val busquedaAbierta = estado.busqueda
+    if (verResultados && busquedaAbierta != null) {
+        DialogoResultados(
+            busqueda = busquedaAbierta,
+            alElegir = { posicion ->
+                verResultados = false
+                modelo.irAResultado(posicion)?.let(::mostrarResultado)
+            },
+            alCerrar = { verResultados = false },
+        )
+    }
+
+    if (irAPagina) {
+        DialogoIrAPagina(
+            actual = estado.paginaVisible,
+            paginas = estado.paginas,
+            indice = estado.indice,
+            indiceLeido = estado.indiceLeido,
+            indiceIlegible = estado.indiceIlegible,
+            alPedirIndice = modelo::leerIndice,
+            alIr = { pagina ->
+                irAPagina = false
+                irA(pagina)
+            },
+            alCancelar = { irAPagina = false },
         )
     }
 }
@@ -635,6 +831,13 @@ private fun anchoRasterDe(anchoViewport: Int, zoom: Float): Int =
  * antes de levantarse, no alguien que quiere recorrer el documento.
  */
 private const val VELOCIDAD_MINIMA = 80f
+
+/**
+ * Lo que espera una página recién llegada y sin nada que enseñar antes de
+ * pedir su pintado. Más que un fotograma o dos —lo que dura en la lista una
+ * página que pasa volando— y menos de lo que se percibe como espera.
+ */
+private const val ESPERA_ANTES_DE_PINTAR_MS = 60L
 
 /**
  * Deja rodando el documento después del arrastre.
@@ -806,15 +1009,27 @@ private fun PaginasDelDocumento(
     estadoLista: androidx.compose.foundation.lazy.LazyListState,
     anotaciones: List<Anotacion>,
     notasIncrustadas: List<NotaIncrustada>,
+    resultados: List<Coincidencia>,
+    resultadoActual: Coincidencia?,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
     palabrasDe: suspend (Int) -> List<Palabra>,
     alSubrayar: (Int, Rect) -> Unit,
     alSubrayarTexto: (Int, List<Rect>, String) -> Unit,
-    alDobleToque: () -> Unit,
+    /** Índice de la página y punto tocado, en sus coordenadas sin ampliar. */
+    alDobleToque: (Int, Offset) -> Unit,
 ) {
     val densidad = LocalDensity.current
     if (anchoLista <= 1 || altoLista <= 0 || anchoRaster <= 1) return
+
+    /*
+     * Agrupadas una vez por cambio, no filtradas por página en cada
+     * recomposición: con cientos de subrayados, cada fotograma del scroll
+     * recorría la lista entera por cada página visible.
+     */
+    val anotacionesPorPagina = remember(anotaciones) { anotaciones.groupBy { it.pagina } }
+    val notasPorPagina = remember(notasIncrustadas) { notasIncrustadas.groupBy { it.pagina } }
+    val resultadosPorPagina = remember(resultados) { resultados.groupBy { it.pagina } }
 
     val anchoDp = with(densidad) { anchoLista.toDp() }
     val altoDp = with(densidad) { altoLista.toDp() }
@@ -861,14 +1076,16 @@ private fun PaginasDelDocumento(
                 cache = cache,
                 indice = indice,
                 anchoPx = anchoRaster,
-                anotaciones = anotaciones.filter { it.pagina == indice + 1 },
-                notasIncrustadas = notasIncrustadas.filter { it.pagina == indice + 1 },
+                anotaciones = anotacionesPorPagina[indice + 1].orEmpty(),
+                notasIncrustadas = notasPorPagina[indice + 1].orEmpty(),
+                resultados = resultadosPorPagina[indice + 1].orEmpty(),
+                resultadoActual = resultadoActual?.takeIf { it.pagina == indice + 1 },
                 modoSubrayado = modoSubrayado,
                 colorActivo = colorActivo,
                 palabrasDe = palabrasDe,
                 alSubrayar = { rect -> alSubrayar(indice + 1, rect) },
                 alSubrayarTexto = { rects, cita -> alSubrayarTexto(indice + 1, rects, cita) },
-                alDobleToque = alDobleToque,
+                alDobleToque = { punto -> alDobleToque(indice, punto) },
             )
         }
     }
@@ -883,14 +1100,18 @@ private fun PaginaPdf(
     anchoPx: Int,
     anotaciones: List<Anotacion>,
     notasIncrustadas: List<NotaIncrustada>,
+    resultados: List<Coincidencia>,
+    resultadoActual: Coincidencia?,
     modoSubrayado: Boolean,
     colorActivo: ColorAnotacion,
     palabrasDe: suspend (Int) -> List<Palabra>,
     alSubrayar: (Rect) -> Unit,
     alSubrayarTexto: (List<Rect>, String) -> Unit,
-    alDobleToque: () -> Unit,
+    alDobleToque: (Offset) -> Unit,
 ) {
-    var proporcion by remember(indice) { mutableStateOf(1.414f) }
+    // Si ya se midió, de entrada: así el hueco nace con su altura y no salta
+    // al llegar la medida, que es lo que pasaba al volver a una página vista.
+    var proporcion by remember(indice) { mutableStateOf(pdf.proporcionConocida(indice) ?: 1.414f) }
     /*
      * El mapa de bits se recuerda **por página, no por ancho**.
      *
@@ -924,18 +1145,40 @@ private fun PaginaPdf(
     }
 
     LaunchedEffect(indice) {
+        if (pdf.proporcionConocida(indice) != null) return@LaunchedEffect
         proporcion = runCatching { pdf.proporcion(indice) }.getOrDefault(1.414f)
     }
 
     LaunchedEffect(indice, anchoPx) {
-        val guardado = cache.obtener(documentoId, indice, anchoPx)
+        // Lo que ya se enseña llega: al bajar el zoom no se repinta nada, la
+        // GPU reduce lo que hay.
+        if ((bitmap?.width ?: 0) >= anchoPx) return@LaunchedEffect
+
+        val guardado = cache.obtener(documentoId, indice)
         if (guardado != null) {
             bitmap = guardado.asImageBitmap()
-            return@LaunchedEffect
+            if (guardado.width >= anchoPx) return@LaunchedEffect
+            // Si no llega, se queda en pantalla estirado mientras se pinta
+            // el bueno, en vez de dejar la página en blanco.
         }
+
+        /*
+         * Una página que no tiene nada que enseñar espera un poco antes de
+         * ponerse en la cola.
+         *
+         * Al arrastrar la barra de posición o al lanzar el documento, las
+         * páginas entran y salen de la lista en un fotograma o dos. Sin esta
+         * espera cada una pedía su pintado, y como el renderer pinta de una en
+         * una, la que de verdad se iba a quedar en pantalla esperaba detrás de
+         * todas las que pasaron volando. La que se va antes de que acabe la
+         * espera se cancela sin haber costado nada. Al leer no se nota: la
+         * lista compone la página siguiente antes de que asome.
+         */
+        if (bitmap == null) delay(ESPERA_ANTES_DE_PINTAR_MS)
+
         val pintado = runCatching { pdf.pintar(indice, anchoPx) }.getOrNull()
         if (pintado != null) {
-            cache.guardar(documentoId, indice, anchoPx, pintado)
+            cache.guardar(documentoId, indice, pintado)
             bitmap = pintado.asImageBitmap()
         }
     }
@@ -1022,7 +1265,7 @@ private fun PaginaPdf(
             }
             .pointerInput(indice, modoSubrayado, palabras) {
                 detectTapGestures(
-                    onDoubleTap = { alDobleToque() },
+                    onDoubleTap = { punto -> alDobleToque(punto) },
                     // Un toque marca **una palabra**. Es el gesto que falta
                     // cuando lo que se quiere subrayar es un nombre o una cifra:
                     // arrastrar sobre cinco letras con el dedo es puntería.
@@ -1095,6 +1338,28 @@ private fun PaginaPdf(
                 )
             }
 
+            /*
+             * Los resultados de la búsqueda.
+             *
+             * En tinta y sin borde todos, y el que se está mirando en el rojo de
+             * la marca y con borde: el rojo aquí significa «éste». Ni amarillo
+             * ni ningún color de subrayado, porque lo encontrado no es algo que
+             * uno haya marcado y no debe poder confundirse con ello.
+             */
+            resultados.forEach { resultado ->
+                val esActual = resultado == resultadoActual
+                resultado.rects.forEach { r ->
+                    val arriba = Offset(r.x * size.width, r.y * size.height)
+                    val medida = Size(r.w * size.width, r.h * size.height)
+                    drawRect(
+                        color = if (esActual) ROJO_RESULTADO.copy(alpha = 0.30f) else TINTA_RESULTADO.copy(alpha = 0.16f),
+                        topLeft = arriba,
+                        size = medida,
+                    )
+                    if (esActual) drawRect(color = ROJO_RESULTADO, topLeft = arriba, size = medida, style = Stroke(width = 3f))
+                }
+            }
+
             // Lo que se está marcando ahora mismo: los renglones si hay texto,
             // el recuadro si no lo hay.
             val enCurso = seleccion
@@ -1125,6 +1390,14 @@ private fun PaginaPdf(
     }
 }
 
+/*
+ * Colores de los resultados, sobre el papel blanco de la página y no sobre el
+ * fondo de la aplicación: por eso son fijos y no salen del esquema, que cambia
+ * con el tema oscuro. Los de la marca: tinta y el rojo.
+ */
+private val TINTA_RESULTADO = Color(0xFF201E1D)
+private val ROJO_RESULTADO = Color(0xFFEC3013)
+
 /** Los cuatro colores del lector web, sin inventar ninguno más. */
 fun colorDe(color: ColorAnotacion): Color = when (color) {
     ColorAnotacion.YELLOW -> Color(0xFFFFD400)
@@ -1134,12 +1407,18 @@ fun colorDe(color: ColorAnotacion): Color = when (color) {
 }
 
 @Composable
-private fun DialogoNota(pagina: Int, alGuardar: (String) -> Unit, alCancelar: () -> Unit) {
-    var texto by remember { mutableStateOf("") }
+private fun DialogoNota(
+    titulo: String,
+    alGuardar: (String) -> Unit,
+    alCancelar: () -> Unit,
+    /** El texto con el que se abre: vacío para una nota nueva, el suyo al editar. */
+    inicial: String = "",
+) {
+    var texto by remember { mutableStateOf(inicial) }
 
     AlertDialog(
         onDismissRequest = alCancelar,
-        title = { Text("Nota en la página $pagina", style = MaterialTheme.typography.titleMedium) },
+        title = { Text(titulo, style = MaterialTheme.typography.titleMedium) },
         text = {
             Box(
                 Modifier

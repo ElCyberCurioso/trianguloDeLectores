@@ -610,12 +610,33 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   no dice qué pone en ella; la capa de texto la da **PdfBox-Android** en
   `pdf/TextoPdf.kt`, que no pinta nada. Con eso el subrayado marca **texto**, en
   un rectángulo por renglón y con su `cita`, igual que el lector web. Lo que
-  sigue sin haber es buscador dentro del documento y selección con manecillas
-  para copiar: no lo prometas.
+  sigue sin haber es selección con manecillas para copiar: no lo prometas.
+- **La búsqueda recorre la capa de texto página a página** (`buscarEnPagina`,
+  lógica pura y con tests). Compara sin tildes, sin mayúsculas y con las
+  ligaduras deshechas (`NFKD`): «ﬁ» es un carácter en el PDF y sin eso «fin» no
+  aparece. La puntuación cuenta, a propósito. Una palabra partida con guion
+  entre renglones no se encuentra: el PDF guarda dos.
+- **Se busca al pulsar la tecla de buscar, no a cada letra**, con techo de
+  `MAX_RESULTADOS` y resultados que llegan mientras se recorre. «Siguiente» la
+  primera vez va al primero **desde la página en la que se está**, no al primero
+  del libro.
+- **Las palabras de la capa de texto se guardan con techo** (una LRU de páginas).
+  Mientras sólo las pedía el subrayado daba igual; la búsqueda las pide todas, y
+  un libro de mil páginas en objetos no cabe en un montón de menos de cien megas.
+- **Ir a un resultado lo deja a la vista, no sólo en su página**: a un tercio del
+  alto y, con zoom, encuadrado en horizontal. El alto de la página sale de la
+  proporción ya medida, porque casi nunca está compuesta.
+- **Lo encontrado se pinta en tinta y el resultado actual en el rojo**, nunca en
+  un color de subrayado: no es algo que uno haya marcado.
+- **El índice del PDF va en el diálogo de «Ir a…»**, que se abre tocando el
+  número de página. Es la misma pregunta y la barra no tiene sitio. Se recorre
+  con techo de entradas y de nivel y mirando cada entrada por identidad: un
+  índice es una lista enlazada de un fichero de fuera y puede dar la vuelta
+  sobre sí mismo.
 - **La capa de texto se abre tarde y nunca al abrir el libro.** Analizar un
   escaneado de cincuenta megas cuesta segundos y memoria, y quien sólo va a leer
-  no tiene por qué pagarlos: se abre al entrar en modo subrayado o al pedir las
-  notas del documento. Y se carga con `setupTempFileOnly`, a disco y no al
+  no tiene por qué pagarlos: se abre al entrar en modo subrayado, al buscar o al
+  pedir las notas o el índice del documento. Y se carga con `setupTempFileOnly`, a disco y no al
   montón, o el sistema mata el proceso a media lectura.
 - **Una página sin texto no es un fallo.** Un escaneado sin OCR es una imagen:
   `palabras()` devuelve la lista vacía y el arrastre vuelve a marcar la zona,
@@ -647,6 +668,12 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
 - **Dentro del pellizco se acota con el zoom pedido, no con el de la
   composición.** `collectAsState` no se entera hasta la recomposición siguiente,
   y con el valor viejo el margen se queda corto mientras se amplía.
+- **Todo cambio de zoom se ancla a un punto, y pasa por `ampliarEn`**: entre
+  los dedos en el pellizco, bajo el dedo en el doble toque, el centro del hueco
+  con los botones. Sólo el pellizco se anclaba; los otros dos ampliaban desde la
+  esquina y lo que se leía se iba de la vista. El doble toque llega en
+  coordenadas de la página sin ampliar y hay que pasarlo al hueco sumando dónde
+  empieza la página en la lista.
 - **El zoom se ancla al punto medio entre los dedos**, nunca a una esquina.
   Ampliar es acercarse a algo, y ese algo es lo que hay entre los dedos: ese
   punto del documento se queda quieto debajo. `transformOrigin` sigue en la
@@ -748,6 +775,27 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   horizontal no es el de vertical. Convertirlas exige el alto ya medido, así
   que se espera a la primera medida y se va en dos pasos: al borde de la
   página, que no depende de ninguna escala, y la fracción después.
+- **La barra de posición mide en páginas, no en píxeles** (`posicionDe`). Una
+  lista perezosa no sabe cuánto mide entera y las páginas no tienen por qué
+  medir lo mismo. El final es `paginas - visibles`, no `paginas`: si no, el
+  tirador abajo del todo dejaría la última página fuera.
+- **De la barra sólo se toca el tirador**, nunca la franja, y va **fuera** de la
+  caja de gestos, como hermana: ese detector trabaja en la pasada `Initial` y
+  con zoom se queda el arrastre antes de que llegue a ningún hijo. Desaparece en
+  modo subrayado, porque el borde derecho es donde acaban los renglones.
+- **El salto pedido por la barra es un estado, no una corrutina por evento.**
+  El dedo manda decenas de posiciones por segundo; `snapshotFlow` se queda con
+  la última mientras termina el salto anterior.
+- **Ir a una página es mover la lista y avisar al modelo** (`irA`). El modelo
+  sólo apunta por dónde va la lectura: con sólo el aviso, tocar una nota en el
+  panel cambiaba el número de página y el documento seguía donde estaba.
+- **Editar una nota conserva su color**, no el activo. `editarNota()` estuvo
+  escrito con el color activo mientras nadie lo llamaba.
+- **El zoom va en `SavedStateHandle`.** Girar no lo necesita, pero Android mata
+  el proceso en segundo plano y el modelo nace de cero; la posición se salva
+  porque está en la base de datos, el zoom no lo estaba.
+- **La pantalla no se apaga en el lector** (`keepScreenOn` en la vista, no
+  bandera de ventana: se quita sola al salir).
 - **Nada de esto lo ve un test unitario.** Son restricciones de medida de
   Compose: hace falta el aparato, y en esta máquina no lo hay. Los tres intentos
   fallidos compilaron, pasaron R8 y se firmaron igual de bien que el bueno.
@@ -755,6 +803,20 @@ privada. El APK se descarga de `/aplicacion` del sitio público.
   el ancho en la clave, cada cambio de zoom lo ponía a nulo y la página se
   quedaba en blanco hasta terminar de repintarse. El anterior tiene que seguir
   en pantalla, estirado, hasta que el nuevo esté listo.
+- **La caché de páginas guarda una por página, la más ancha.** Con el ancho en
+  la clave, cada nivel de zoom dejaba otra copia de la misma página. Si lo que
+  hay llega al ancho pedido se usa tal cual —al bajar el zoom no se repinta
+  nada—; si no, se enseña estirado mientras se pinta el bueno.
+- **Una página sin nada que enseñar espera 60 ms antes de pedir su pintado.**
+  Al arrastrar la barra o lanzar el documento las páginas duran un fotograma o
+  dos en la lista, y el renderer pinta de una en una: sin la espera, la que se
+  quedaba en pantalla esperaba detrás de todas las que pasaron volando.
+- **Las proporciones se miden una vez y de fondo** (`medirTodas`), soltando el
+  cerrojo entre página y página: el `Mutex` es justo y el pintado nunca espera
+  más de una medida.
+- **`DocumentoPdf.close()` toma el cerrojo**, y todo lo que entra en él mira si
+  ya se cerró. Cerrar el `PdfRenderer` nativo por debajo de un `render()` en
+  curso no lanza una excepción: tumba el proceso.
 - **Un único detector se ocupa de todos los gestos** (`gestosDeLectura`). Con un
   contenedor de scroll horizontal por fuera y una lista vertical por dentro,
   Compose ata cada gesto a una orientación y **no hay diagonal**: hay que
@@ -927,6 +989,14 @@ que cuestan media hora cada vez que se olvidan.
 - **Gradle necesita `ANDROID_HOME`**: `ANDROID_HOME=$HOME/Android/Sdk ./gradlew
   …`. Sin él dice «SDK location not found» y no hay `local.properties` en el
   repositorio.
+- **La firma se pasa a Gradle por entorno, nunca por `-P`.** El shell es zsh, que
+  no parte una variable sin comillas por los espacios: un `$ARGS` con las cuatro
+  propiedades llegó a Gradle como un solo `-PtdlKeystore=…` con las otras tres
+  dentro, Gradle respondió que el fichero no existía **citando la ruta entera**,
+  y la contraseña del almacén acabó en el log, en el informe de problemas y en
+  el log del demonio. Se exporta cada clave como `ORG_GRADLE_PROJECT_<clave>`
+  desde `~/.tdl/firma.properties`: no sale en la línea de órdenes ni en ningún
+  mensaje de error de argumentos.
 - **El directorio de trabajo del shell persiste entre comandos.** Un `cd android`
   para compilar deja los comandos siguientes ahí, y `git ls-files --others`
   empieza a mentir. Vuelve al raíz o usa rutas absolutas.

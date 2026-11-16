@@ -1,5 +1,6 @@
 package site.triangulodelectores.lector.ui
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,11 @@ import site.triangulodelectores.lector.data.local.Marcador
 import site.triangulodelectores.lector.data.local.Origen
 import site.triangulodelectores.lector.data.local.Progreso
 import site.triangulodelectores.lector.data.local.Rect
+import site.triangulodelectores.lector.pdf.Coincidencia
 import site.triangulodelectores.lector.pdf.DocumentoPdf
+import site.triangulodelectores.lector.pdf.EntradaIndice
+import site.triangulodelectores.lector.pdf.buscarEnPagina
+import site.triangulodelectores.lector.pdf.normalizarBusqueda
 import site.triangulodelectores.lector.pdf.NotaIncrustada
 import site.triangulodelectores.lector.pdf.Palabra
 import site.triangulodelectores.lector.pdf.TextoPdf
@@ -38,6 +43,43 @@ const val ZOOM_MINIMO = 1f
  * pasado cierto punto se estira lo pintado en vez de pintar más grande.
  */
 const val ZOOM_MAXIMO = 8f
+
+private const val CLAVE_ZOOM = "zoom"
+
+/**
+ * Techo de resultados de una búsqueda.
+ *
+ * Buscar «de» en un libro da miles, y ninguna lista de miles sirve para nada:
+ * pasado el techo se para y se pide afinar. También acota la memoria y el
+ * trabajo de pintar los resaltados.
+ */
+const val MAX_RESULTADOS = 500
+
+/** Por debajo de esto se encuentra media página de cada página. */
+const val MINIMO_BUSQUEDA = 2
+
+/**
+ * Una búsqueda en el documento, en curso o terminada.
+ *
+ * Los resultados llegan **mientras se busca**, página a página: en un libro
+ * largo el recorrido entero tarda, y lo que ya ha aparecido se puede mirar sin
+ * esperar al final.
+ */
+data class EstadoBusqueda(
+    val consulta: String = "",
+    val resultados: List<Coincidencia> = emptyList(),
+    /** El resultado que se está mirando, o -1 si todavía ninguno. */
+    val actual: Int = -1,
+    val buscando: Boolean = false,
+    val revisadas: Int = 0,
+    val total: Int = 0,
+    /** Se llegó a [MAX_RESULTADOS] y se dejó de buscar. */
+    val truncada: Boolean = false,
+    /** Terminó sin encontrar ni una letra: es un escaneado sin texto. */
+    val sinTexto: Boolean = false,
+    /** PDFBox no ha podido abrir el documento: cifrado o roto. */
+    val ilegible: Boolean = false,
+)
 
 data class EstadoLector(
     val documento: Documento? = null,
@@ -73,6 +115,13 @@ data class EstadoLector(
      * limpio, y no hay forma de saber cuál de las dos cosas es.
      */
     val notasIncrustadasIlegibles: Boolean = false,
+    /** Nula cuando no se está buscando. Con ella, la barra es la de búsqueda. */
+    val busqueda: EstadoBusqueda? = null,
+    val indice: List<EntradaIndice> = emptyList(),
+    val indiceLeido: Boolean = false,
+    val leyendoIndice: Boolean = false,
+    /** Mismo caso que con las notas: no es lo mismo que «no trae índice». */
+    val indiceIlegible: Boolean = false,
 )
 
 /**
@@ -86,9 +135,13 @@ data class EstadoLector(
 class LectorViewModel(
     private val contenedor: Contenedor,
     private val documentoId: String,
+    /** Lo que tiene que sobrevivir a que Android mate el proceso: el zoom. */
+    private val guardado: SavedStateHandle,
 ) : ViewModel() {
 
-    private val _estado = MutableStateFlow(EstadoLector())
+    private val _estado = MutableStateFlow(
+        EstadoLector(zoom = (guardado.get<Float>(CLAVE_ZOOM) ?: 1f).coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)),
+    )
     val estado: StateFlow<EstadoLector> = _estado.asStateFlow()
 
     /** El PDF abierto. Lo consume la pantalla para pintar cada página. */
@@ -96,6 +149,7 @@ class LectorViewModel(
         private set
 
     private var guardadoDiferido: Job? = null
+    private var busquedaEnCurso: Job? = null
 
     /**
      * La capa de texto, que es otro trato con el mismo fichero.
@@ -148,6 +202,13 @@ class LectorViewModel(
             abierto
                 .onSuccess { doc ->
                     pdf = doc
+                    /*
+                     * Las proporciones de todas las páginas, de fondo. Va por
+                     * delante de la lectura sin estorbarla —suelta el cerrojo
+                     * entre página y página—, y cuando se salta lejos con la
+                     * barra de posición el hueco ya tiene su altura.
+                     */
+                    viewModelScope.launch { runCatching { doc.medirTodas() } }
                     contenedor.biblioteca.anotarPaginas(documento, doc.paginas)
                     val progreso = contenedor.biblioteca.progreso(documentoId)
                     _estado.update {
@@ -207,8 +268,10 @@ class LectorViewModel(
      * zoom que se ve y el que está pintado media una transformación de la GPU,
      * así que mover esto no cuesta nada y puede seguir al dedo.
      */
-    fun cambiarZoom(zoom: Float) = _estado.update {
-        it.copy(zoom = zoom.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO))
+    fun cambiarZoom(zoom: Float) {
+        val acotado = zoom.coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+        _estado.update { it.copy(zoom = acotado) }
+        guardado[CLAVE_ZOOM] = acotado
     }
 
     fun subrayar(pagina: Int, rect: Rect) {
@@ -271,6 +334,143 @@ class LectorViewModel(
         }
     }
 
+    /** Abre la barra de búsqueda sin buscar nada todavía. */
+    fun empezarBusqueda() {
+        if (_estado.value.busqueda != null) return
+        // Las dos cosas a la vez no: en modo subrayado el arrastre marca, y
+        // la búsqueda lleva a sitios donde lo normal es querer leer.
+        _estado.update { it.copy(busqueda = EstadoBusqueda(), modoSubrayado = false) }
+    }
+
+    /**
+     * Busca en todo el documento, de la primera página a la última.
+     *
+     * Va página a página por la capa de texto, que suelta el cerrojo entre una
+     * y otra: si a media búsqueda se subraya algo, el subrayado no espera a que
+     * termine. Una búsqueda nueva cancela la anterior.
+     */
+    fun buscar(consulta: String) {
+        busquedaEnCurso?.cancel()
+        val texto = consulta.trim()
+        val total = _estado.value.paginas
+        if (normalizarBusqueda(texto).length < MINIMO_BUSQUEDA || total == 0) {
+            _estado.update { it.copy(busqueda = EstadoBusqueda(consulta = texto, total = total)) }
+            return
+        }
+        _estado.update {
+            it.copy(
+                modoSubrayado = false,
+                busqueda = EstadoBusqueda(consulta = texto, buscando = true, total = total),
+            )
+        }
+        busquedaEnCurso = viewModelScope.launch {
+            val capa = capaDeTexto()
+            if (capa == null) {
+                actualizarBusqueda { it.copy(buscando = false, ilegible = true) }
+                return@launch
+            }
+            val encontrados = mutableListOf<Coincidencia>()
+            var conTexto = false
+            var truncada = false
+            for (indice in 0 until total) {
+                val palabras = capa.palabras(indice)
+                if (palabras.isNotEmpty()) conTexto = true
+                val aqui = buscarEnPagina(palabras, texto, indice + 1)
+                encontrados += aqui
+                if (encontrados.size >= MAX_RESULTADOS) {
+                    truncada = true
+                    while (encontrados.size > MAX_RESULTADOS) encontrados.removeAt(encontrados.lastIndex)
+                }
+                // Se publica cuando hay algo nuevo y, si no, cada pocas
+                // páginas: lo bastante para que el contador avance a la vista
+                // sin recomponer la barra por cada página vacía.
+                if (aqui.isNotEmpty() || indice % 8 == 7 || truncada) {
+                    val copia = encontrados.toList()
+                    actualizarBusqueda { it.copy(resultados = copia, revisadas = indice + 1) }
+                }
+                if (truncada) break
+            }
+            val copia = encontrados.toList()
+            actualizarBusqueda {
+                it.copy(
+                    resultados = copia,
+                    revisadas = if (truncada) it.revisadas else total,
+                    buscando = false,
+                    truncada = truncada,
+                    sinTexto = !conTexto,
+                )
+            }
+        }
+    }
+
+    /** Sólo si la búsqueda sigue abierta: cerrarla a medias no la reabre. */
+    private fun actualizarBusqueda(cambio: (EstadoBusqueda) -> EstadoBusqueda) =
+        _estado.update { estado -> estado.busqueda?.let { estado.copy(busqueda = cambio(it)) } ?: estado }
+
+    /**
+     * El resultado siguiente al que se está mirando.
+     *
+     * La primera vez no es el primero del documento, sino **el primero desde la
+     * página donde se está**: quien busca a mitad de libro quiere lo que viene,
+     * no volver al principio. Al final da la vuelta.
+     */
+    fun siguienteResultado(paginaActual: Int): Coincidencia? = elegirResultado { busqueda ->
+        val resultados = busqueda.resultados
+        if (busqueda.actual < 0) {
+            resultados.indexOfFirst { it.pagina >= paginaActual }.takeIf { it >= 0 } ?: 0
+        } else {
+            (busqueda.actual + 1) % resultados.size
+        }
+    }
+
+    fun anteriorResultado(paginaActual: Int): Coincidencia? = elegirResultado { busqueda ->
+        val resultados = busqueda.resultados
+        if (busqueda.actual < 0) {
+            resultados.indexOfLast { it.pagina <= paginaActual }.takeIf { it >= 0 } ?: resultados.lastIndex
+        } else {
+            (busqueda.actual - 1 + resultados.size) % resultados.size
+        }
+    }
+
+    fun irAResultado(posicion: Int): Coincidencia? = elegirResultado { posicion }
+
+    private fun elegirResultado(cual: (EstadoBusqueda) -> Int): Coincidencia? {
+        val busqueda = _estado.value.busqueda ?: return null
+        if (busqueda.resultados.isEmpty()) return null
+        val elegido = cual(busqueda).coerceIn(0, busqueda.resultados.lastIndex)
+        actualizarBusqueda { it.copy(actual = elegido) }
+        return busqueda.resultados[elegido]
+    }
+
+    fun cerrarBusqueda() {
+        busquedaEnCurso?.cancel()
+        busquedaEnCurso = null
+        _estado.update { it.copy(busqueda = null) }
+    }
+
+    /**
+     * Lee el índice del PDF.
+     *
+     * Al abrir el salto de página, no al abrir el libro: el índice sale de la
+     * capa de texto, y abrirla cuesta lo que cuesta en un escaneado grande.
+     */
+    fun leerIndice() {
+        if (_estado.value.indiceLeido || _estado.value.leyendoIndice) return
+        _estado.update { it.copy(leyendoIndice = true) }
+        viewModelScope.launch {
+            val capa = capaDeTexto()
+            val indice = capa?.indice().orEmpty()
+            _estado.update {
+                it.copy(
+                    indice = indice,
+                    indiceLeido = true,
+                    leyendoIndice = false,
+                    indiceIlegible = capa == null,
+                )
+            }
+        }
+    }
+
     fun anotar(pagina: Int, texto: String) {
         if (texto.isBlank()) return
         viewModelScope.launch {
@@ -281,9 +481,19 @@ class LectorViewModel(
         }
     }
 
-    fun editarNota(id: String, texto: String) {
+    /**
+     * Cambia el texto de una nota **sin tocarle el color**.
+     *
+     * Estaba escrito con el color activo, y nadie lo llamaba: el día que se le
+     * puso botón, corregir una errata en una nota amarilla la habría vuelto del
+     * color con el que se estuviera subrayando en ese momento.
+     */
+    fun editarNota(anotacion: Anotacion, texto: String) {
+        if (texto.isBlank()) return
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { contenedor.biblioteca.editarAnotacion(id, texto.trim(), _estado.value.colorActivo) }
+            withContext(Dispatchers.IO) {
+                contenedor.biblioteca.editarAnotacion(anotacion.id, texto.trim(), anotacion.color)
+            }
             recargarAnotaciones()
         }
     }
